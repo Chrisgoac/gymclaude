@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '@/lib/db/database';
 import { createRoutine, addDay, addExerciseToDay } from '@/lib/repositories/routines';
 import {
-  startSession, getSession, listSessions, finishSession,
+  startSession, getSession, listSessions, finishSession, softDeleteSession,
   addLoggedExercise, listSessionExercises, softDeleteLoggedExercise,
   addSet, updateSet, softDeleteSet, listExerciseSets, getLastSet,
 } from '@/lib/repositories/workouts';
@@ -50,6 +50,17 @@ describe('sesiones', () => {
     const b = await startSession({});
     const ids = (await listSessions()).map((x) => x.id);
     expect(ids).toEqual([b.id, a.id]);
+  });
+
+  it('borra una sesión en cascada con sus ejercicios y series', async () => {
+    const s = await startSession({});
+    const le = await addLoggedExercise(s.id, 'seed-press-banca');
+    await addSet(le.id, { peso: 60, reps: 8 });
+    await softDeleteSession(s.id);
+    expect(await listSessions()).toHaveLength(0);
+    expect(await listSessionExercises(s.id)).toHaveLength(0);
+    expect(await listExerciseSets(le.id)).toHaveLength(0);
+    expect((await getSession(s.id))!.deletedAt).not.toBeNull();
   });
 });
 

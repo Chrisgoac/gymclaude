@@ -6,12 +6,13 @@ const now = () => Date.now();
 const activo = <T extends { deletedAt: number | null }>(arr: T[]) => arr.filter((x) => x.deletedAt === null);
 
 export async function startSession(input: { routineDayId?: string }): Promise<WorkoutSession> {
+  const ts = now();
   const session: WorkoutSession = {
     id: crypto.randomUUID(),
     userId: null,
     routineDayId: input.routineDayId,
-    fecha: now(),
-    updatedAt: now(),
+    fecha: ts,
+    updatedAt: ts,
     deletedAt: null,
   };
   await db.workoutSessions.put(session);
