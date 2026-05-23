@@ -8,12 +8,13 @@ const TABS = [
   { href: '/rutinas', label: 'Rutinas' },
   { href: '/progreso', label: 'Progreso' },
   { href: '/historial', label: 'Historial' },
+  { href: '/ajustes', label: 'Ajustes' },
 ] as const;
 
 export function BottomNav() {
   const pathname = usePathname();
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 border-t bg-background">
+    <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t bg-background">
       {TABS.map((tab) => {
         // La pestaña Entrenar ('/') cubre también las subrutas del registro (/entrenar/...).
         const active =
