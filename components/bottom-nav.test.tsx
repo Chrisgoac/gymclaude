@@ -26,4 +26,10 @@ describe('BottomNav', () => {
     expect(screen.getByText('Rutinas').className).toContain('text-primary');
     expect(screen.getByText('Entrenar').className).toContain('text-muted-foreground');
   });
+
+  it('marca Entrenar como activa en las subrutas del registro', () => {
+    mockedUsePathname.mockReturnValue('/entrenar/abc123');
+    render(<BottomNav />);
+    expect(screen.getByText('Entrenar').className).toContain('text-primary');
+  });
 });

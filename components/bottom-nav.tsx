@@ -15,7 +15,11 @@ export function BottomNav() {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 border-t bg-background">
       {TABS.map((tab) => {
-        const active = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href);
+        // La pestaña Entrenar ('/') cubre también las subrutas del registro (/entrenar/...).
+        const active =
+          tab.href === '/'
+            ? pathname === '/' || pathname.startsWith('/entrenar')
+            : pathname.startsWith(tab.href);
         return (
           <Link
             key={tab.href}
