@@ -47,4 +47,5 @@ it('no llama a push si no hay cambios sucios', async () => {
   };
   await runSync(transport);
   expect(transport.push).not.toHaveBeenCalled();
+  expect(await getSyncValue(PUSH_WATERMARK)).toBeGreaterThanOrEqual(start);
 });
