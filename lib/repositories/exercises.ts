@@ -26,8 +26,10 @@ export async function getExercise(id: string): Promise<Exercise | undefined> {
 }
 
 export async function listExercises(): Promise<Exercise[]> {
-  const all = await db.exercises.orderBy('nombre').toArray();
-  return all.filter((e) => e.deletedAt === null);
+  const all = await db.exercises.toArray();
+  return all
+    .filter((e) => e.deletedAt === null)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
 }
 
 export async function updateExercise(id: string, changes: ExerciseChanges): Promise<void> {

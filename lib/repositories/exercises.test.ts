@@ -20,6 +20,15 @@ describe('repositorio de ejercicios', () => {
     expect(list.map((e) => e.nombre)).toEqual(['Aperturas', 'Zancada']);
   });
 
+  it('ordena con criterio español ignorando mayúsculas y excluye los borrados', async () => {
+    await createExercise({ nombre: 'zancada', grupoMuscular: 'cuadriceps', equipamiento: 'mancuerna', tipo: 'compuesto' });
+    await createExercise({ nombre: 'Aperturas', grupoMuscular: 'pecho', equipamiento: 'polea', tipo: 'aislamiento' });
+    const borrado = await createExercise({ nombre: 'Banca', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto' });
+    await softDeleteExercise(borrado.id);
+    const list = await listExercises();
+    expect(list.map((e) => e.nombre)).toEqual(['Aperturas', 'zancada']);
+  });
+
   it('actualiza un ejercicio y refresca updatedAt', async () => {
     const ex = await createExercise({ nombre: 'Sentadilla', grupoMuscular: 'cuadriceps', equipamiento: 'barra', tipo: 'compuesto' });
     const before = ex.updatedAt;
