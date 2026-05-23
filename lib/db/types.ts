@@ -60,3 +60,25 @@ export interface RoutineExercise extends SyncMeta {
   descansoSegundos?: number;
   notas?: string;
 }
+
+export interface WorkoutSession extends SyncMeta {
+  userId: string | null;
+  routineDayId?: string; // vacío = entreno libre
+  fecha: number; // epoch ms (inicio del entreno)
+  duracionSegundos?: number;
+  notas?: string;
+}
+
+export interface LoggedExercise extends SyncMeta {
+  sessionId: string;
+  exerciseId: string;
+  orden: number;
+}
+
+export interface LoggedSet extends SyncMeta {
+  loggedExerciseId: string;
+  orden: number;
+  peso: number;
+  reps: number;
+  esCalentamiento?: boolean;
+}

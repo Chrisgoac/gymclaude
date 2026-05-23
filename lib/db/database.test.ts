@@ -25,4 +25,10 @@ describe('GymLogDB', () => {
     expect(db.routineDays).toBeDefined();
     expect(db.routineExercises).toBeDefined();
   });
+
+  it('expone las tablas de registro de entrenos (v3)', () => {
+    expect(db.workoutSessions).toBeDefined();
+    expect(db.loggedExercises).toBeDefined();
+    expect(db.loggedSets).toBeDefined();
+  });
 });
