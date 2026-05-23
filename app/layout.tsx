@@ -29,7 +29,7 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full min-h-screen pb-16 flex flex-col">
+      <body className="min-h-screen pb-16 flex flex-col">
         <DbProvider>
           <main className="mx-auto max-w-md p-4">{children}</main>
         </DbProvider>

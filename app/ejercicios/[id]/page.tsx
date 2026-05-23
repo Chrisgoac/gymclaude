@@ -23,6 +23,7 @@ export default function EditarEjercicioPage({ params }: { params: Promise<{ id: 
       <Button
         variant="destructive"
         onClick={async () => {
+          if (!window.confirm(`¿Borrar "${exercise.nombre}"?`)) return;
           await softDeleteExercise(id);
           router.push('/ejercicios');
         }}
