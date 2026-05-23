@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { it, expect, beforeEach, vi } from 'vitest';
 import { db } from '@/lib/db/database';
 import { createRoutine } from '@/lib/repositories/routines';
 import { runSync } from '@/lib/sync/sync';
