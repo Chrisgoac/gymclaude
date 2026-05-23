@@ -82,3 +82,8 @@ export interface LoggedSet extends SyncMeta {
   reps: number;
   esCalentamiento?: boolean;
 }
+
+export interface SyncState {
+  key: string;
+  value: number;
+}
