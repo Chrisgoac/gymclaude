@@ -36,3 +36,27 @@ export const EQUIPMENTS: Equipment[] = [
 ];
 
 export const EXERCISE_TYPES: ExerciseType[] = ['compuesto', 'aislamiento'];
+
+export interface Routine extends SyncMeta {
+  userId: string | null;
+  nombre: string;
+  descripcion?: string;
+  archivada: boolean;
+}
+
+export interface RoutineDay extends SyncMeta {
+  routineId: string;
+  nombre: string;
+  orden: number;
+  notas?: string;
+}
+
+export interface RoutineExercise extends SyncMeta {
+  routineDayId: string;
+  exerciseId: string;
+  orden: number;
+  seriesObjetivo?: number;
+  repsObjetivo?: number;
+  descansoSegundos?: number;
+  notas?: string;
+}

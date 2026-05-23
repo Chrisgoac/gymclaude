@@ -19,4 +19,10 @@ describe('GymLogDB', () => {
     const found = await db.exercises.get('x1');
     expect(found?.nombre).toBe('Press banca');
   });
+
+  it('expone las tablas de rutinas (v2)', () => {
+    expect(db.routines).toBeDefined();
+    expect(db.routineDays).toBeDefined();
+    expect(db.routineExercises).toBeDefined();
+  });
 });
