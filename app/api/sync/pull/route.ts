@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { and, eq, gte } from 'drizzle-orm';
