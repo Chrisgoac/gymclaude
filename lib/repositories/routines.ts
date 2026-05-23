@@ -36,13 +36,14 @@ export async function updateRoutine(
 
 export async function softDeleteRoutine(id: string): Promise<void> {
   const ts = now();
-  const days = await db.routineDays.where('routineId').equals(id).toArray();
-  const dayIds = days.map((d) => d.id);
+  // Lectura y escritura dentro de la misma transacción para evitar carreras (p.ej. multi-pestaña).
   await db.transaction('rw', db.routines, db.routineDays, db.routineExercises, async () => {
     await db.routines.update(id, { deletedAt: ts, updatedAt: ts });
+    const days = activo(await db.routineDays.where('routineId').equals(id).toArray());
+    const dayIds = days.map((d) => d.id);
     for (const d of days) await db.routineDays.update(d.id, { deletedAt: ts, updatedAt: ts });
     if (dayIds.length) {
-      const res = await db.routineExercises.where('routineDayId').anyOf(dayIds).toArray();
+      const res = activo(await db.routineExercises.where('routineDayId').anyOf(dayIds).toArray());
       for (const re of res) await db.routineExercises.update(re.id, { deletedAt: ts, updatedAt: ts });
     }
   });
@@ -75,7 +76,7 @@ export async function softDeleteDay(id: string): Promise<void> {
   const ts = now();
   await db.transaction('rw', db.routineDays, db.routineExercises, async () => {
     await db.routineDays.update(id, { deletedAt: ts, updatedAt: ts });
-    const res = await db.routineExercises.where('routineDayId').equals(id).toArray();
+    const res = activo(await db.routineExercises.where('routineDayId').equals(id).toArray());
     for (const re of res) await db.routineExercises.update(re.id, { deletedAt: ts, updatedAt: ts });
   });
 }
