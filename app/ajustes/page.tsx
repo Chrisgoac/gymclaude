@@ -9,15 +9,19 @@ export default function AjustesPage() {
   const [mensaje, setMensaje] = useState('');
 
   async function exportar() {
-    const backup = await exportData();
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `gymlog-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setMensaje('Copia exportada.');
+    try {
+      const backup = await exportData();
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gymlog-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMensaje('Copia exportada.');
+    } catch {
+      setMensaje('No se pudo exportar la copia.');
+    }
   }
 
   async function importar(file: File) {
@@ -47,6 +51,7 @@ export default function AjustesPage() {
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) void importar(file);
+            e.target.value = ''; // permite reimportar el mismo fichero
           }}
         />
         {mensaje && <p className="text-sm text-muted-foreground">{mensaje}</p>}
