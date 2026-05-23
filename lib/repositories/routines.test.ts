@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '@/lib/db/database';
 import {
   createRoutine, listRoutines, getRoutine, updateRoutine, softDeleteRoutine,
-  addDay, listDays, updateDay, softDeleteDay,
+  addDay, listDays, softDeleteDay,
   addExerciseToDay, listDayExercises, updateRoutineExercise, softDeleteRoutineExercise,
 } from '@/lib/repositories/routines';
 
