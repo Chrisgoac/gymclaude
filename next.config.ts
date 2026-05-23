@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Fija la raíz de tracing al proyecto (hay un yarn.lock en el home que confunde la inferencia).
+  outputFileTracingRoot: process.cwd(),
 };
 
 const withSerwist = withSerwistInit({

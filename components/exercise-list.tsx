@@ -3,21 +3,17 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/lib/db/database';
 import type { Exercise, MuscleGroup } from '@/lib/db/types';
 import { MUSCLE_GROUPS } from '@/lib/db/types';
+import { listExercises } from '@/lib/repositories/exercises';
 import { muscleGroupLabel, equipmentLabel } from '@/lib/labels';
 import { Input } from '@/components/ui/input';
 
 export function ExerciseList() {
   const [query, setQuery] = useState('');
 
-  const exercises = useLiveQuery(async () => {
-    const all = await db.exercises.toArray();
-    return all
-      .filter((e) => e.deletedAt === null)
-      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
-  }, []);
+  // Reusa la regla del repositorio (no-borrados + orden localizado) en vez de duplicarla.
+  const exercises = useLiveQuery(() => listExercises(), []);
 
   const grouped = useMemo(() => {
     const list = (exercises ?? []).filter((e) =>

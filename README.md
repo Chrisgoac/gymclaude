@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GymLog
 
-## Getting Started
+App personal de gimnasio (rutinas, pesos y entrenos). PWA móvil **local-first**: funciona offline en el gimnasio y guarda los datos en el dispositivo (IndexedDB). En fases posteriores tendrá cuenta y sincronización en la nube.
 
-First, run the development server:
+## Estado por fases
+
+- **Fase 1 (actual):** cimientos + catálogo de ejercicios (explorar, buscar, crear/editar/borrar los propios), instalable como PWA y offline.
+- Fase 2 — rutinas + registro de entrenos.
+- Fase 3 — progreso, historial y export/import.
+- Fase 4 — cuenta (Clerk) + sincronización (Neon/Drizzle).
+
+Diseño y planes: `docs/superpowers/specs/` y `docs/superpowers/plans/`.
+
+## Stack
+
+Next.js 16 (App Router, TS) · Tailwind v4 · shadcn/ui · Dexie (IndexedDB) · Serwist (PWA) · Vitest + React Testing Library.
+
+## Desarrollo
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000 (Turbopack)
+npm test           # tests unitarios y de componente (Vitest)
+npm run build      # build de producción con webpack (genera public/sw.js vía Serwist)
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+> Nota: `dev` usa Turbopack; `build` usa `--webpack` porque el service worker de Serwist se empaqueta con el plugin de webpack. El SW está deshabilitado en desarrollo.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Datos
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Todo vive en IndexedDB (base `gymlog`) mediante Dexie. El catálogo de ejercicios se siembra en el primer arranque. Cada registro lleva `id` (UUID), `updatedAt` y `deletedAt` (borrado lógico), preparados para la sincronización de la Fase 4.
