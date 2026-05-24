@@ -2,12 +2,11 @@ import { it, expect, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { db } from '@/lib/db/database';
-import { createRoutine, addDay, addExerciseToDay } from '@/lib/repositories/routines';
+import { createRoutine, addExerciseToRoutine } from '@/lib/repositories/routines';
 import { RoutineDayExerciseRow } from '@/components/routine-day-exercise-row';
 
 beforeEach(async () => {
   await db.routines.clear();
-  await db.routineDays.clear();
   await db.routineExercises.clear();
   await db.exercises.clear();
   await db.exercises.put({
@@ -18,8 +17,7 @@ beforeEach(async () => {
 
 it('muestra el nombre del ejercicio y guarda los objetivos', async () => {
   const r = await createRoutine({ nombre: 'R' });
-  const d = await addDay(r.id, { nombre: 'D' });
-  const re = await addExerciseToDay(d.id, { exerciseId: 'seed-press-banca' });
+  const re = await addExerciseToRoutine(r.id, { exerciseId: 'seed-press-banca' });
 
   render(<RoutineDayExerciseRow routineExercise={re} />);
   expect(await screen.findByText('Press de banca')).toBeInTheDocument();

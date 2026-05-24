@@ -1,13 +1,12 @@
 import Dexie, { type Table } from 'dexie';
 import type {
-  Exercise, Routine, RoutineDay, RoutineExercise,
+  Exercise, Routine, RoutineExercise,
   WorkoutSession, LoggedExercise, LoggedSet, SyncState, Gym,
 } from './types';
 
 export class GymLogDB extends Dexie {
   exercises!: Table<Exercise, string>;
   routines!: Table<Routine, string>;
-  routineDays!: Table<RoutineDay, string>;
   routineExercises!: Table<RoutineExercise, string>;
   workoutSessions!: Table<WorkoutSession, string>;
   loggedExercises!: Table<LoggedExercise, string>;
@@ -73,6 +72,10 @@ export class GymLogDB extends Dexie {
         re.routineId = routineIdByDay.get(re.routineDayId) ?? '';
         re.updatedAt = Date.now(); // re-sincroniza el cambio
       });
+    });
+    this.version(7).stores({
+      routineDays: null, // eliminar la tabla (datos ya migrados a routineExercises.routineId en v6)
+      routineExercises: 'id, routineId, exerciseId, orden, deletedAt',
     });
   }
 }

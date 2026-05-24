@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '@/lib/db/database';
-import { createRoutine, addDay, addExerciseToDay, addExerciseToRoutine } from '@/lib/repositories/routines';
+import { createRoutine, addExerciseToRoutine } from '@/lib/repositories/routines';
 import {
   startSession, getSession, listSessions, finishSession, softDeleteSession,
   addLoggedExercise, listSessionExercises, softDeleteLoggedExercise,
@@ -13,7 +13,6 @@ beforeEach(async () => {
   await db.loggedExercises.clear();
   await db.loggedSets.clear();
   await db.routines.clear();
-  await db.routineDays.clear();
   await db.routineExercises.clear();
   await db.gyms.clear();
 });
@@ -25,16 +24,6 @@ describe('sesiones', () => {
     expect(s.routineDayId).toBeUndefined();
     expect(s.fecha).toBeGreaterThan(0);
     expect(await listSessionExercises(s.id)).toHaveLength(0);
-  });
-
-  it('empieza desde un día de rutina y precarga sus ejercicios en orden', async () => {
-    const r = await createRoutine({ nombre: 'R' });
-    const d = await addDay(r.id, { nombre: 'Empuje' });
-    await addExerciseToDay(d.id, { exerciseId: 'seed-press-banca' });
-    await addExerciseToDay(d.id, { exerciseId: 'seed-press-militar' });
-    const s = await startSession({ routineDayId: d.id });
-    const les = await listSessionExercises(s.id);
-    expect(les.map((le) => le.exerciseId)).toEqual(['seed-press-banca', 'seed-press-militar']);
   });
 
   it('empieza desde una rutina y precarga sus ejercicios en orden', async () => {

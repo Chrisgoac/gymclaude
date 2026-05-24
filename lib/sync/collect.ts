@@ -14,7 +14,6 @@ const asSync = (t: unknown) => t as Table<SyncMeta, string>;
 export const SYNCABLE_TABLES: SyncableTable[] = [
   { name: 'exercises', table: asSync(db.exercises), shouldSync: (r) => (r as SyncMeta & { esPersonalizado?: boolean }).esPersonalizado === true },
   { name: 'routines', table: asSync(db.routines) },
-  { name: 'routineDays', table: asSync(db.routineDays) },
   { name: 'routineExercises', table: asSync(db.routineExercises) },
   { name: 'workoutSessions', table: asSync(db.workoutSessions) },
   { name: 'loggedExercises', table: asSync(db.loggedExercises) },

@@ -44,16 +44,8 @@ export interface Routine extends SyncMeta {
   archivada: boolean;
 }
 
-export interface RoutineDay extends SyncMeta {
-  routineId: string;
-  nombre: string;
-  orden: number;
-  notas?: string;
-}
-
 export interface RoutineExercise extends SyncMeta {
-  routineId: string;        // nuevo: el ejercicio cuelga directamente de la rutina
-  routineDayId?: string;    // legacy en transición; se elimina en la fase sustractiva
+  routineId: string;
   exerciseId: string;
   orden: number;
   seriesObjetivo?: number;

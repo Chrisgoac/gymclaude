@@ -8,7 +8,6 @@ const asSync = (t: unknown) => t as Table<SyncMeta, string>;
 const TABLE_BY_NAME: Record<string, Table<SyncMeta, string>> = {
   exercises: asSync(db.exercises),
   routines: asSync(db.routines),
-  routineDays: asSync(db.routineDays),
   routineExercises: asSync(db.routineExercises),
   workoutSessions: asSync(db.workoutSessions),
   loggedExercises: asSync(db.loggedExercises),
