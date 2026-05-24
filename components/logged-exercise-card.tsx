@@ -18,9 +18,11 @@ function parseNum(v: string): number {
 export function LoggedExerciseCard({
   loggedExercise,
   sessionId,
+  gymId,
 }: {
   loggedExercise: LoggedExercise;
   sessionId: string;
+  gymId?: string;
 }) {
   const ejercicio = useLiveQuery(() => db.exercises.get(loggedExercise.exerciseId), [loggedExercise.exerciseId]);
   const sets = useLiveQuery(() => listExerciseSets(loggedExercise.id), [loggedExercise.id]);
@@ -32,7 +34,7 @@ export function LoggedExerciseCard({
       await addSet(loggedExercise.id, { peso: ultima.peso, reps: ultima.reps });
       return;
     }
-    const previa = await getLastSet(loggedExercise.exerciseId, sessionId);
+    const previa = await getLastSet(loggedExercise.exerciseId, sessionId, gymId);
     await addSet(loggedExercise.id, { peso: previa?.peso ?? 0, reps: previa?.reps ?? 0 });
   }
 
