@@ -101,3 +101,33 @@ describe('getCurrentStreakDays', () => {
     expect(await getCurrentStreakDays()).toBe(0);
   });
 });
+
+describe('filtro por gimnasio', () => {
+  it('getExercisePRs y getExerciseProgress filtran por gimnasio', async () => {
+    const a = await startSession({ gymId: 'gymA' });
+    const leA = await addLoggedExercise(a.id, 'seed-sentadilla');
+    await addSet(leA.id, { peso: 100, reps: 5 });
+    const b = await startSession({ gymId: 'gymB' });
+    const leB = await addLoggedExercise(b.id, 'seed-sentadilla');
+    await addSet(leB.id, { peso: 60, reps: 5 });
+
+    expect((await getExercisePRs('seed-sentadilla'))?.maxPeso).toBe(100);
+    expect((await getExercisePRs('seed-sentadilla', 'gymB'))?.maxPeso).toBe(60);
+    const progB = await getExerciseProgress('seed-sentadilla', 'gymB');
+    expect(progB).toHaveLength(1);
+    expect(progB[0].maxPeso).toBe(60);
+  });
+
+  it('listSessionSummaries y getVolumeByMuscle filtran por gimnasio', async () => {
+    const a = await startSession({ gymId: 'gymA' });
+    const leA = await addLoggedExercise(a.id, 'seed-sentadilla');
+    await addSet(leA.id, { peso: 100, reps: 5 });
+    await startSession({ gymId: 'gymB' });
+
+    expect(await listSessionSummaries()).toHaveLength(2);
+    expect(await listSessionSummaries('gymA')).toHaveLength(1);
+    const volA = await getVolumeByMuscle(0, 'gymA');
+    expect(volA.reduce((acc, v) => acc + v.volumen, 0)).toBe(500);
+    expect(await getVolumeByMuscle(0, 'gymB')).toHaveLength(0);
+  });
+});

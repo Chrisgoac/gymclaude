@@ -8,13 +8,17 @@ export function estimar1RM(peso: number, reps: number): number {
   return Math.round(peso * (1 + reps / 30) * 10) / 10;
 }
 
-async function setsDeEjercicio(exerciseId: string): Promise<{ set: LoggedSet; fecha: number }[]> {
+async function setsDeEjercicio(exerciseId: string, gymId?: string | null): Promise<{ set: LoggedSet; fecha: number }[]> {
   const les = activo(await db.loggedExercises.where('exerciseId').equals(exerciseId).toArray());
   if (les.length === 0) return [];
   const sessionIds = [...new Set(les.map((le) => le.sessionId))];
   const sessions = await db.workoutSessions.bulkGet(sessionIds);
   const fechaBy = new Map<string, number>();
-  for (const s of sessions) if (s && s.deletedAt === null) fechaBy.set(s.id, s.fecha);
+  for (const s of sessions) {
+    if (!s || s.deletedAt !== null) continue;
+    if (gymId != null && (s.gymId ?? null) !== gymId) continue; // filtro por gimnasio
+    fechaBy.set(s.id, s.fecha);
+  }
   const out: { set: LoggedSet; fecha: number }[] = [];
   for (const le of les) {
     const fecha = fechaBy.get(le.sessionId);
@@ -32,8 +36,8 @@ export interface ExerciseProgressPoint {
   volumen: number;
 }
 
-export async function getExerciseProgress(exerciseId: string): Promise<ExerciseProgressPoint[]> {
-  const data = await setsDeEjercicio(exerciseId);
+export async function getExerciseProgress(exerciseId: string, gymId?: string | null): Promise<ExerciseProgressPoint[]> {
+  const data = await setsDeEjercicio(exerciseId, gymId);
   const byFecha = new Map<number, LoggedSet[]>();
   for (const { set, fecha } of data) {
     const arr = byFecha.get(fecha) ?? [];
@@ -57,8 +61,8 @@ export interface ExercisePRs {
   mejor1RM: number;
 }
 
-export async function getExercisePRs(exerciseId: string): Promise<ExercisePRs | null> {
-  const data = await setsDeEjercicio(exerciseId);
+export async function getExercisePRs(exerciseId: string, gymId?: string | null): Promise<ExercisePRs | null> {
+  const data = await setsDeEjercicio(exerciseId, gymId);
   if (data.length === 0) return null;
   let maxPeso = 0;
   let mejor1RM = 0;
@@ -74,8 +78,10 @@ export interface VolumeByMuscle {
   volumen: number;
 }
 
-export async function getVolumeByMuscle(sinceTs = 0): Promise<VolumeByMuscle[]> {
-  const sessions = activo(await db.workoutSessions.toArray()).filter((s) => s.fecha >= sinceTs);
+export async function getVolumeByMuscle(sinceTs = 0, gymId?: string | null): Promise<VolumeByMuscle[]> {
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => s.fecha >= sinceTs)
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId);
   const sessionIds = new Set(sessions.map((s) => s.id));
   if (sessionIds.size === 0) return [];
   const les = activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
@@ -102,8 +108,10 @@ export interface SessionSummary {
   volumen: number;
 }
 
-export async function listSessionSummaries(): Promise<SessionSummary[]> {
-  const sessions = activo(await db.workoutSessions.toArray()).sort((a, b) => b.fecha - a.fecha);
+export async function listSessionSummaries(gymId?: string | null): Promise<SessionSummary[]> {
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId)
+    .sort((a, b) => b.fecha - a.fecha);
   const out: SessionSummary[] = [];
   for (const session of sessions) {
     const les = activo(await db.loggedExercises.where('sessionId').equals(session.id).toArray());
