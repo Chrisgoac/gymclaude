@@ -16,8 +16,9 @@ describe('ExerciseList', () => {
     render(<ExerciseList />);
     expect(await screen.findByText('Press de banca')).toBeInTheDocument();
     expect(screen.getByText('Curl martillo')).toBeInTheDocument();
-    expect(screen.getByText('Pecho')).toBeInTheDocument();
-    expect(screen.getByText('Bíceps')).toBeInTheDocument();
+    // Encabezados de sección por rol (hay también chips con el mismo texto).
+    expect(screen.getByRole('heading', { name: 'Pecho' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Bíceps' })).toBeInTheDocument();
   });
 
   it('filtra por el texto de búsqueda', async () => {

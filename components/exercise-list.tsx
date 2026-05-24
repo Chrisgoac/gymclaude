@@ -89,7 +89,7 @@ export function ExerciseList() {
       {grouped.length === 0 && <p className="text-muted-foreground">No hay ejercicios.</p>}
       {grouped.map(({ grupo: g, items }) => (
         <section key={g} className="space-y-1">
-          <h2 className="label-mono text-[11px] text-muted-foreground">— {muscleGroupLabel[g]}</h2>
+          <h2 className="label-mono text-[11px] text-muted-foreground">{muscleGroupLabel[g]}</h2>
           <ul className="brutal-box divide-y-2 divide-foreground">
             {items.map((ex) => (
               <li key={ex.id}>
