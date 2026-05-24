@@ -9,4 +9,5 @@ export const SERVER_TABLES: Record<string, PgTable> = {
   workoutSessions: schema.workoutSessions,
   loggedExercises: schema.loggedExercises,
   loggedSets: schema.loggedSets,
+  gyms: schema.gyms,
 };

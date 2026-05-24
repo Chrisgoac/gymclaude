@@ -5,7 +5,7 @@ import { createRoutine } from '@/lib/repositories/routines';
 import { collectDirty } from '@/lib/sync/collect';
 
 beforeEach(async () => {
-  await Promise.all([db.exercises.clear(), db.routines.clear()]);
+  await Promise.all([db.exercises.clear(), db.routines.clear(), db.gyms.clear()]);
 });
 
 describe('collectDirty', () => {
@@ -20,6 +20,16 @@ describe('collectDirty', () => {
     const r = await createRoutine({ nombre: 'R' });
     const changes = await collectDirty(r.updatedAt);
     expect(changes.find((c) => c.table === 'routines')).toBeUndefined();
+  });
+
+  it('sincroniza los gimnasios', async () => {
+    await db.gyms.clear();
+    await db.gyms.put({
+      id: 'g1', userId: null, nombre: 'Gold\'s', orden: 0, archivada: false,
+      updatedAt: Date.now(), deletedAt: null,
+    });
+    const changes = await collectDirty(0);
+    expect(changes.find((c) => c.table === 'gyms')?.records).toHaveLength(1);
   });
 
   it('sólo sincroniza ejercicios personalizados, no los del catálogo (seed)', async () => {
