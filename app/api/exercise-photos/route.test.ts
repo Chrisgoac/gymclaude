@@ -43,6 +43,15 @@ describe('POST /api/exercise-photos', () => {
     const res = await POST(reqConFoto('e1'));
     expect(res.status).toBe(503);
   });
+
+  it('413 si la imagen es demasiado grande', async () => {
+    auth.mockResolvedValue({ userId: 'u1' });
+    const fd = new FormData();
+    fd.append('exerciseId', 'e1');
+    fd.append('file', new Blob([new Uint8Array(9 * 1024 * 1024)], { type: 'image/jpeg' }), 'foto.jpg');
+    const res = await POST(new Request('http://localhost/api/exercise-photos', { method: 'POST', body: fd }));
+    expect(res.status).toBe(413);
+  });
 });
 
 describe('DELETE /api/exercise-photos', () => {
@@ -52,5 +61,13 @@ describe('DELETE /api/exercise-photos', () => {
       method: 'DELETE', body: JSON.stringify({ key: 'k' }),
     }));
     expect(res.status).toBe(401);
+  });
+
+  it('403 si el key es de otro usuario', async () => {
+    auth.mockResolvedValue({ userId: 'u1' });
+    const res = await DELETE(new Request('http://localhost/api/exercise-photos', {
+      method: 'DELETE', body: JSON.stringify({ key: 'otro/e1/x.jpg' }),
+    }));
+    expect(res.status).toBe(403);
   });
 });
