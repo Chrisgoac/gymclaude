@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/database';
 import { getSession, listSessionExercises, softDeleteSession } from '@/lib/repositories/workouts';
-import { listGyms } from '@/lib/repositories/gyms';
+import { listGyms, getGymsMap, gymDisplayName } from '@/lib/repositories/gyms';
 import { Button } from '@/components/ui/button';
 
 function ExerciseDetail({ loggedExerciseId, exerciseId }: { loggedExerciseId: string; exerciseId: string }) {
@@ -36,9 +36,15 @@ export default function SessionDetailPage() {
   const session = useLiveQuery(() => getSession(sessionId), [sessionId]);
   const ejercicios = useLiveQuery(() => listSessionExercises(sessionId), [sessionId]);
   const gyms = useLiveQuery(() => listGyms(), []);
+  const gymsMap = useLiveQuery(() => getGymsMap(), []);
 
   if (session === undefined) return <p className="text-muted-foreground">Cargando…</p>;
   if (!session || session.deletedAt !== null) return <p>Entreno no encontrado.</p>;
+
+  // Si el gimnasio del entreno está archivado/borrado no aparece en la lista de activos;
+  // lo añadimos como opción extra para no perder ni tergiversar su asignación real.
+  const activos = gyms ?? [];
+  const actualFueraDeLista = !!session.gymId && !activos.some((g) => g.id === session.gymId);
 
   return (
     <div className="space-y-6">
@@ -54,7 +60,10 @@ export default function SessionDetailPage() {
           }}
         >
           <option value="">Sin gimnasio</option>
-          {(gyms ?? []).map((g) => (
+          {actualFueraDeLista && session.gymId && (
+            <option value={session.gymId}>{gymDisplayName(session.gymId, gymsMap ?? new Map())}</option>
+          )}
+          {activos.map((g) => (
             <option key={g.id} value={g.id}>{g.nombre}</option>
           ))}
         </select>

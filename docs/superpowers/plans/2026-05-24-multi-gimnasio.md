@@ -1524,10 +1524,13 @@ git commit -m "chore: verificación final multi-gimnasio (tests, tipos, lint, bu
 
 ## Notas de cierre
 
-- **Reordenar gimnasios (UI) diferido conscientemente:** el repo incluye y testea `reorderGyms`,
-  pero el gestor de Ajustes no expone reordenar (un usuario personal tiene 2-4 gimnasios; la
-  lista por orden de creación basta). Si más adelante hace falta, los botones ▲▼ que llaman a
-  `reorderGyms(nuevoOrden)` son triviales de añadir. Esto es la única desviación respecto al spec.
+- **UI de reordenar y archivar gimnasios diferida conscientemente:** el repo incluye y testea
+  `reorderGyms` y `archiveGym` (y `listGyms` ya oculta los archivados), pero el gestor de Ajustes
+  solo expone crear/renombrar/borrar. Motivos: para 2-4 gimnasios el orden de creación basta, y
+  archivar sin un camino de "desarchivar" (que exigiría una vista de archivados) sería una trampa;
+  `borrar` (soft-delete) ya conserva los entrenos. Las funciones de repo se mantienen por
+  completitud de la superficie de sync y son triviales de cablear si más adelante se quieren.
+  Estas son las únicas desviaciones respecto al spec.
 - Tras todo el plan: el push a Neon (`db:push`) ya está hecho en la Task 2; al desplegar, los endpoints `/api/sync/push|pull` sincronizarán `gyms` y `gym_id` automáticamente (ya registrados en `server-tables.ts`).
 - Estética Brutalist Iron mantenida en los componentes nuevos (`brutal-box`, `label-mono`, borde 2px, sombra dura, chips cuadrados).
 - Desplegar con `vercel --prod` cuando el usuario lo pida.
