@@ -10,14 +10,21 @@ vi.mock('next/navigation', () => ({
 const mockedUsePathname = vi.mocked(usePathname);
 
 describe('BottomNav', () => {
-  it('muestra las cinco pestañas', () => {
+  it('muestra las seis pestañas', () => {
     mockedUsePathname.mockReturnValue('/');
     render(<BottomNav />);
     expect(screen.getByText('Entrenar')).toBeInTheDocument();
     expect(screen.getByText('Rutinas')).toBeInTheDocument();
+    expect(screen.getByText('Ejercicios')).toBeInTheDocument();
     expect(screen.getByText('Progreso')).toBeInTheDocument();
     expect(screen.getByText('Historial')).toBeInTheDocument();
     expect(screen.getByText('Ajustes')).toBeInTheDocument();
+  });
+
+  it('marca Ejercicios como activa en su ruta y subrutas', () => {
+    mockedUsePathname.mockReturnValue('/ejercicios/nuevo');
+    render(<BottomNav />);
+    expect(screen.getByText('Ejercicios').className).toContain('text-primary');
   });
 
   it('marca como activa la pestaña de la ruta actual', () => {

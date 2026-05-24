@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 const TABS = [
   { href: '/', label: 'Entrenar' },
   { href: '/rutinas', label: 'Rutinas' },
+  { href: '/ejercicios', label: 'Ejercicios' },
   { href: '/progreso', label: 'Progreso' },
   { href: '/historial', label: 'Historial' },
   { href: '/ajustes', label: 'Ajustes' },
@@ -14,7 +15,7 @@ const TABS = [
 export function BottomNav() {
   const pathname = usePathname();
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t-2 border-foreground bg-card">
+    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t-2 border-foreground bg-card">
       {TABS.map((tab) => {
         // La pestaña Entrenar ('/') cubre también las subrutas del registro (/entrenar/...).
         const active =
