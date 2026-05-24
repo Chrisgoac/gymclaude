@@ -1,6 +1,6 @@
 import { db } from '@/lib/db/database';
 import type {
-  Exercise, Routine, RoutineDay, RoutineExercise,
+  Exercise, Gym, Routine, RoutineDay, RoutineExercise,
   WorkoutSession, LoggedExercise, LoggedSet,
 } from '@/lib/db/types';
 
@@ -9,6 +9,7 @@ export interface BackupFile {
   version: number;
   exportedAt: number;
   data: {
+    gyms: Gym[];
     exercises: Exercise[];
     routines: Routine[];
     routineDays: RoutineDay[];
@@ -22,9 +23,10 @@ export interface BackupFile {
 export async function exportData(): Promise<BackupFile> {
   return {
     app: 'gymlog',
-    version: 3,
+    version: 4,
     exportedAt: Date.now(),
     data: {
+      gyms: await db.gyms.toArray(),
       exercises: await db.exercises.toArray(),
       routines: await db.routines.toArray(),
       routineDays: await db.routineDays.toArray(),
@@ -42,10 +44,11 @@ export async function importData(backup: BackupFile): Promise<void> {
   }
   const d = backup.data;
   const tables = [
-    db.exercises, db.routines, db.routineDays, db.routineExercises,
+    db.gyms, db.exercises, db.routines, db.routineDays, db.routineExercises,
     db.workoutSessions, db.loggedExercises, db.loggedSets,
   ] as const;
   await db.transaction('rw', tables, async () => {
+    if (d.gyms?.length) await db.gyms.bulkPut(d.gyms);
     if (d.exercises?.length) await db.exercises.bulkPut(d.exercises);
     if (d.routines?.length) await db.routines.bulkPut(d.routines);
     if (d.routineDays?.length) await db.routineDays.bulkPut(d.routineDays);

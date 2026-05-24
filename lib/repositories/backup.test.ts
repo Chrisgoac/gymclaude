@@ -8,6 +8,7 @@ beforeEach(async () => {
   await Promise.all([
     db.exercises.clear(), db.routines.clear(), db.routineDays.clear(), db.routineExercises.clear(),
     db.workoutSessions.clear(), db.loggedExercises.clear(), db.loggedSets.clear(),
+    db.gyms.clear(),
   ]);
 });
 
@@ -32,6 +33,19 @@ it('exporta e importa todos los datos (roundtrip)', async () => {
   expect(await db.routines.count()).toBe(1);
   expect(await db.routineDays.count()).toBe(1);
   expect(await db.loggedSets.count()).toBe(1);
+});
+
+it('exporta e importa los gimnasios', async () => {
+  await db.gyms.clear();
+  await db.gyms.put({
+    id: 'g1', userId: null, nombre: 'Gold\'s', orden: 0, archivada: false,
+    updatedAt: Date.now(), deletedAt: null,
+  });
+  const backup = await exportData();
+  expect(backup.data.gyms).toHaveLength(1);
+  await db.gyms.clear();
+  await importData(backup);
+  expect((await db.gyms.get('g1'))?.nombre).toBe("Gold's");
 });
 
 it('rechaza un fichero no válido', async () => {
