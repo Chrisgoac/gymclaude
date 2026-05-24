@@ -29,4 +29,14 @@ describe('ExerciseList', () => {
       expect(screen.getByText('Curl martillo')).toBeInTheDocument();
     });
   });
+
+  it('filtra por chip de grupo muscular', async () => {
+    render(<ExerciseList />);
+    await screen.findByText('Press de banca');
+    await userEvent.click(screen.getByRole('button', { name: 'Bíceps' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Press de banca')).not.toBeInTheDocument();
+      expect(screen.getByText('Curl martillo')).toBeInTheDocument();
+    });
+  });
 });
