@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '@/lib/db/database';
-import { createRoutine, addDay, addExerciseToDay } from '@/lib/repositories/routines';
+import { createRoutine, addDay, addExerciseToDay, addExerciseToRoutine } from '@/lib/repositories/routines';
 import {
   startSession, getSession, listSessions, finishSession, softDeleteSession,
   addLoggedExercise, listSessionExercises, softDeleteLoggedExercise,
@@ -33,6 +33,15 @@ describe('sesiones', () => {
     await addExerciseToDay(d.id, { exerciseId: 'seed-press-banca' });
     await addExerciseToDay(d.id, { exerciseId: 'seed-press-militar' });
     const s = await startSession({ routineDayId: d.id });
+    const les = await listSessionExercises(s.id);
+    expect(les.map((le) => le.exerciseId)).toEqual(['seed-press-banca', 'seed-press-militar']);
+  });
+
+  it('empieza desde una rutina y precarga sus ejercicios en orden', async () => {
+    const r = await createRoutine({ nombre: 'R' });
+    await addExerciseToRoutine(r.id, { exerciseId: 'seed-press-banca' });
+    await addExerciseToRoutine(r.id, { exerciseId: 'seed-press-militar' });
+    const s = await startSession({ routineId: r.id });
     const les = await listSessionExercises(s.id);
     expect(les.map((le) => le.exerciseId)).toEqual(['seed-press-banca', 'seed-press-militar']);
   });

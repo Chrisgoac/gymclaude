@@ -126,3 +126,35 @@ export async function softDeleteRoutineExercise(id: string): Promise<void> {
   const ts = now();
   await db.routineExercises.update(id, { deletedAt: ts, updatedAt: ts });
 }
+
+export async function addExerciseToRoutine(
+  routineId: string,
+  input: {
+    exerciseId: string;
+    seriesObjetivo?: number;
+    repsObjetivo?: number;
+    descansoSegundos?: number;
+    notas?: string;
+  },
+): Promise<RoutineExercise> {
+  const existentes = activo(await db.routineExercises.where('routineId').equals(routineId).toArray());
+  const re: RoutineExercise = {
+    id: crypto.randomUUID(),
+    routineId,
+    exerciseId: input.exerciseId,
+    orden: existentes.length,
+    seriesObjetivo: input.seriesObjetivo,
+    repsObjetivo: input.repsObjetivo,
+    descansoSegundos: input.descansoSegundos,
+    notas: input.notas,
+    updatedAt: now(),
+    deletedAt: null,
+  };
+  await db.routineExercises.put(re);
+  return re;
+}
+
+export async function listRoutineExercises(routineId: string): Promise<RoutineExercise[]> {
+  const all = await db.routineExercises.where('routineId').equals(routineId).toArray();
+  return activo(all).sort((a, b) => a.orden - b.orden);
+}

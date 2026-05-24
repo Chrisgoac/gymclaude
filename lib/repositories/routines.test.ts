@@ -4,6 +4,7 @@ import {
   createRoutine, listRoutines, getRoutine, updateRoutine, softDeleteRoutine,
   addDay, listDays, softDeleteDay,
   addExerciseToDay, listDayExercises, updateRoutineExercise, softDeleteRoutineExercise,
+  addExerciseToRoutine, listRoutineExercises,
 } from '@/lib/repositories/routines';
 
 beforeEach(async () => {
@@ -75,5 +76,26 @@ describe('ejercicios del día', () => {
     expect(await db.routineExercises.get(re.id)).toMatchObject({ seriesObjetivo: 4, repsObjetivo: 10, descansoSegundos: 120 });
     await softDeleteRoutineExercise(re.id);
     expect(await listDayExercises(d.id)).toHaveLength(0);
+  });
+});
+
+describe('ejercicios de la rutina (plano)', () => {
+  it('añade ejercicios directos a la rutina con orden incremental', async () => {
+    const r = await createRoutine({ nombre: 'R' });
+    const e1 = await addExerciseToRoutine(r.id, { exerciseId: 'seed-press-banca' });
+    const e2 = await addExerciseToRoutine(r.id, { exerciseId: 'seed-sentadilla' });
+    expect(e1.routineId).toBe(r.id);
+    expect(e1.routineDayId).toBeUndefined();
+    expect(e1.orden).toBe(0);
+    expect(e2.orden).toBe(1);
+    expect((await listRoutineExercises(r.id)).map((re) => re.exerciseId))
+      .toEqual(['seed-press-banca', 'seed-sentadilla']);
+  });
+
+  it('listRoutineExercises omite los borrados', async () => {
+    const r = await createRoutine({ nombre: 'R' });
+    const e1 = await addExerciseToRoutine(r.id, { exerciseId: 'seed-press-banca' });
+    await softDeleteRoutineExercise(e1.id);
+    expect(await listRoutineExercises(r.id)).toHaveLength(0);
   });
 });

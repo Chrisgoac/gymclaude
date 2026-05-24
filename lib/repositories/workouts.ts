@@ -1,11 +1,11 @@
 import { db } from '@/lib/db/database';
 import type { WorkoutSession, LoggedExercise, LoggedSet } from '@/lib/db/types';
-import { listDayExercises } from '@/lib/repositories/routines';
+import { listDayExercises, listRoutineExercises } from '@/lib/repositories/routines';
 
 const now = () => Date.now();
 const activo = <T extends { deletedAt: number | null }>(arr: T[]) => arr.filter((x) => x.deletedAt === null);
 
-export async function startSession(input: { routineDayId?: string; gymId?: string | null }): Promise<WorkoutSession> {
+export async function startSession(input: { routineDayId?: string; routineId?: string; gymId?: string | null }): Promise<WorkoutSession> {
   const ts = now();
   const session: WorkoutSession = {
     id: crypto.randomUUID(),
@@ -17,11 +17,12 @@ export async function startSession(input: { routineDayId?: string; gymId?: strin
     deletedAt: null,
   };
   await db.workoutSessions.put(session);
-  if (input.routineDayId) {
+  if (input.routineId) {
+    const res = await listRoutineExercises(input.routineId);
+    for (const re of res) await addLoggedExercise(session.id, re.exerciseId);
+  } else if (input.routineDayId) {
     const dayExercises = await listDayExercises(input.routineDayId);
-    for (const re of dayExercises) {
-      await addLoggedExercise(session.id, re.exerciseId);
-    }
+    for (const re of dayExercises) await addLoggedExercise(session.id, re.exerciseId);
   }
   return session;
 }
