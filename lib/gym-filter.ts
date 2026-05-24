@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 const KEY = 'gymlog.gymFilter';
 export type GymFilter = 'all' | string;
@@ -16,16 +16,20 @@ export function setGymFilter(value: GymFilter): void {
   window.dispatchEvent(new CustomEvent('gymfilterchange'));
 }
 
-/** Hook React: lee el filtro y se re-renderiza cuando cambia (misma pestaña). */
+function subscribe(callback: () => void): () => void {
+  window.addEventListener('gymfilterchange', callback);
+  window.addEventListener('storage', callback); // cambios desde otra pestaña
+  return () => {
+    window.removeEventListener('gymfilterchange', callback);
+    window.removeEventListener('storage', callback);
+  };
+}
+
+/** Hook React: lee el filtro y se re-renderiza cuando cambia (misma pestaña u otra). */
 export function useGymFilter(): [GymFilter, (v: GymFilter) => void] {
-  const [filtro, setFiltro] = useState<GymFilter>('all');
-  useEffect(() => {
-    setFiltro(getGymFilter());
-    const onChange = () => setFiltro(getGymFilter());
-    window.addEventListener('gymfilterchange', onChange);
-    return () => window.removeEventListener('gymfilterchange', onChange);
-  }, []);
-  return [filtro, (v) => { setGymFilter(v); setFiltro(v); }];
+  // useSyncExternalStore evita set-state-en-efecto y resuelve el snapshot de servidor (SSR).
+  const filtro = useSyncExternalStore(subscribe, getGymFilter, () => 'all');
+  return [filtro, setGymFilter];
 }
 
 /** Convierte el filtro en el argumento para las stats (undefined = todos). */
