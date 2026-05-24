@@ -6,15 +6,20 @@ import { listExercises } from '@/lib/repositories/exercises';
 import { getVolumeByMuscle } from '@/lib/repositories/stats';
 import { muscleGroupLabel } from '@/lib/labels';
 import { ExerciseProgress } from '@/components/exercise-progress';
+import { GymFilter } from '@/components/gym-filter';
+import { useGymFilter, filtroAGymId } from '@/lib/gym-filter';
 
 export default function ProgresoPage() {
   const ejercicios = useLiveQuery(() => listExercises(), []);
-  const volumen = useLiveQuery(() => getVolumeByMuscle(), []);
+  const [filtro] = useGymFilter();
+  const gymId = filtroAGymId(filtro);
+  const volumen = useLiveQuery(() => getVolumeByMuscle(0, gymId), [gymId]);
   const [seleccion, setSeleccion] = useState('');
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Progreso</h1>
+      <GymFilter />
 
       <section className="space-y-2">
         <label htmlFor="ejercicio" className="text-sm font-semibold uppercase text-muted-foreground">
@@ -33,7 +38,7 @@ export default function ProgresoPage() {
             </option>
           ))}
         </select>
-        {seleccion && <ExerciseProgress exerciseId={seleccion} />}
+        {seleccion && <ExerciseProgress exerciseId={seleccion} gymId={gymId} />}
       </section>
 
       <section className="space-y-2">

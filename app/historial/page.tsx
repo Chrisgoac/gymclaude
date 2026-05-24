@@ -3,6 +3,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getCurrentStreakDays } from '@/lib/repositories/stats';
 import { SessionSummaryList } from '@/components/session-summary-list';
+import { GymFilter } from '@/components/gym-filter';
 
 export default function HistorialPage() {
   const racha = useLiveQuery(() => getCurrentStreakDays(), []);
@@ -15,6 +16,7 @@ export default function HistorialPage() {
           <span className="text-sm font-medium text-primary">🔥 {racha} día{racha === 1 ? '' : 's'}</span>
         )}
       </div>
+      <GymFilter />
       <SessionSummaryList />
     </div>
   );

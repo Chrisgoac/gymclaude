@@ -4,9 +4,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { getExerciseProgress, getExercisePRs } from '@/lib/repositories/stats';
 import { ExerciseChart } from '@/components/exercise-chart';
 
-export function ExerciseProgress({ exerciseId }: { exerciseId: string }) {
-  const progreso = useLiveQuery(() => getExerciseProgress(exerciseId), [exerciseId]);
-  const prs = useLiveQuery(() => getExercisePRs(exerciseId), [exerciseId]);
+export function ExerciseProgress({ exerciseId, gymId }: { exerciseId: string; gymId?: string }) {
+  const progreso = useLiveQuery(() => getExerciseProgress(exerciseId, gymId), [exerciseId, gymId]);
+  const prs = useLiveQuery(() => getExercisePRs(exerciseId, gymId), [exerciseId, gymId]);
 
   if (progreso === undefined || prs === undefined) return <p className="text-muted-foreground">Cargando…</p>;
   if (prs === null) return <p className="text-muted-foreground">Sin datos todavía para este ejercicio.</p>;
