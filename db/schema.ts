@@ -49,6 +49,7 @@ export const routineExercises = pgTable('routine_exercises', {
 export const workoutSessions = pgTable('workout_sessions', {
   ...sync,
   routineDayId: text('routine_day_id'),
+  gymId: text('gym_id'),
   fecha: bigint('fecha', { mode: 'number' }).notNull(),
   duracionSegundos: integer('duracion_segundos'),
   notas: text('notas'),
@@ -68,4 +69,11 @@ export const loggedSets = pgTable('logged_sets', {
   peso: doublePrecision('peso').notNull(),
   reps: integer('reps').notNull(),
   esCalentamiento: boolean('es_calentamiento'),
+});
+
+export const gyms = pgTable('gyms', {
+  ...sync,
+  nombre: text('nombre').notNull(),
+  orden: integer('orden').notNull(),
+  archivada: boolean('archivada').notNull(),
 });
