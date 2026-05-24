@@ -14,7 +14,7 @@ const TABS = [
 export function BottomNav() {
   const pathname = usePathname();
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t bg-background">
+    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t-2 border-foreground bg-card">
       {TABS.map((tab) => {
         // La pestaña Entrenar ('/') cubre también las subrutas del registro (/entrenar/...).
         const active =
@@ -25,8 +25,15 @@ export function BottomNav() {
           <Link
             key={tab.href}
             href={tab.href}
-            className={`py-3 text-center text-sm ${active ? 'font-semibold text-primary' : 'text-muted-foreground'}`}
+            className={`label-mono relative py-3.5 text-center text-[10px] transition-colors [&:not(:first-child)]:border-l-2 [&:not(:first-child)]:border-foreground ${
+              active
+                ? 'bg-primary text-primary-foreground font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
           >
+            {active && (
+              <span className="absolute inset-x-0 top-0 h-1 bg-foreground" aria-hidden="true" />
+            )}
             {tab.label}
           </Link>
         );

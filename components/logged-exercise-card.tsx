@@ -37,46 +37,67 @@ export function LoggedExerciseCard({
   }
 
   return (
-    <div className="space-y-3 rounded-md border p-3">
-      <div className="flex items-center justify-between">
-        <span className="font-medium">{ejercicio?.nombre ?? '—'}</span>
-        <button className="text-xs text-destructive" onClick={() => softDeleteLoggedExercise(loggedExercise.id)}>
+    <div className="brutal-box">
+      <div className="flex items-center justify-between gap-2 border-b-2 border-foreground bg-foreground px-3 py-2">
+        <span className="font-[family-name:var(--font-display)] text-lg uppercase leading-none tracking-wide text-background">
+          {ejercicio?.nombre ?? '—'}
+        </span>
+        <button
+          className="label-mono text-[10px] text-background/70 hover:text-destructive"
+          onClick={() => softDeleteLoggedExercise(loggedExercise.id)}
+        >
           Quitar
         </button>
       </div>
 
-      <ul className="space-y-2">
+      <ul className="divide-y-2 divide-foreground">
         {(sets ?? []).map((set, i) => (
-          <li key={set.id} className="flex items-end gap-2">
-            <span className="w-5 pb-2 text-xs text-muted-foreground">{i + 1}</span>
+          <li key={set.id} className="flex items-end gap-2 px-3 py-3">
+            <span className="grid h-11 w-7 shrink-0 place-items-center border-2 border-foreground bg-secondary font-[family-name:var(--font-display)] text-base text-secondary-foreground">
+              {i + 1}
+            </span>
             <div className="flex-1 space-y-1">
-              <Label htmlFor={`peso-${set.id}`} className="text-xs">Peso</Label>
+              <div className="flex items-baseline justify-between">
+                <Label htmlFor={`peso-${set.id}`}>Peso</Label>
+                <span className="label-mono text-[9px] text-muted-foreground">kg</span>
+              </div>
               <Input
                 id={`peso-${set.id}`}
                 inputMode="decimal"
                 defaultValue={set.peso}
+                className="h-14 text-center text-3xl font-[family-name:var(--font-display)] tabular-nums"
                 onChange={(e) => updateSet(set.id, { peso: parseNum(e.target.value) })}
               />
             </div>
+            <span className="self-center pb-5 font-[family-name:var(--font-display)] text-2xl text-muted-foreground">
+              ×
+            </span>
             <div className="flex-1 space-y-1">
-              <Label htmlFor={`reps-${set.id}`} className="text-xs">Reps</Label>
+              <Label htmlFor={`reps-${set.id}`}>Reps</Label>
               <Input
                 id={`reps-${set.id}`}
                 inputMode="numeric"
                 defaultValue={set.reps}
+                className="h-14 text-center text-3xl font-[family-name:var(--font-display)] tabular-nums"
                 onChange={(e) => updateSet(set.id, { reps: parseNum(e.target.value) })}
               />
             </div>
-            <button className="pb-2 text-xs text-destructive" onClick={() => softDeleteSet(set.id)}>
+            <button
+              className="grid h-11 w-7 shrink-0 place-items-center text-muted-foreground hover:text-destructive"
+              aria-label="Eliminar serie"
+              onClick={() => softDeleteSet(set.id)}
+            >
               ✕
             </button>
           </li>
         ))}
       </ul>
 
-      <Button type="button" variant="secondary" className="w-full" onClick={añadirSerie}>
-        Añadir serie
-      </Button>
+      <div className="border-t-2 border-foreground p-3">
+        <Button type="button" variant="outline" className="w-full" onClick={añadirSerie}>
+          Añadir serie
+        </Button>
+      </div>
     </div>
   );
 }

@@ -42,6 +42,19 @@ export function SyncProvider() {
 
   if (!isSignedIn) return null;
   const etiqueta =
-    estado === 'syncing' ? 'Sincronizando…' : estado === 'offline' ? 'Sin conexión' : estado === 'error' ? 'Error de sync' : 'Sincronizado';
-  return <span className="text-xs text-muted-foreground">{etiqueta}</span>;
+    estado === 'syncing' ? 'Sync…' : estado === 'offline' ? 'Offline' : estado === 'error' ? 'Error' : 'Sync OK';
+  const dot =
+    estado === 'syncing'
+      ? 'bg-primary animate-pulse'
+      : estado === 'offline'
+        ? 'bg-muted-foreground'
+        : estado === 'error'
+          ? 'bg-destructive'
+          : 'bg-foreground';
+  return (
+    <span className="label-mono inline-flex items-center gap-1.5 border-2 border-foreground bg-card px-2 py-1 text-[10px]">
+      <span className={`size-2 border border-foreground ${dot}`} aria-hidden="true" />
+      {etiqueta}
+    </span>
+  );
 }

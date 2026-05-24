@@ -7,9 +7,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+  --font-heading: var(--font-display);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,82 +40,98 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  /* Cero curvas: estética brutalista. Todos los radios colapsan a recto. */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 }
 
+/* ============================================================
+   BRUTALIST IRON — cemento, tinta y naranja de seguridad.
+   Hierro de gimnasio: alto contraste, bordes negros, sin curvas.
+   ============================================================ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Cemento cálido */
+  --background: oklch(0.862 0.006 75);
+  /* Tinta: negro cálido casi puro */
+  --foreground: oklch(0.205 0.012 60);
+  /* Tiza: tarjetas un punto más claras que el cemento para destacar */
+  --card: oklch(0.952 0.005 90);
+  --card-foreground: oklch(0.205 0.012 60);
+  --popover: oklch(0.952 0.005 90);
+  --popover-foreground: oklch(0.205 0.012 60);
+  /* Naranja de seguridad — el único color caliente */
+  --primary: oklch(0.668 0.205 41);
+  --primary-foreground: oklch(0.18 0.012 55);
+  /* Secundario: bloque de tinta con texto tiza */
+  --secondary: oklch(0.205 0.012 60);
+  --secondary-foreground: oklch(0.952 0.005 90);
+  --muted: oklch(0.79 0.007 75);
+  --muted-foreground: oklch(0.41 0.013 62);
+  --accent: oklch(0.668 0.205 41);
+  --accent-foreground: oklch(0.18 0.012 55);
+  --destructive: oklch(0.53 0.224 27);
+  /* Bordes negros: firma del brutalismo */
+  --border: oklch(0.205 0.012 60);
+  --input: oklch(0.205 0.012 60);
+  --ring: oklch(0.668 0.205 41);
+  /* Gráficas: naranja + escala de acero */
+  --chart-1: oklch(0.668 0.205 41);
+  --chart-2: oklch(0.205 0.012 60);
+  --chart-3: oklch(0.5 0.02 60);
+  --chart-4: oklch(0.62 0.025 55);
+  --chart-5: oklch(0.73 0.03 50);
+  --radius: 0px;
+  /* Rejilla de fondo tipo plano técnico */
+  --grid: oklch(0.205 0.012 60 / 0.06);
+  --sidebar: oklch(0.952 0.005 90);
+  --sidebar-foreground: oklch(0.205 0.012 60);
+  --sidebar-primary: oklch(0.668 0.205 41);
+  --sidebar-primary-foreground: oklch(0.18 0.012 55);
+  --sidebar-accent: oklch(0.79 0.007 75);
+  --sidebar-accent-foreground: oklch(0.205 0.012 60);
+  --sidebar-border: oklch(0.205 0.012 60);
+  --sidebar-ring: oklch(0.668 0.205 41);
 }
 
+/* Modo noche "hierro": acero oscuro + naranja. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: oklch(0.17 0.008 60);
+  --foreground: oklch(0.93 0.006 85);
+  --card: oklch(0.23 0.01 60);
+  --card-foreground: oklch(0.93 0.006 85);
+  --popover: oklch(0.23 0.01 60);
+  --popover-foreground: oklch(0.93 0.006 85);
+  --primary: oklch(0.7 0.21 42);
+  --primary-foreground: oklch(0.16 0.012 55);
+  --secondary: oklch(0.93 0.006 85);
+  --secondary-foreground: oklch(0.17 0.008 60);
+  --muted: oklch(0.3 0.01 60);
+  --muted-foreground: oklch(0.7 0.01 70);
+  --accent: oklch(0.7 0.21 42);
+  --accent-foreground: oklch(0.16 0.012 55);
+  --destructive: oklch(0.62 0.22 27);
+  --border: oklch(0.93 0.006 85);
+  --input: oklch(0.93 0.006 85);
+  --ring: oklch(0.7 0.21 42);
+  --chart-1: oklch(0.7 0.21 42);
+  --chart-2: oklch(0.93 0.006 85);
+  --chart-3: oklch(0.75 0.02 70);
+  --chart-4: oklch(0.6 0.02 60);
+  --chart-5: oklch(0.45 0.02 55);
+  --grid: oklch(0.93 0.006 85 / 0.07);
+  --sidebar: oklch(0.23 0.01 60);
+  --sidebar-foreground: oklch(0.93 0.006 85);
+  --sidebar-primary: oklch(0.7 0.21 42);
+  --sidebar-primary-foreground: oklch(0.16 0.012 55);
+  --sidebar-accent: oklch(0.3 0.01 60);
+  --sidebar-accent-foreground: oklch(0.93 0.006 85);
+  --sidebar-border: oklch(0.93 0.006 85);
+  --sidebar-ring: oklch(0.7 0.21 42);
 }
 
 @layer base {
@@ -123,8 +140,80 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    /* Plano técnico: rejilla fina sobre el cemento. */
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 30px 30px;
+    background-attachment: fixed;
   }
   html {
     @apply font-sans;
   }
+  /* Titulares en Anton: condensados, mayúsculas, apretados. */
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    line-height: 0.92;
+  }
+  /* Tipografía con kerning industrial en mayúsculas pequeñas. */
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+}
+
+/* ---- Utilidades brutalistas reutilizables ---- */
+@layer components {
+  /* Sombra dura desplazada, sin desenfoque. */
+  .brutal-shadow {
+    box-shadow: 4px 4px 0 0 var(--color-foreground);
+  }
+  .brutal-shadow-sm {
+    box-shadow: 3px 3px 0 0 var(--color-foreground);
+  }
+  /* Caja base: tiza, borde negro grueso y sombra dura. */
+  .brutal-box {
+    background-color: var(--color-card);
+    border: 2px solid var(--color-foreground);
+    box-shadow: 4px 4px 0 0 var(--color-foreground);
+  }
+  /* Etiqueta de "máquina": mono, mayúsculas, espaciada. */
+  .label-mono {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  /* Número grande estilo marcador. */
+  .stat {
+    font-family: var(--font-display);
+    font-weight: 400;
+    line-height: 0.85;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Grano de película fijo sobre toda la UI. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Franja de peligro reutilizable (rayas diagonales naranja/tinta). */
+.hazard {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-foreground) 0,
+    var(--color-foreground) 8px,
+    var(--color-primary) 8px,
+    var(--color-primary) 16px
+  );
 }

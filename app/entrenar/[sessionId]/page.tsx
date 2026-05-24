@@ -20,16 +20,21 @@ export default function RegistroPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Entreno</h1>
-        <span className="text-sm text-muted-foreground">
+      <div className="flex items-end justify-between border-b-2 border-foreground pb-3">
+        <div>
+          <p className="label-mono text-[11px] text-muted-foreground">En curso</p>
+          <h1 className="text-4xl">Entreno</h1>
+        </div>
+        <span className="label-mono text-xs text-muted-foreground">
           {new Date(session.fecha).toLocaleDateString('es-ES')}
         </span>
       </div>
 
-      {(ejercicios ?? []).length === 0 && <p className="text-muted-foreground">Añade ejercicios para empezar.</p>}
+      {(ejercicios ?? []).length === 0 && (
+        <p className="label-mono text-xs text-muted-foreground">Añade ejercicios para empezar.</p>
+      )}
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {(ejercicios ?? []).map((le) => (
           <LoggedExerciseCard key={le.id} loggedExercise={le} sessionId={sessionId} />
         ))}
@@ -37,13 +42,14 @@ export default function RegistroPage() {
 
       <Link
         href={`/entrenar/${sessionId}/anadir`}
-        className="block rounded-md border border-dashed p-3 text-center text-sm text-primary"
+        className="label-mono block border-2 border-dashed border-foreground bg-card/50 p-4 text-center text-xs text-foreground transition-colors hover:bg-card"
       >
         + Añadir ejercicio
       </Link>
 
       <Button
-        className="w-full"
+        size="lg"
+        className="w-full font-[family-name:var(--font-display)] text-xl tracking-wide"
         onClick={async () => {
           await finishSession(sessionId, {});
           router.push('/');
