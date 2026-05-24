@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -7,25 +8,41 @@ import { listRoutines, listDays } from '@/lib/repositories/routines';
 import { startSession } from '@/lib/repositories/workouts';
 import type { Routine } from '@/lib/db/types';
 import { Button } from '@/components/ui/button';
+import { GymPicker } from '@/components/gym-picker';
+
+type Pendiente = { tipo: 'libre' } | { tipo: 'dia'; routineDayId: string } | null;
 
 export function StartWorkout() {
   const router = useRouter();
   const routines = useLiveQuery(() => listRoutines(), []);
+  const [pendiente, setPendiente] = useState<Pendiente>(null);
 
-  async function empezarLibre() {
-    const s = await startSession({});
+  async function empezarConGym(gymId: string) {
+    if (!pendiente) return;
+    const s = pendiente.tipo === 'dia'
+      ? await startSession({ routineDayId: pendiente.routineDayId, gymId })
+      : await startSession({ gymId });
     router.push(`/entrenar/${s.id}`);
   }
 
-  async function empezarDia(routineDayId: string) {
-    const s = await startSession({ routineDayId });
-    router.push(`/entrenar/${s.id}`);
+  if (pendiente) {
+    return (
+      <div className="space-y-4">
+        <GymPicker onPick={empezarConGym} />
+        <button
+          className="label-mono text-[11px] text-muted-foreground underline"
+          onClick={() => setPendiente(null)}
+        >
+          Cancelar
+        </button>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-7">
       <Button
-        onClick={empezarLibre}
+        onClick={() => setPendiente({ tipo: 'libre' })}
         size="lg"
         className="w-full font-[family-name:var(--font-display)] text-xl tracking-wide"
       >
@@ -37,7 +54,11 @@ export function StartWorkout() {
         <section className="space-y-3">
           <h2 className="label-mono text-[11px] text-muted-foreground">Desde una rutina</h2>
           {(routines ?? []).map((r) => (
-            <RoutineDaysToStart key={r.id} routine={r} onStart={empezarDia} />
+            <RoutineDaysToStart
+              key={r.id}
+              routine={r}
+              onStart={(routineDayId) => setPendiente({ tipo: 'dia', routineDayId })}
+            />
           ))}
         </section>
       )}
