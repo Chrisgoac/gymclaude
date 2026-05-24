@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { exportData, importData, type BackupFile } from '@/lib/repositories/backup';
 import { Button } from '@/components/ui/button';
+import { GymManager } from '@/components/gym-manager';
 
 export default function AjustesPage() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +38,7 @@ export default function AjustesPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Ajustes</h1>
+      <GymManager />
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase text-muted-foreground">Copia de seguridad</h2>
         <Button onClick={exportar} className="w-full">Exportar copia (JSON)</Button>
