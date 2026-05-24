@@ -56,6 +56,24 @@ export class GymLogDB extends Dexie {
       syncState: 'key',
       gyms: 'id, userId, nombre, deletedAt',
     });
+    this.version(6).stores({
+      exercises: 'id, userId, grupoMuscular, nombre, deletedAt',
+      routines: 'id, userId, nombre, deletedAt',
+      routineDays: 'id, routineId, orden, deletedAt',
+      routineExercises: 'id, routineId, routineDayId, exerciseId, orden, deletedAt',
+      workoutSessions: 'id, userId, routineDayId, gymId, fecha, deletedAt',
+      loggedExercises: 'id, sessionId, exerciseId, orden, deletedAt',
+      loggedSets: 'id, loggedExerciseId, orden, deletedAt',
+      syncState: 'key',
+      gyms: 'id, userId, nombre, deletedAt',
+    }).upgrade(async (tx) => {
+      const days = await tx.table('routineDays').toArray();
+      const routineIdByDay = new Map<string, string>(days.map((d) => [d.id, d.routineId]));
+      await tx.table('routineExercises').toCollection().modify((re) => {
+        re.routineId = routineIdByDay.get(re.routineDayId) ?? '';
+        re.updatedAt = Date.now(); // re-sincroniza el cambio
+      });
+    });
   }
 }
 

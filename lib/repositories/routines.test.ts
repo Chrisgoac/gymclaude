@@ -69,6 +69,7 @@ describe('ejercicios del día', () => {
     const r = await createRoutine({ nombre: 'R' });
     const d = await addDay(r.id, { nombre: 'D' });
     const re = await addExerciseToDay(d.id, { exerciseId: 'seed-press-banca' });
+    expect(re.routineId).toBe(r.id); // el ejercicio del día también guarda routineId
     expect(re.orden).toBe(0);
     await updateRoutineExercise(re.id, { seriesObjetivo: 4, repsObjetivo: 10, descansoSegundos: 120 });
     expect(await db.routineExercises.get(re.id)).toMatchObject({ seriesObjetivo: 4, repsObjetivo: 10, descansoSegundos: 120 });

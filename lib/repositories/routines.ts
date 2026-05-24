@@ -91,9 +91,11 @@ export async function addExerciseToDay(
     notas?: string;
   },
 ): Promise<RoutineExercise> {
+  const dia = await db.routineDays.get(routineDayId);
   const existentes = activo(await db.routineExercises.where('routineDayId').equals(routineDayId).toArray());
   const re: RoutineExercise = {
     id: crypto.randomUUID(),
+    routineId: dia?.routineId ?? '',
     routineDayId,
     exerciseId: input.exerciseId,
     orden: existentes.length,
