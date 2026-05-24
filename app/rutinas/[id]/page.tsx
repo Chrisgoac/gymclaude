@@ -5,25 +5,17 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/database';
-import { addDay, listDays, softDeleteDay, softDeleteRoutine } from '@/lib/repositories/routines';
-import { Input } from '@/components/ui/input';
+import { listRoutineExercises, softDeleteRoutine } from '@/lib/repositories/routines';
+import { RoutineDayExerciseRow } from '@/components/routine-day-exercise-row';
 import { Button } from '@/components/ui/button';
 
 function RoutineEditor({ id }: { id: string }) {
   const router = useRouter();
-  const [nuevoDia, setNuevoDia] = useState('');
-
   const routine = useLiveQuery(() => db.routines.get(id), [id]);
-  const dias = useLiveQuery(() => listDays(id), [id]);
+  const ejercicios = useLiveQuery(() => listRoutineExercises(id), [id]);
 
   if (routine === undefined) return <p className="text-muted-foreground">Cargando…</p>;
   if (!routine || routine.deletedAt !== null) return <p>Rutina no encontrada.</p>;
-
-  async function añadir() {
-    if (nuevoDia.trim() === '') return;
-    await addDay(id, { nombre: nuevoDia.trim() });
-    setNuevoDia('');
-  }
 
   return (
     <div className="space-y-6">
@@ -32,38 +24,29 @@ function RoutineEditor({ id }: { id: string }) {
         {routine.descripcion && <p className="text-sm text-muted-foreground">{routine.descripcion}</p>}
       </div>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase text-muted-foreground">Días</h2>
-        {(dias ?? []).length === 0 && <p className="text-muted-foreground">Aún no hay días.</p>}
-        <ul className="divide-y rounded-md border">
-          {(dias ?? []).map((d) => (
-            <li key={d.id} className="flex items-center justify-between p-3">
-              <Link href={`/rutinas/dia/${d.id}`} className="font-medium">
-                {d.nombre}
-              </Link>
-              <button
-                className="text-xs text-destructive"
-                onClick={async () => {
-                  if (window.confirm(`¿Borrar el día "${d.nombre}"?`)) await softDeleteDay(d.id);
-                }}
-              >
-                Borrar
-              </button>
-            </li>
+      <section className="space-y-3">
+        <h2 className="label-mono text-[11px] text-muted-foreground">Ejercicios</h2>
+        {(ejercicios ?? []).length === 0 && (
+          <p className="label-mono text-xs text-muted-foreground">Aún no hay ejercicios.</p>
+        )}
+        <ul className="brutal-box divide-y-2 divide-foreground">
+          {(ejercicios ?? []).map((re) => (
+            <RoutineDayExerciseRow key={re.id} routineExercise={re} />
           ))}
         </ul>
-        <div className="flex gap-2">
-          <Input placeholder="Nombre del día" value={nuevoDia} onChange={(e) => setNuevoDia(e.target.value)} />
-          <Button type="button" onClick={añadir}>
-            Añadir día
-          </Button>
-        </div>
+        <Link
+          href={`/rutinas/${id}/anadir`}
+          className="label-mono block border-2 border-dashed border-foreground bg-card/50 p-4 text-center text-xs text-foreground transition-colors hover:bg-card"
+        >
+          + Añadir ejercicio
+        </Link>
       </section>
 
       <Button
         variant="destructive"
+        className="w-full"
         onClick={async () => {
-          if (window.confirm(`¿Borrar la rutina "${routine.nombre}" y todos sus días?`)) {
+          if (window.confirm(`¿Borrar la rutina "${routine.nombre}"?`)) {
             await softDeleteRoutine(id);
             router.push('/rutinas');
           }

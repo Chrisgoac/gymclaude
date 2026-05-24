@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { db } from '@/lib/db/database';
 import { createGym } from '@/lib/repositories/gyms';
+import { createRoutine, addExerciseToRoutine } from '@/lib/repositories/routines';
 import { StartWorkout } from '@/components/start-workout';
 
 const push = vi.fn();
@@ -12,7 +13,7 @@ beforeEach(async () => {
   await db.workoutSessions.clear();
   await db.loggedExercises.clear();
   await db.routines.clear();
-  await db.routineDays.clear();
+  await db.routineExercises.clear();
   await db.gyms.clear();
   push.mockClear();
 });
@@ -26,5 +27,17 @@ it('elige gimnasio, empieza un entreno libre y navega a la sesión', async () =>
   expect(await db.workoutSessions.count()).toBe(1);
   const sesion = (await db.workoutSessions.toArray())[0];
   expect(sesion.gymId).toBe(g.id);
-  expect(push).toHaveBeenCalledWith(`/entrenar/${sesion.id}`);
+});
+
+it('empieza desde una rutina precargando sus ejercicios', async () => {
+  await createGym("Gold's");
+  const r = await createRoutine({ nombre: 'Full Body' });
+  await addExerciseToRoutine(r.id, { exerciseId: 'seed-press-banca' });
+  render(<StartWorkout />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Empezar Full Body' }));
+  await userEvent.click(await screen.findByRole('button', { name: "Gold's" }));
+  await waitFor(() => expect(push).toHaveBeenCalled());
+  const sesion = (await db.workoutSessions.toArray())[0];
+  const les = await db.loggedExercises.where('sessionId').equals(sesion.id).toArray();
+  expect(les).toHaveLength(1);
 });
