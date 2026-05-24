@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Exercise, Routine, RoutineDay, RoutineExercise,
-  WorkoutSession, LoggedExercise, LoggedSet, SyncState,
+  WorkoutSession, LoggedExercise, LoggedSet, SyncState, Gym,
 } from './types';
 
 export class GymLogDB extends Dexie {
@@ -13,6 +13,7 @@ export class GymLogDB extends Dexie {
   loggedExercises!: Table<LoggedExercise, string>;
   loggedSets!: Table<LoggedSet, string>;
   syncState!: Table<SyncState, string>;
+  gyms!: Table<Gym, string>;
 
   constructor() {
     super('gymlog');
@@ -43,6 +44,17 @@ export class GymLogDB extends Dexie {
       loggedExercises: 'id, sessionId, exerciseId, orden, deletedAt',
       loggedSets: 'id, loggedExerciseId, orden, deletedAt',
       syncState: 'key',
+    });
+    this.version(5).stores({
+      exercises: 'id, userId, grupoMuscular, nombre, deletedAt',
+      routines: 'id, userId, nombre, deletedAt',
+      routineDays: 'id, routineId, orden, deletedAt',
+      routineExercises: 'id, routineDayId, exerciseId, orden, deletedAt',
+      workoutSessions: 'id, userId, routineDayId, gymId, fecha, deletedAt',
+      loggedExercises: 'id, sessionId, exerciseId, orden, deletedAt',
+      loggedSets: 'id, loggedExerciseId, orden, deletedAt',
+      syncState: 'key',
+      gyms: 'id, userId, nombre, deletedAt',
     });
   }
 }

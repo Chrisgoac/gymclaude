@@ -31,4 +31,21 @@ describe('GymLogDB', () => {
     expect(db.loggedExercises).toBeDefined();
     expect(db.loggedSets).toBeDefined();
   });
+
+  it('v5: tabla gyms operativa y workoutSessions admite gymId', async () => {
+    await db.gyms.clear();
+    await db.gyms.put({
+      id: 'g1', userId: null, nombre: 'Gold\'s', orden: 0, archivada: false,
+      updatedAt: Date.now(), deletedAt: null,
+    });
+    expect((await db.gyms.get('g1'))?.nombre).toBe("Gold's");
+
+    await db.workoutSessions.clear();
+    await db.workoutSessions.put({
+      id: 's1', userId: null, gymId: 'g1', fecha: Date.now(),
+      updatedAt: Date.now(), deletedAt: null,
+    });
+    const porGym = await db.workoutSessions.where('gymId').equals('g1').toArray();
+    expect(porGym.map((s) => s.id)).toEqual(['s1']);
+  });
 });
