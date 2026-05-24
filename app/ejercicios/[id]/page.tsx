@@ -9,6 +9,7 @@ import { softDeleteExercise } from '@/lib/repositories/exercises';
 import { muscleGroupLabel, equipmentLabel, exerciseTypeLabel } from '@/lib/labels';
 import { ExerciseForm } from '@/components/exercise-form';
 import { Button } from '@/components/ui/button';
+import { ExercisePhotoPicker } from '@/components/exercise-photo-picker';
 
 export default function EditarEjercicioPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -24,6 +25,7 @@ export default function EditarEjercicioPage({ params }: { params: Promise<{ id: 
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">{exercise.nombre}</h1>
+        <ExercisePhotoPicker exerciseId={exercise.id} />
         <dl className="space-y-1 text-sm">
           <div>
             <span className="text-muted-foreground">Grupo: </span>
@@ -51,6 +53,7 @@ export default function EditarEjercicioPage({ params }: { params: Promise<{ id: 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Editar ejercicio</h1>
+      <ExercisePhotoPicker exerciseId={exercise.id} />
       <ExerciseForm existing={exercise} onSaved={() => router.push('/ejercicios')} />
       <Button
         variant="destructive"
