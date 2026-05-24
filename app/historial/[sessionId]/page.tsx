@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/database';
 import { getSession, listSessionExercises, softDeleteSession } from '@/lib/repositories/workouts';
+import { listGyms } from '@/lib/repositories/gyms';
 import { Button } from '@/components/ui/button';
 
 function ExerciseDetail({ loggedExerciseId, exerciseId }: { loggedExerciseId: string; exerciseId: string }) {
@@ -34,6 +35,7 @@ export default function SessionDetailPage() {
   const router = useRouter();
   const session = useLiveQuery(() => getSession(sessionId), [sessionId]);
   const ejercicios = useLiveQuery(() => listSessionExercises(sessionId), [sessionId]);
+  const gyms = useLiveQuery(() => listGyms(), []);
 
   if (session === undefined) return <p className="text-muted-foreground">Cargando…</p>;
   if (!session || session.deletedAt !== null) return <p>Entreno no encontrado.</p>;
@@ -41,6 +43,22 @@ export default function SessionDetailPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">{new Date(session.fecha).toLocaleDateString('es-ES')}</h1>
+      <div className="flex items-center gap-2">
+        <span className="label-mono text-[11px] text-muted-foreground">Gimnasio:</span>
+        <select
+          className="h-9 border-2 border-input bg-card px-2 text-sm font-medium"
+          value={session.gymId ?? ''}
+          onChange={async (e) => {
+            const v = e.target.value || null;
+            await db.workoutSessions.update(session.id, { gymId: v, updatedAt: Date.now() });
+          }}
+        >
+          <option value="">Sin gimnasio</option>
+          {(gyms ?? []).map((g) => (
+            <option key={g.id} value={g.id}>{g.nombre}</option>
+          ))}
+        </select>
+      </div>
       <div className="space-y-3">
         {(ejercicios ?? []).map((le) => (
           <ExerciseDetail key={le.id} loggedExerciseId={le.id} exerciseId={le.exerciseId} />
