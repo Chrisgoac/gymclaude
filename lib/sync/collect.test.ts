@@ -5,7 +5,7 @@ import { createRoutine } from '@/lib/repositories/routines';
 import { collectDirty } from '@/lib/sync/collect';
 
 beforeEach(async () => {
-  await Promise.all([db.exercises.clear(), db.routines.clear(), db.gyms.clear()]);
+  await Promise.all([db.exercises.clear(), db.routines.clear(), db.gyms.clear(), db.exercisePhotos.clear()]);
 });
 
 describe('collectDirty', () => {
@@ -30,6 +30,17 @@ describe('collectDirty', () => {
     });
     const changes = await collectDirty(0);
     expect(changes.find((c) => c.table === 'gyms')?.records).toHaveLength(1);
+  });
+
+  it('sincroniza las fotos de ejercicio', async () => {
+    await db.exercisePhotos.clear();
+    await db.exercisePhotos.put({
+      id: 'p1', userId: null, exerciseId: 'seed-press-banca',
+      url: 'https://pub.r2.dev/p1.jpg', key: 'u/seed-press-banca/p1.jpg',
+      updatedAt: Date.now(), deletedAt: null,
+    });
+    const changes = await collectDirty(0);
+    expect(changes.find((c) => c.table === 'exercisePhotos')?.records).toHaveLength(1);
   });
 
   it('sólo sincroniza ejercicios personalizados, no los del catálogo (seed)', async () => {

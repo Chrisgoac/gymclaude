@@ -69,3 +69,10 @@ export const gyms = pgTable('gyms', {
   orden: integer('orden').notNull(),
   archivada: boolean('archivada').notNull(),
 });
+
+export const exercisePhotos = pgTable('exercise_photos', {
+  ...sync,
+  exerciseId: text('exercise_id').notNull(),
+  url: text('url').notNull(),
+  key: text('key').notNull(),
+});

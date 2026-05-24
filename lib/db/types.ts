@@ -26,6 +26,13 @@ export interface Exercise extends SyncMeta {
   esPersonalizado: boolean;
 }
 
+export interface ExercisePhoto extends SyncMeta {
+  userId: string | null;
+  exerciseId: string;
+  url: string;   // URL pública en R2
+  key: string;   // object key en R2
+}
+
 export const MUSCLE_GROUPS: MuscleGroup[] = [
   'pecho', 'espalda', 'hombros', 'biceps', 'triceps',
   'cuadriceps', 'femoral', 'gluteo', 'gemelo', 'abdomen', 'antebrazo', 'otro',
