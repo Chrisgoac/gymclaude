@@ -5,6 +5,7 @@ import {
   startSession, getSession, listSessions, finishSession, softDeleteSession,
   addLoggedExercise, listSessionExercises, softDeleteLoggedExercise,
   addSet, updateSet, softDeleteSet, listExerciseSets, getLastSet,
+  countSessionsWithoutGym, assignGymToSessionsWithoutGym,
 } from '@/lib/repositories/workouts';
 
 beforeEach(async () => {
@@ -14,6 +15,7 @@ beforeEach(async () => {
   await db.routines.clear();
   await db.routineDays.clear();
   await db.routineExercises.clear();
+  await db.gyms.clear();
 });
 
 describe('sesiones', () => {
@@ -105,5 +107,40 @@ describe('autorrelleno', () => {
     const le = await addLoggedExercise(s.id, 'seed-sentadilla');
     await addSet(le.id, { peso: 100, reps: 3 });
     expect(await getLastSet('seed-sentadilla', s.id)).toBeUndefined();
+  });
+});
+
+describe('gimnasios', () => {
+  it('startSession guarda el gymId', async () => {
+    const s = await startSession({ gymId: 'g1' });
+    expect((await getSession(s.id))?.gymId).toBe('g1');
+  });
+
+  it('getLastSet filtra por gimnasio', async () => {
+    const a = await startSession({ gymId: 'gymA' });
+    const leA = await addLoggedExercise(a.id, 'seed-sentadilla');
+    await addSet(leA.id, { peso: 100, reps: 5 });
+    await new Promise((res) => setTimeout(res, 3));
+    const b = await startSession({ gymId: 'gymB' });
+    const leB = await addLoggedExercise(b.id, 'seed-sentadilla');
+    await addSet(leB.id, { peso: 80, reps: 5 });
+    await new Promise((res) => setTimeout(res, 3));
+    const nueva = await startSession({ gymId: 'gymA' });
+    // Sin filtro: la más reciente (gymB, 80).
+    expect(await getLastSet('seed-sentadilla', nueva.id)).toMatchObject({ peso: 80 });
+    // Filtrando por gymA: la de gymA (100).
+    expect(await getLastSet('seed-sentadilla', nueva.id, 'gymA')).toMatchObject({ peso: 100 });
+  });
+
+  it('backfill asigna gymId a las sesiones sin gimnasio y cuenta', async () => {
+    await startSession({}); // sin gym
+    await startSession({}); // sin gym
+    await startSession({ gymId: 'g1' });
+    expect(await countSessionsWithoutGym()).toBe(2);
+    const n = await assignGymToSessionsWithoutGym('g1');
+    expect(n).toBe(2);
+    expect(await countSessionsWithoutGym()).toBe(0);
+    const todas = await listSessions();
+    expect(todas.every((s) => s.gymId === 'g1')).toBe(true);
   });
 });

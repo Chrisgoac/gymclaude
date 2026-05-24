@@ -5,12 +5,13 @@ import { listDayExercises } from '@/lib/repositories/routines';
 const now = () => Date.now();
 const activo = <T extends { deletedAt: number | null }>(arr: T[]) => arr.filter((x) => x.deletedAt === null);
 
-export async function startSession(input: { routineDayId?: string }): Promise<WorkoutSession> {
+export async function startSession(input: { routineDayId?: string; gymId?: string | null }): Promise<WorkoutSession> {
   const ts = now();
   const session: WorkoutSession = {
     id: crypto.randomUUID(),
     userId: null,
     routineDayId: input.routineDayId,
+    gymId: input.gymId ?? null,
     fecha: ts,
     updatedAt: ts,
     deletedAt: null,
@@ -112,16 +113,27 @@ export async function listExerciseSets(loggedExerciseId: string): Promise<Logged
   return activo(all).sort((a, b) => a.orden - b.orden);
 }
 
-export async function getLastSet(exerciseId: string, excludeSessionId?: string): Promise<LoggedSet | undefined> {
+export async function getLastSet(
+  exerciseId: string,
+  excludeSessionId?: string,
+  gymId?: string | null,
+): Promise<LoggedSet | undefined> {
   const les = activo(await db.loggedExercises.where('exerciseId').equals(exerciseId).toArray())
     .filter((le) => le.sessionId !== excludeSessionId);
   if (les.length === 0) return undefined;
   const sessionIds = [...new Set(les.map((le) => le.sessionId))];
   const sessions = await db.workoutSessions.bulkGet(sessionIds);
   const fechaBySession = new Map<string, number>();
-  for (const s of sessions) if (s) fechaBySession.set(s.id, s.fecha);
-  les.sort((a, b) => (fechaBySession.get(b.sessionId) ?? 0) - (fechaBySession.get(a.sessionId) ?? 0));
-  for (const le of les) {
+  const gymBySession = new Map<string, string | null | undefined>();
+  for (const s of sessions) if (s) {
+    fechaBySession.set(s.id, s.fecha);
+    gymBySession.set(s.id, s.gymId ?? null);
+  }
+  const candidatos = gymId == null
+    ? les
+    : les.filter((le) => gymBySession.get(le.sessionId) === gymId);
+  candidatos.sort((a, b) => (fechaBySession.get(b.sessionId) ?? 0) - (fechaBySession.get(a.sessionId) ?? 0));
+  for (const le of candidatos) {
     const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(le.id).toArray());
     if (sets.length > 0) {
       sets.sort((a, b) => b.orden - a.orden);
@@ -129,4 +141,21 @@ export async function getLastSet(exerciseId: string, excludeSessionId?: string):
     }
   }
   return undefined;
+}
+
+/** Nº de sesiones activas sin gimnasio asignado. */
+export async function countSessionsWithoutGym(): Promise<number> {
+  return activo(await db.workoutSessions.toArray()).filter((s) => !s.gymId).length;
+}
+
+/** Asigna gymId a todas las sesiones activas sin gimnasio. Devuelve cuántas tocó. */
+export async function assignGymToSessionsWithoutGym(gymId: string): Promise<number> {
+  const ts = now();
+  const sinGym = activo(await db.workoutSessions.toArray()).filter((s) => !s.gymId);
+  await db.transaction('rw', db.workoutSessions, async () => {
+    for (const s of sinGym) {
+      await db.workoutSessions.update(s.id, { gymId, updatedAt: ts });
+    }
+  });
+  return sinGym.length;
 }
