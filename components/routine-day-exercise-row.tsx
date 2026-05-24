@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/database';
 import type { RoutineExercise } from '@/lib/db/types';
 import { updateRoutineExercise, softDeleteRoutineExercise } from '@/lib/repositories/routines';
+import { getPhoto } from '@/lib/repositories/exercise-photos';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 
@@ -14,11 +15,18 @@ function parseNum(v: string): number | undefined {
 
 export function RoutineDayExerciseRow({ routineExercise }: { routineExercise: RoutineExercise }) {
   const ejercicio = useLiveQuery(() => db.exercises.get(routineExercise.exerciseId), [routineExercise.exerciseId]);
+  const foto = useLiveQuery(() => getPhoto(routineExercise.exerciseId), [routineExercise.exerciseId]);
 
   return (
     <li className="space-y-2 p-3">
       <div className="flex items-center justify-between">
-        <span className="font-medium">{ejercicio?.nombre ?? '—'}</span>
+        <span className="flex items-center gap-2">
+          {foto && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={foto.url} alt="" className="size-8 shrink-0 border-2 border-foreground object-cover" />
+          )}
+          <span className="font-medium">{ejercicio?.nombre ?? '—'}</span>
+        </span>
         <button className="text-xs text-destructive" onClick={() => softDeleteRoutineExercise(routineExercise.id)}>
           Quitar
         </button>
