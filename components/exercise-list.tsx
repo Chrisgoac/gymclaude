@@ -8,6 +8,7 @@ import { MUSCLE_GROUPS, EQUIPMENTS } from '@/lib/db/types';
 import { listExercises } from '@/lib/repositories/exercises';
 import { getPhotosMap } from '@/lib/repositories/exercise-photos';
 import { muscleGroupLabel, equipmentLabel } from '@/lib/labels';
+import { resolveExercisePhotoUrl } from '@/lib/catalog-photos';
 import { Input } from '@/components/ui/input';
 
 export function ExerciseList() {
@@ -91,20 +92,23 @@ export function ExerciseList() {
         <section key={g} className="space-y-1">
           <h2 className="label-mono text-[11px] text-muted-foreground">{muscleGroupLabel[g]}</h2>
           <ul className="brutal-box divide-y-2 divide-foreground">
-            {items.map((ex) => (
-              <li key={ex.id}>
-                <Link href={`/ejercicios/${ex.id}`} className="flex items-center gap-3 p-2">
-                  {fotos?.get(ex.id) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={fotos.get(ex.id)!.url} alt="" className="size-12 shrink-0 border-2 border-foreground object-cover" />
-                  ) : (
-                    <span className="size-12 shrink-0 border-2 border-foreground bg-card/50" aria-hidden="true" />
-                  )}
-                  <span className="flex-1 font-medium">{ex.nombre}</span>
-                  <span className="label-mono text-[10px] text-muted-foreground">{equipmentLabel[ex.equipamiento]}</span>
-                </Link>
-              </li>
-            ))}
+            {items.map((ex) => {
+              const url = resolveExercisePhotoUrl(ex.id, fotos?.get(ex.id)?.url);
+              return (
+                <li key={ex.id}>
+                  <Link href={`/ejercicios/${ex.id}`} className="flex items-center gap-3 p-2">
+                    {url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={url} alt="" className="size-12 shrink-0 border-2 border-foreground object-cover" />
+                    ) : (
+                      <span className="size-12 shrink-0 border-2 border-foreground bg-card/50" aria-hidden="true" />
+                    )}
+                    <span className="flex-1 font-medium">{ex.nombre}</span>
+                    <span className="label-mono text-[10px] text-muted-foreground">{equipmentLabel[ex.equipamiento]}</span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}
