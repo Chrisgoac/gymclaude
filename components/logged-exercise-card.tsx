@@ -7,7 +7,6 @@ import {
   addSet, updateSet, softDeleteSet, listExerciseSets, getLastSet, softDeleteLoggedExercise,
 } from '@/lib/repositories/workouts';
 import { getPhoto } from '@/lib/repositories/exercise-photos';
-import { resolveExercisePhotoUrl } from '@/lib/catalog-photos';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -29,7 +28,6 @@ export function LoggedExerciseCard({
   const ejercicio = useLiveQuery(() => db.exercises.get(loggedExercise.exerciseId), [loggedExercise.exerciseId]);
   const sets = useLiveQuery(() => listExerciseSets(loggedExercise.id), [loggedExercise.id]);
   const foto = useLiveQuery(() => getPhoto(loggedExercise.exerciseId), [loggedExercise.exerciseId]);
-  const fotoUrl = resolveExercisePhotoUrl(loggedExercise.exerciseId, foto?.url);
 
   async function añadirSerie() {
     const actuales = sets ?? [];
@@ -46,9 +44,9 @@ export function LoggedExerciseCard({
     <div className="brutal-box">
       <div className="flex items-center justify-between gap-2 border-b-2 border-foreground bg-foreground px-3 py-2">
         <span className="flex items-center gap-2">
-          {fotoUrl && (
+          {foto && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={fotoUrl} alt="" className="size-7 shrink-0 border border-background object-cover" />
+            <img src={foto.url} alt="" className="size-7 shrink-0 border border-background object-cover" />
           )}
           <span className="font-[family-name:var(--font-display)] text-lg uppercase leading-none tracking-wide text-background">
             {ejercicio?.nombre ?? '—'}
