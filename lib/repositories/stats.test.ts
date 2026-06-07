@@ -44,6 +44,13 @@ describe('getExerciseProgress', () => {
     expect(prog[0].volumen).toBe(60 * 8 + 62.5 * 6);
     expect(prog[1].maxPeso).toBe(65);
   });
+
+  it('filtra los puntos por sinceTs', async () => {
+    await sesionCon(2 * DAY, 'seed-press-banca', [[60, 8]]);
+    await sesionCon(5 * DAY, 'seed-press-banca', [[65, 8]]);
+    const prog = await getExerciseProgress('seed-press-banca', undefined, 3 * DAY);
+    expect(prog.map((p) => p.fecha)).toEqual([5 * DAY]);
+  });
 });
 
 describe('getExercisePRs', () => {

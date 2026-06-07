@@ -36,7 +36,11 @@ export interface ExerciseProgressPoint {
   volumen: number;
 }
 
-export async function getExerciseProgress(exerciseId: string, gymId?: string | null): Promise<ExerciseProgressPoint[]> {
+export async function getExerciseProgress(
+  exerciseId: string,
+  gymId?: string | null,
+  sinceTs = 0,
+): Promise<ExerciseProgressPoint[]> {
   const data = await setsDeEjercicio(exerciseId, gymId);
   const byFecha = new Map<number, LoggedSet[]>();
   for (const { set, fecha } of data) {
@@ -53,7 +57,7 @@ export async function getExerciseProgress(exerciseId: string, gymId?: string | n
       volumen: sets.reduce((acc, s) => acc + s.peso * s.reps, 0),
     });
   }
-  return points.sort((a, b) => a.fecha - b.fecha);
+  return points.filter((p) => p.fecha >= sinceTs).sort((a, b) => a.fecha - b.fecha);
 }
 
 export interface ExercisePRs {
