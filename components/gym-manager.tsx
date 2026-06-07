@@ -8,8 +8,10 @@ import {
 import { countSessionsWithoutGym, assignGymToSessionsWithoutGym } from '@/lib/repositories/workouts';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { useDialogs } from '@/components/ui/dialog-provider';
 
 export function GymManager() {
+  const { confirm, prompt } = useDialogs();
   const gyms = useLiveQuery(() => listGyms(), []);
   const sinGym = useLiveQuery(() => countSessionsWithoutGym(), []);
   const [nombre, setNombre] = useState('');
@@ -46,7 +48,7 @@ export function GymManager() {
               <button
                 className="label-mono text-[10px] text-muted-foreground hover:text-foreground"
                 onClick={async () => {
-                  const nuevo = window.prompt('Nuevo nombre', g.nombre);
+                  const nuevo = await prompt({ titulo: 'Nuevo nombre', valorInicial: g.nombre, confirmar: 'Guardar' });
                   if (nuevo?.trim()) await renameGym(g.id, nuevo);
                 }}
               >
@@ -55,7 +57,7 @@ export function GymManager() {
               <button
                 className="label-mono text-[10px] text-muted-foreground hover:text-destructive"
                 onClick={async () => {
-                  if (window.confirm(`¿Borrar "${g.nombre}"? Sus entrenos se conservan.`)) {
+                  if (await confirm({ titulo: `¿Borrar "${g.nombre}"?`, mensaje: 'Sus entrenos se conservan.', confirmar: 'Borrar', destructivo: true })) {
                     await softDeleteGym(g.id);
                   }
                 }}

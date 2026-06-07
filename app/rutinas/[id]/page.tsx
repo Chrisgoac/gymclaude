@@ -8,9 +8,11 @@ import { db } from '@/lib/db/database';
 import { listRoutineExercises, softDeleteRoutine } from '@/lib/repositories/routines';
 import { RoutineDayExerciseRow } from '@/components/routine-day-exercise-row';
 import { Button } from '@/components/ui/button';
+import { useDialogs } from '@/components/ui/dialog-provider';
 
 function RoutineEditor({ id }: { id: string }) {
   const router = useRouter();
+  const { confirm } = useDialogs();
   const routine = useLiveQuery(() => db.routines.get(id), [id]);
   const ejercicios = useLiveQuery(() => listRoutineExercises(id), [id]);
 
@@ -46,7 +48,7 @@ function RoutineEditor({ id }: { id: string }) {
         variant="destructive"
         className="w-full"
         onClick={async () => {
-          if (window.confirm(`¿Borrar la rutina "${routine.nombre}"?`)) {
+          if (await confirm({ titulo: `¿Borrar la rutina "${routine.nombre}"?`, confirmar: 'Borrar', destructivo: true })) {
             await softDeleteRoutine(id);
             router.push('/rutinas');
           }

@@ -5,6 +5,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { BottomNav } from "@/components/bottom-nav";
 import { DbProvider } from "@/components/db-provider";
 import { AuthHeader } from "@/components/auth-header";
+import { DialogProvider } from "@/components/ui/dialog-provider";
 
 // Display ultra-condensado para titulares y números grandes (peso, reps, 1RM).
 const fontDisplay = Anton({
@@ -46,11 +47,13 @@ export default function RootLayout({
     >
       <body className="min-h-screen pb-24 flex flex-col">
         <ClerkProvider>
-          <AuthHeader />
-          <DbProvider>
-            <main className="mx-auto w-full max-w-md p-4">{children}</main>
-          </DbProvider>
-          <BottomNav />
+          <DialogProvider>
+            <AuthHeader />
+            <DbProvider>
+              <main className="mx-auto w-full max-w-md p-4">{children}</main>
+            </DbProvider>
+            <BottomNav />
+          </DialogProvider>
         </ClerkProvider>
         {/* Grano de película sutil sobre toda la UI — textura industrial. */}
         <div className="grain" aria-hidden="true" />

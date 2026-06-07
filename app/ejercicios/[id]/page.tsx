@@ -10,10 +10,12 @@ import { muscleGroupLabel, equipmentLabel, exerciseTypeLabel } from '@/lib/label
 import { ExerciseForm } from '@/components/exercise-form';
 import { Button } from '@/components/ui/button';
 import { ExercisePhotoPicker } from '@/components/exercise-photo-picker';
+import { useDialogs } from '@/components/ui/dialog-provider';
 
 export default function EditarEjercicioPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const { confirm } = useDialogs();
   const exercise = useLiveQuery(() => db.exercises.get(id), [id]);
 
   if (exercise === undefined) return <p className="text-muted-foreground">Cargando…</p>;
@@ -58,7 +60,7 @@ export default function EditarEjercicioPage({ params }: { params: Promise<{ id: 
       <Button
         variant="destructive"
         onClick={async () => {
-          if (!window.confirm(`¿Borrar "${exercise.nombre}"?`)) return;
+          if (!(await confirm({ titulo: `¿Borrar "${exercise.nombre}"?`, confirmar: 'Borrar', destructivo: true }))) return;
           await softDeleteExercise(id);
           router.push('/ejercicios');
         }}

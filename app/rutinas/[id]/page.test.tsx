@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { db } from '@/lib/db/database';
 import { createRoutine, addExerciseToRoutine } from '@/lib/repositories/routines';
 import RoutineEditorPage from '@/app/rutinas/[id]/page';
+import { DialogProvider } from '@/components/ui/dialog-provider';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -21,9 +22,11 @@ it('muestra los ejercicios de la rutina', async () => {
   const r = await createRoutine({ nombre: 'R' });
   await addExerciseToRoutine(r.id, { exerciseId: 'seed-press-banca' });
   render(
-    <Suspense>
-      <RoutineEditorPage params={Promise.resolve({ id: r.id })} />
-    </Suspense>,
+    <DialogProvider>
+      <Suspense>
+        <RoutineEditorPage params={Promise.resolve({ id: r.id })} />
+      </Suspense>
+    </DialogProvider>,
   );
   expect(await screen.findByText('R')).toBeInTheDocument();
   expect(await screen.findByText('Press de banca')).toBeInTheDocument();

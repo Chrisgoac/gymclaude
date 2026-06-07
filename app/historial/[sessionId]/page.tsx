@@ -6,6 +6,7 @@ import { db } from '@/lib/db/database';
 import { getSession, listSessionExercises, softDeleteSession } from '@/lib/repositories/workouts';
 import { listGyms, getGymsMap, gymDisplayName } from '@/lib/repositories/gyms';
 import { Button } from '@/components/ui/button';
+import { useDialogs } from '@/components/ui/dialog-provider';
 
 function ExerciseDetail({ loggedExerciseId, exerciseId }: { loggedExerciseId: string; exerciseId: string }) {
   const ejercicio = useLiveQuery(() => db.exercises.get(exerciseId), [exerciseId]);
@@ -33,6 +34,7 @@ function ExerciseDetail({ loggedExerciseId, exerciseId }: { loggedExerciseId: st
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const router = useRouter();
+  const { confirm } = useDialogs();
   const session = useLiveQuery(() => getSession(sessionId), [sessionId]);
   const ejercicios = useLiveQuery(() => listSessionExercises(sessionId), [sessionId]);
   const gyms = useLiveQuery(() => listGyms(), []);
@@ -76,7 +78,7 @@ export default function SessionDetailPage() {
       <Button
         variant="destructive"
         onClick={async () => {
-          if (window.confirm('¿Borrar este entreno?')) {
+          if (await confirm({ titulo: '¿Borrar este entreno?', confirmar: 'Borrar', destructivo: true })) {
             await softDeleteSession(sessionId);
             router.push('/historial');
           }
