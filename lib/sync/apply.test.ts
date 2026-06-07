@@ -19,7 +19,7 @@ describe('pickWinner (LWW)', () => {
 
 describe('applyIncoming', () => {
   it('inserta entrantes nuevos y respeta el más reciente', async () => {
-    await db.routines.put({ id: 'r1', userId: null, nombre: 'Local', archivada: false, updatedAt: 100, deletedAt: null });
+    await db.routines.put({ id: 'r1', userId: null, nombre: 'Local', orden: 0, archivada: false, updatedAt: 100, deletedAt: null });
     await applyIncoming([
       { table: 'routines', records: [
         { id: 'r1', userId: null, nombre: 'RemotoNuevo', archivada: false, updatedAt: 200, deletedAt: null } as unknown as SyncMeta,
@@ -31,7 +31,7 @@ describe('applyIncoming', () => {
   });
 
   it('no pisa un local más reciente que el entrante', async () => {
-    await db.routines.put({ id: 'r1', userId: null, nombre: 'LocalNuevo', archivada: false, updatedAt: 300, deletedAt: null });
+    await db.routines.put({ id: 'r1', userId: null, nombre: 'LocalNuevo', orden: 0, archivada: false, updatedAt: 300, deletedAt: null });
     await applyIncoming([
       { table: 'routines', records: [
         { id: 'r1', userId: null, nombre: 'RemotoViejo', archivada: false, updatedAt: 100, deletedAt: null } as unknown as SyncMeta,
@@ -41,7 +41,7 @@ describe('applyIncoming', () => {
   });
 
   it('aplica tombstones (borrados) entrantes', async () => {
-    await db.routines.put({ id: 'r1', userId: null, nombre: 'X', archivada: false, updatedAt: 100, deletedAt: null });
+    await db.routines.put({ id: 'r1', userId: null, nombre: 'X', orden: 0, archivada: false, updatedAt: 100, deletedAt: null });
     await applyIncoming([
       { table: 'routines', records: [
         { id: 'r1', userId: null, nombre: 'X', archivada: false, updatedAt: 200, deletedAt: 200 } as unknown as SyncMeta,

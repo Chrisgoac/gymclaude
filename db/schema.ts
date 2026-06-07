@@ -24,6 +24,7 @@ export const routines = pgTable('routines', {
   ...sync,
   nombre: text('nombre').notNull(),
   descripcion: text('descripcion'),
+  orden: integer('orden'),
   archivada: boolean('archivada').notNull(),
 });
 
@@ -41,6 +42,7 @@ export const routineExercises = pgTable('routine_exercises', {
 export const workoutSessions = pgTable('workout_sessions', {
   ...sync,
   routineDayId: text('routine_day_id'),
+  routineId: text('routine_id'),
   gymId: text('gym_id'),
   fecha: bigint('fecha', { mode: 'number' }).notNull(),
   duracionSegundos: integer('duracion_segundos'),

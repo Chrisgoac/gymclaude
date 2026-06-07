@@ -81,6 +81,17 @@ export class GymLogDB extends Dexie {
     this.version(8).stores({
       exercisePhotos: 'id, exerciseId, deletedAt',
     });
+    // v9: orden manual de rutinas (para la rotación "siguiente rutina").
+    // Rellena `orden` por nombre alfabético como punto de partida estable.
+    this.version(9).stores({}).upgrade(async (tx) => {
+      const rs = await tx.table('routines').toArray();
+      const activas = rs
+        .filter((r) => r.deletedAt === null)
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+      for (let i = 0; i < activas.length; i++) {
+        await tx.table('routines').update(activas[i].id, { orden: i, updatedAt: Date.now() });
+      }
+    });
   }
 }
 
