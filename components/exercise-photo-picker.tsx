@@ -3,10 +3,12 @@
 import { useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getPhoto, setPhoto, removePhoto } from '@/lib/repositories/exercise-photos';
+import { resolveExercisePhotoUrl } from '@/lib/catalog-photos';
 import { compressImage } from '@/lib/image/compress';
 
 export function ExercisePhotoPicker({ exerciseId }: { exerciseId: string }) {
   const foto = useLiveQuery(() => getPhoto(exerciseId), [exerciseId]);
+  const urlMostrada = resolveExercisePhotoUrl(exerciseId, foto?.url);
   const inputRef = useRef<HTMLInputElement>(null);
   const [estado, setEstado] = useState('');
 
@@ -39,9 +41,9 @@ export function ExercisePhotoPicker({ exerciseId }: { exerciseId: string }) {
 
   return (
     <div className="space-y-2">
-      {foto ? (
+      {urlMostrada ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={foto.url} alt="Foto del ejercicio" className="h-40 w-full border-2 border-foreground object-cover" />
+        <img src={urlMostrada} alt="Foto del ejercicio" className="h-40 w-full border-2 border-foreground object-cover" />
       ) : (
         <div className="grid h-40 w-full place-items-center border-2 border-dashed border-foreground bg-card/50">
           <span className="label-mono text-[11px] text-muted-foreground">Sin foto</span>
