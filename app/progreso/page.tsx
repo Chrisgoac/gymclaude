@@ -19,7 +19,7 @@ import { useGymFilter, filtroAGymId } from '@/lib/gym-filter';
 import { periodoASinceTs, type Periodo } from '@/lib/period';
 
 function formatoVolumen(kg: number): string {
-  return kg >= 1000 ? `${(kg / 1000).toFixed(1)}t` : `${kg}`;
+  return kg >= 1000 ? `${(kg / 1000).toFixed(1)}t` : `${Math.round(kg)}`;
 }
 
 export default function ProgresoPage() {

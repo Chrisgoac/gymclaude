@@ -10,7 +10,7 @@ export function MuscleBalance({ data }: { data: VolumeByMuscle[] }) {
         <div key={d.grupo}>
           <div className="label-mono mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
             <span>{muscleGroupLabel[d.grupo]}</span>
-            <span>{d.volumen} kg·rep</span>
+            <span>{Math.round(d.volumen)} kg·rep</span>
           </div>
           <div className="h-3.5 border-2 border-foreground bg-card">
             <div className="h-full bg-primary" style={{ width: `${(d.volumen / max) * 100}%` }} />
