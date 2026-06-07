@@ -11,10 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-function parseNum(v: string): number {
-  const n = Number(v);
-  return v.trim() === '' || Number.isNaN(n) ? 0 : n;
-}
+import { parseEntero, parseDecimal } from '@/lib/num';
 
 export function LoggedExerciseCard({
   loggedExercise,
@@ -76,7 +73,7 @@ export function LoggedExerciseCard({
                 inputMode="decimal"
                 defaultValue={set.peso}
                 className="h-14 text-center text-3xl font-[family-name:var(--font-display)] tabular-nums"
-                onChange={(e) => updateSet(set.id, { peso: parseNum(e.target.value) })}
+                onChange={(e) => updateSet(set.id, { peso: parseDecimal(e.target.value) })}
               />
             </div>
             <span className="self-center pb-5 font-[family-name:var(--font-display)] text-2xl text-muted-foreground">
@@ -89,7 +86,7 @@ export function LoggedExerciseCard({
                 inputMode="numeric"
                 defaultValue={set.reps}
                 className="h-14 text-center text-3xl font-[family-name:var(--font-display)] tabular-nums"
-                onChange={(e) => updateSet(set.id, { reps: parseNum(e.target.value) })}
+                onChange={(e) => updateSet(set.id, { reps: parseEntero(e.target.value) })}
               />
             </div>
             <button

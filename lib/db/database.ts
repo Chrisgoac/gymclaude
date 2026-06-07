@@ -92,6 +92,21 @@ export class GymLogDB extends Dexie {
         await tx.table('routines').update(activas[i].id, { orden: i, updatedAt: Date.now() });
       }
     });
+    // v10: sanea decimales en campos que el servidor guarda como integer
+    // (series/reps/descanso de rutina y reps de serie); si no, el push rompe el sync.
+    this.version(10).stores({}).upgrade(async (tx) => {
+      const esDecimal = (x: unknown): x is number => typeof x === 'number' && !Number.isInteger(x);
+      await tx.table('routineExercises').toCollection().modify((re) => {
+        let cambiado = false;
+        for (const k of ['seriesObjetivo', 'repsObjetivo', 'descansoSegundos'] as const) {
+          if (esDecimal(re[k])) { re[k] = Math.round(re[k]); cambiado = true; }
+        }
+        if (cambiado) re.updatedAt = Date.now();
+      });
+      await tx.table('loggedSets').toCollection().modify((s) => {
+        if (esDecimal(s.reps)) { s.reps = Math.round(s.reps); s.updatedAt = Date.now(); }
+      });
+    });
   }
 }
 

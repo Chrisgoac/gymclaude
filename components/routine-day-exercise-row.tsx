@@ -7,11 +7,7 @@ import { updateRoutineExercise, softDeleteRoutineExercise } from '@/lib/reposito
 import { getPhoto } from '@/lib/repositories/exercise-photos';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-
-function parseNum(v: string): number | undefined {
-  const n = Number(v);
-  return v.trim() === '' || Number.isNaN(n) ? undefined : n;
-}
+import { parseEnteroOpt as parseNum } from '@/lib/num';
 
 export function RoutineDayExerciseRow({ routineExercise }: { routineExercise: RoutineExercise }) {
   const ejercicio = useLiveQuery(() => db.exercises.get(routineExercise.exerciseId), [routineExercise.exerciseId]);
@@ -43,7 +39,7 @@ export function RoutineDayExerciseRow({ routineExercise }: { routineExercise: Ro
             onChange={(e) => updateRoutineExercise(routineExercise.id, { repsObjetivo: parseNum(e.target.value) })} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor={`descanso-${routineExercise.id}`} className="text-xs">Descanso (s)</Label>
+          <Label htmlFor={`descanso-${routineExercise.id}`} className="text-xs">Descanso (segs)</Label>
           <Input id={`descanso-${routineExercise.id}`} inputMode="numeric" defaultValue={routineExercise.descansoSegundos ?? ''}
             onChange={(e) => updateRoutineExercise(routineExercise.id, { descansoSegundos: parseNum(e.target.value) })} />
         </div>
