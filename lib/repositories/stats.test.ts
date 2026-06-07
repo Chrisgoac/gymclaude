@@ -3,7 +3,7 @@ import { db } from '@/lib/db/database';
 import { startSession, addLoggedExercise, addSet } from '@/lib/repositories/workouts';
 import {
   estimar1RM, getExerciseProgress, getExercisePRs, getVolumeByMuscle,
-  listSessionSummaries, getCurrentStreakDays,
+  listSessionSummaries, getCurrentStreakDays, getPeriodSummary, getWeeklyVolume,
 } from '@/lib/repositories/stats';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -43,6 +43,13 @@ describe('getExerciseProgress', () => {
     expect(prog[0].maxPeso).toBe(62.5);
     expect(prog[0].volumen).toBe(60 * 8 + 62.5 * 6);
     expect(prog[1].maxPeso).toBe(65);
+  });
+
+  it('filtra los puntos por sinceTs', async () => {
+    await sesionCon(2 * DAY, 'seed-press-banca', [[60, 8]]);
+    await sesionCon(5 * DAY, 'seed-press-banca', [[65, 8]]);
+    const prog = await getExerciseProgress('seed-press-banca', undefined, 3 * DAY);
+    expect(prog.map((p) => p.fecha)).toEqual([5 * DAY]);
   });
 });
 
@@ -99,6 +106,57 @@ describe('getCurrentStreakDays', () => {
   it('es 0 si la única sesión es de hace días (racha rota)', async () => {
     await sesionCon(Date.now() - 10 * DAY, 'seed-press-banca', [[60, 5]]);
     expect(await getCurrentStreakDays()).toBe(0);
+  });
+});
+
+describe('getPeriodSummary', () => {
+  it('cuenta sesiones y suma volumen del periodo', async () => {
+    await sesionCon(1 * DAY, 'seed-press-banca', [[60, 10]]); // 600
+    await sesionCon(3 * DAY, 'seed-sentadilla', [[100, 5]]);  // 500
+    const r = await getPeriodSummary(0);
+    expect(r.sesiones).toBe(2);
+    expect(r.volumen).toBe(1100);
+  });
+  it('respeta sinceTs', async () => {
+    await sesionCon(1 * DAY, 'seed-press-banca', [[60, 10]]);
+    await sesionCon(5 * DAY, 'seed-sentadilla', [[100, 5]]);
+    const r = await getPeriodSummary(3 * DAY);
+    expect(r.sesiones).toBe(1);
+    expect(r.volumen).toBe(500);
+  });
+  it('respeta el filtro de gimnasio', async () => {
+    const a = await startSession({ gymId: 'gymA' });
+    const le = await addLoggedExercise(a.id, 'seed-sentadilla');
+    await addSet(le.id, { peso: 100, reps: 5 });
+    await startSession({ gymId: 'gymB' });
+    const r = await getPeriodSummary(0, 'gymA');
+    expect(r.sesiones).toBe(1);
+    expect(r.volumen).toBe(500);
+  });
+});
+
+describe('getWeeklyVolume', () => {
+  it('agrupa el volumen por semana (lunes) y ordena ascendente', async () => {
+    // 2021-01-04 = lunes. Dos sesiones esa semana + una la semana siguiente.
+    const lunes = new Date(2021, 0, 4).getTime();
+    const miercoles = new Date(2021, 0, 6).getTime();
+    const lunesSig = new Date(2021, 0, 11).getTime();
+    await sesionCon(lunes, 'seed-press-banca', [[60, 10]]);      // 600
+    await sesionCon(miercoles, 'seed-sentadilla', [[100, 5]]);   // 500
+    await sesionCon(lunesSig, 'seed-press-banca', [[70, 10]]);   // 700
+
+    const semanas = await getWeeklyVolume(0);
+    expect(semanas).toHaveLength(2);
+    expect(semanas[0].semanaInicioTs).toBe(new Date(2021, 0, 4).getTime());
+    expect(semanas[0].volumen).toBe(1100);
+    expect(semanas[1].volumen).toBe(700);
+  });
+  it('respeta sinceTs y el gimnasio', async () => {
+    const a = await startSession({ gymId: 'gymA' });
+    await db.workoutSessions.update(a.id, { fecha: new Date(2021, 0, 4).getTime() });
+    const le = await addLoggedExercise(a.id, 'seed-sentadilla');
+    await addSet(le.id, { peso: 100, reps: 5 });
+    expect(await getWeeklyVolume(0, 'gymB')).toHaveLength(0);
   });
 });
 

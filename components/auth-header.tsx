@@ -2,8 +2,14 @@
 
 import { SignInButton, Show, UserButton } from '@clerk/nextjs';
 import { SyncProvider } from '@/components/sync-provider';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Settings } from 'lucide-react';
 
 export function AuthHeader() {
+  const pathname = usePathname();
+  const ajustesActivo = pathname.startsWith('/ajustes');
+
   return (
     <header className="sticky top-0 z-30 border-b-2 border-foreground bg-card">
       {/* Franja de peligro: el detalle que ancla la estética de hierro. */}
@@ -18,6 +24,15 @@ export function AuthHeader() {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/ajustes"
+            aria-label="Ajustes"
+            className={`grid size-8 place-items-center border-2 border-foreground transition-transform active:translate-x-[1px] active:translate-y-[1px] ${
+              ajustesActivo ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground'
+            }`}
+          >
+            <Settings className="size-4" strokeWidth={2} aria-hidden="true" />
+          </Link>
           <SyncProvider />
           <Show when="signed-out">
             <SignInButton mode="modal">

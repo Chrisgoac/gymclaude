@@ -36,7 +36,11 @@ export interface ExerciseProgressPoint {
   volumen: number;
 }
 
-export async function getExerciseProgress(exerciseId: string, gymId?: string | null): Promise<ExerciseProgressPoint[]> {
+export async function getExerciseProgress(
+  exerciseId: string,
+  gymId?: string | null,
+  sinceTs = 0,
+): Promise<ExerciseProgressPoint[]> {
   const data = await setsDeEjercicio(exerciseId, gymId);
   const byFecha = new Map<number, LoggedSet[]>();
   for (const { set, fecha } of data) {
@@ -53,7 +57,7 @@ export async function getExerciseProgress(exerciseId: string, gymId?: string | n
       volumen: sets.reduce((acc, s) => acc + s.peso * s.reps, 0),
     });
   }
-  return points.sort((a, b) => a.fecha - b.fecha);
+  return points.filter((p) => p.fecha >= sinceTs).sort((a, b) => a.fecha - b.fecha);
 }
 
 export interface ExercisePRs {
@@ -123,6 +127,63 @@ export async function listSessionSummaries(gymId?: string | null): Promise<Sessi
     out.push({ session, numEjercicios: les.length, volumen });
   }
   return out;
+}
+
+export interface PeriodSummary {
+  sesiones: number;
+  volumen: number;
+}
+
+export async function getPeriodSummary(sinceTs = 0, gymId?: string | null): Promise<PeriodSummary> {
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => s.fecha >= sinceTs)
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId);
+  if (sessions.length === 0) return { sesiones: 0, volumen: 0 };
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  const les = activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
+  let volumen = 0;
+  for (const le of les) {
+    const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(le.id).toArray());
+    volumen += sets.reduce((acc, s) => acc + s.peso * s.reps, 0);
+  }
+  return { sesiones: sessions.length, volumen };
+}
+
+export interface WeeklyVolumePoint {
+  semanaInicioTs: number;
+  volumen: number;
+}
+
+/** Lunes 00:00 (hora local) de la semana que contiene ts. */
+function inicioSemana(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  const dow = (d.getDay() + 6) % 7; // 0 = lunes
+  d.setDate(d.getDate() - dow);
+  return d.getTime();
+}
+
+export async function getWeeklyVolume(sinceTs = 0, gymId?: string | null): Promise<WeeklyVolumePoint[]> {
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => s.fecha >= sinceTs)
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId);
+  if (sessions.length === 0) return [];
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  const les = activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
+  const volBySession = new Map<string, number>();
+  for (const le of les) {
+    const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(le.id).toArray());
+    const vol = sets.reduce((acc, s) => acc + s.peso * s.reps, 0);
+    volBySession.set(le.sessionId, (volBySession.get(le.sessionId) ?? 0) + vol);
+  }
+  const byWeek = new Map<number, number>();
+  for (const s of sessions) {
+    const semana = inicioSemana(s.fecha);
+    byWeek.set(semana, (byWeek.get(semana) ?? 0) + (volBySession.get(s.id) ?? 0));
+  }
+  return [...byWeek.entries()]
+    .map(([semanaInicioTs, volumen]) => ({ semanaInicioTs, volumen }))
+    .sort((a, b) => a.semanaInicioTs - b.semanaInicioTs);
 }
 
 const dayKey = (ts: number) => {
