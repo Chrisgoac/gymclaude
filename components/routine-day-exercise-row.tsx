@@ -5,6 +5,7 @@ import { db } from '@/lib/db/database';
 import type { RoutineExercise } from '@/lib/db/types';
 import { updateRoutineExercise, softDeleteRoutineExercise } from '@/lib/repositories/routines';
 import { getPhoto } from '@/lib/repositories/exercise-photos';
+import { resolveExercisePhotoUrl } from '@/lib/catalog-photos';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { parseEnteroOpt as parseNum } from '@/lib/num';
@@ -17,10 +18,13 @@ export function RoutineDayExerciseRow({ routineExercise }: { routineExercise: Ro
     <li className="space-y-2 p-3">
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-2">
-          {foto && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={foto.url} alt="" className="size-8 shrink-0 border-2 border-foreground object-cover" />
-          )}
+          {(() => {
+            const url = resolveExercisePhotoUrl(routineExercise.exerciseId, foto?.url);
+            return url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={url} alt="" className="size-8 shrink-0 border-2 border-foreground object-cover" />
+            ) : null;
+          })()}
           <span className="font-medium">{ejercicio?.nombre ?? '—'}</span>
         </span>
         <button className="text-xs text-destructive" onClick={() => softDeleteRoutineExercise(routineExercise.id)}>
