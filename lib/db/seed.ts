@@ -1,5 +1,6 @@
 import { db } from './database';
 import type { Exercise, MuscleGroup, Equipment, ExerciseType } from './types';
+import { CATALOG_EXTRA } from './catalog-extra';
 
 interface ExerciseDef {
   slug: string;
@@ -48,7 +49,7 @@ const DEFS: ExerciseDef[] = [
   { slug: 'plancha',                  nombre: 'Plancha',                         grupoMuscular: 'abdomen',     equipamiento: 'peso_corporal',tipo: 'aislamiento'},
 ];
 
-export const CATALOG_SEED: Exercise[] = DEFS.map((def) => ({
+const CATALOG_BASE: Exercise[] = DEFS.map((def) => ({
   id: `seed-${def.slug}`,
   userId: null,
   nombre: def.nombre,
@@ -60,9 +61,15 @@ export const CATALOG_SEED: Exercise[] = DEFS.map((def) => ({
   deletedAt: null,
 }));
 
-export async function seedCatalogIfEmpty(): Promise<void> {
-  const count = await db.exercises.count();
-  if (count === 0) {
-    await db.exercises.bulkPut(CATALOG_SEED);
-  }
+export const CATALOG_SEED: Exercise[] = [...CATALOG_BASE, ...CATALOG_EXTRA];
+
+/** Siembra aditiva: añade los ejercicios del catálogo que falten por id
+ * (sin pisar lo existente), para que usuarios con la BD ya poblada reciban los nuevos. */
+export async function seedCatalog(): Promise<void> {
+  const existentes = new Set((await db.exercises.toArray()).map((e) => e.id));
+  const faltan = CATALOG_SEED.filter((e) => !existentes.has(e.id));
+  if (faltan.length) await db.exercises.bulkPut(faltan);
 }
+
+/** @deprecated usar seedCatalog (ahora aditivo). Alias por compatibilidad. */
+export const seedCatalogIfEmpty = seedCatalog;

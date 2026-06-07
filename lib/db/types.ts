@@ -23,6 +23,8 @@ export interface Exercise extends SyncMeta {
   tipo: ExerciseType;
   videoUrl?: string;
   notas?: string;
+  descripcion?: string; // catálogo: posición inicial / overview
+  execution?: string;   // catálogo: pasos de ejecución
   esPersonalizado: boolean;
 }
 
