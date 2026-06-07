@@ -10,6 +10,7 @@ export async function startSession(input: { routineId?: string; gymId?: string |
   const session: WorkoutSession = {
     id: crypto.randomUUID(),
     userId: null,
+    routineId: input.routineId ?? null,
     gymId: input.gymId ?? null,
     fecha: ts,
     updatedAt: ts,
@@ -30,6 +31,12 @@ export function getSession(id: string): Promise<WorkoutSession | undefined> {
 export async function listSessions(): Promise<WorkoutSession[]> {
   const all = await db.workoutSessions.toArray();
   return activo(all).sort((a, b) => b.fecha - a.fecha);
+}
+
+/** Última sesión (más reciente) que se hizo desde una rutina; undefined si no hay. */
+export async function getLastRoutineSession(): Promise<WorkoutSession | undefined> {
+  const sesiones = await listSessions();
+  return sesiones.find((s) => s.routineId != null);
 }
 
 export async function finishSession(id: string, input: { notas?: string }): Promise<void> {

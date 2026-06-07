@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '@/lib/db/database';
 import {
   createRoutine, listRoutines, getRoutine, updateRoutine, softDeleteRoutine,
+  reorderRoutines,
   addExerciseToRoutine, listRoutineExercises, updateRoutineExercise, softDeleteRoutineExercise,
 } from '@/lib/repositories/routines';
 
@@ -18,6 +19,27 @@ describe('rutinas', () => {
     expect(r.deletedAt).toBeNull();
     expect((await listRoutines()).map((x) => x.nombre)).toEqual(['Full Body']);
     expect(await getRoutine(r.id)).toMatchObject({ nombre: 'Full Body' });
+  });
+
+  it('asigna orden incremental al crear y lista por orden', async () => {
+    const a = await createRoutine({ nombre: 'Empuje' });
+    const b = await createRoutine({ nombre: 'Tirón' });
+    const c = await createRoutine({ nombre: 'Pierna' });
+    expect(a.orden).toBe(0);
+    expect(b.orden).toBe(1);
+    expect(c.orden).toBe(2);
+    expect((await listRoutines()).map((r) => r.nombre)).toEqual(['Empuje', 'Tirón', 'Pierna']);
+  });
+
+  it('reordena reescribiendo orden y refrescando updatedAt', async () => {
+    const a = await createRoutine({ nombre: 'A' });
+    const b = await createRoutine({ nombre: 'B' });
+    const c = await createRoutine({ nombre: 'C' });
+    await new Promise((res) => setTimeout(res, 2));
+    await reorderRoutines([c.id, a.id, b.id]);
+    expect((await listRoutines()).map((r) => r.nombre)).toEqual(['C', 'A', 'B']);
+    expect((await getRoutine(c.id))!.orden).toBe(0);
+    expect((await getRoutine(c.id))!.updatedAt).toBeGreaterThan(c.updatedAt);
   });
 
   it('actualiza nombre/descripcion y refresca updatedAt', async () => {

@@ -48,6 +48,7 @@ export interface Routine extends SyncMeta {
   userId: string | null;
   nombre: string;
   descripcion?: string;
+  orden: number;
   archivada: boolean;
 }
 
@@ -70,7 +71,8 @@ export interface Gym extends SyncMeta {
 
 export interface WorkoutSession extends SyncMeta {
   userId: string | null;
-  routineDayId?: string; // vacío = entreno libre
+  routineDayId?: string; // legacy sin uso
+  routineId?: string | null; // null/ausente = entreno libre
   gymId?: string | null; // null/ausente = "Sin gimnasio" (datos pre-migración)
   fecha: number; // epoch ms (inicio del entreno)
   duracionSegundos?: number;

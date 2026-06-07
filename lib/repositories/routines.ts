@@ -5,11 +5,13 @@ const now = () => Date.now();
 const activo = <T extends { deletedAt: number | null }>(arr: T[]) => arr.filter((x) => x.deletedAt === null);
 
 export async function createRoutine(input: { nombre: string; descripcion?: string }): Promise<Routine> {
+  const existentes = activo(await db.routines.toArray());
   const routine: Routine = {
     id: crypto.randomUUID(),
     userId: null,
     nombre: input.nombre,
     descripcion: input.descripcion,
+    orden: existentes.length,
     archivada: false,
     updatedAt: now(),
     deletedAt: null,
@@ -24,7 +26,18 @@ export function getRoutine(id: string): Promise<Routine | undefined> {
 
 export async function listRoutines(): Promise<Routine[]> {
   const all = await db.routines.toArray();
-  return activo(all).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+  return activo(all).sort(
+    (a, b) => (a.orden ?? 0) - (b.orden ?? 0) || a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }),
+  );
+}
+
+export async function reorderRoutines(idsEnOrden: string[]): Promise<void> {
+  const ts = now();
+  await db.transaction('rw', db.routines, async () => {
+    for (let i = 0; i < idsEnOrden.length; i++) {
+      await db.routines.update(idsEnOrden[i], { orden: i, updatedAt: ts });
+    }
+  });
 }
 
 export async function updateRoutine(

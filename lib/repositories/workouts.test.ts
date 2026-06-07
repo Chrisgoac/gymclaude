@@ -6,6 +6,7 @@ import {
   addLoggedExercise, listSessionExercises, softDeleteLoggedExercise,
   addSet, updateSet, softDeleteSet, listExerciseSets, getLastSet,
   countSessionsWithoutGym, assignGymToSessionsWithoutGym,
+  getLastRoutineSession,
 } from '@/lib/repositories/workouts';
 
 beforeEach(async () => {
@@ -33,6 +34,29 @@ describe('sesiones', () => {
     const s = await startSession({ routineId: r.id });
     const les = await listSessionExercises(s.id);
     expect(les.map((le) => le.exerciseId)).toEqual(['seed-press-banca', 'seed-press-militar']);
+  });
+
+  it('guarda routineId al empezar desde rutina y lo deja null en libre', async () => {
+    const r = await createRoutine({ nombre: 'R' });
+    const conRutina = await startSession({ routineId: r.id });
+    const libre = await startSession({});
+    expect(conRutina.routineId).toBe(r.id);
+    expect(libre.routineId).toBeNull();
+  });
+
+  it('getLastRoutineSession ignora libres/borrados y da la más reciente con rutina', async () => {
+    const r1 = await createRoutine({ nombre: 'R1' });
+    const r2 = await createRoutine({ nombre: 'R2' });
+    expect(await getLastRoutineSession()).toBeUndefined();
+    await startSession({ routineId: r1.id });
+    await new Promise((res) => setTimeout(res, 3));
+    await startSession({}); // libre, no cuenta
+    await new Promise((res) => setTimeout(res, 3));
+    const ultima = await startSession({ routineId: r2.id });
+    await new Promise((res) => setTimeout(res, 3));
+    await startSession({}); // libre posterior, tampoco cuenta
+    expect((await getLastRoutineSession())?.id).toBe(ultima.id);
+    expect((await getLastRoutineSession())?.routineId).toBe(r2.id);
   });
 
   it('finaliza la sesión guardando duración y notas', async () => {

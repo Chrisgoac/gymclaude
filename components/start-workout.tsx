@@ -5,7 +5,10 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { listRoutines } from '@/lib/repositories/routines';
-import { startSession } from '@/lib/repositories/workouts';
+import { startSession, getLastRoutineSession } from '@/lib/repositories/workouts';
+import { getNextRoutineId } from '@/lib/routine-rotation';
+import { useSuggestNextRoutine } from '@/lib/settings';
+import { formatHaceDias } from '@/lib/fecha';
 import { Button } from '@/components/ui/button';
 import { GymPicker } from '@/components/gym-picker';
 
@@ -14,7 +17,14 @@ type Pendiente = { tipo: 'libre' } | { tipo: 'rutina'; routineId: string } | nul
 export function StartWorkout() {
   const router = useRouter();
   const routines = useLiveQuery(() => listRoutines(), []);
+  const ultima = useLiveQuery(() => getLastRoutineSession(), []);
+  const [sugerir] = useSuggestNextRoutine();
   const [pendiente, setPendiente] = useState<Pendiente>(null);
+
+  const lista = routines ?? [];
+  const ultimaRutina = ultima?.routineId ? lista.find((r) => r.id === ultima.routineId) : undefined;
+  const nextId = getNextRoutineId(lista, ultima?.routineId ?? null);
+  const siguienteRutina = nextId ? lista.find((r) => r.id === nextId) : undefined;
 
   async function empezarConGym(gymId: string) {
     if (!pendiente) return;
@@ -38,8 +48,32 @@ export function StartWorkout() {
     );
   }
 
+  const lineaUltima = ultimaRutina ? (
+    <p className="label-mono text-[11px] text-muted-foreground">
+      Última: {ultimaRutina.nombre} · {formatHaceDias(ultima!.fecha)}
+    </p>
+  ) : null;
+
   return (
     <div className="space-y-7">
+      {sugerir && siguienteRutina ? (
+        <section className="brutal-box brutal-shadow space-y-3 bg-primary/10 p-4">
+          <p className="label-mono text-[11px] text-muted-foreground">Siguiente</p>
+          <h2 className="text-3xl leading-none">{siguienteRutina.nombre}</h2>
+          <Button
+            onClick={() => setPendiente({ tipo: 'rutina', routineId: siguienteRutina.id })}
+            size="lg"
+            className="w-full font-[family-name:var(--font-display)] text-lg tracking-wide"
+          >
+            Empezar {siguienteRutina.nombre}
+            <ArrowRight className="size-5" strokeWidth={3} />
+          </Button>
+          {lineaUltima}
+        </section>
+      ) : (
+        lineaUltima
+      )}
+
       <Button
         onClick={() => setPendiente({ tipo: 'libre' })}
         size="lg"
