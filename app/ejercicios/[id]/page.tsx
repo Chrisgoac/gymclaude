@@ -42,6 +42,18 @@ export default function EditarEjercicioPage({ params }: { params: Promise<{ id: 
             {exerciseTypeLabel[exercise.tipo]}
           </div>
         </dl>
+        {exercise.descripcion && (
+          <section className="space-y-1">
+            <h2 className="label-mono text-[11px] text-muted-foreground">Descripción</h2>
+            <p className="whitespace-pre-line text-sm">{exercise.descripcion}</p>
+          </section>
+        )}
+        {exercise.execution && (
+          <section className="space-y-1">
+            <h2 className="label-mono text-[11px] text-muted-foreground">Ejecución</h2>
+            <p className="whitespace-pre-line text-sm">{exercise.execution}</p>
+          </section>
+        )}
         <p className="text-sm text-muted-foreground">
           Ejercicio del catálogo (solo lectura). Crea uno propio para personalizarlo.
         </p>

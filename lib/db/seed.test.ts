@@ -5,10 +5,10 @@ import { CATALOG_SEED, seedCatalogIfEmpty } from '@/lib/db/seed';
 describe('sembrado del catálogo', () => {
   beforeEach(async () => { await db.exercises.clear(); });
 
-  it('contiene exactamente 26 ejercicios sin slugs duplicados', async () => {
-    expect(CATALOG_SEED.length).toBe(26);
+  it('contiene 143 ejercicios sin ids duplicados', async () => {
+    expect(CATALOG_SEED.length).toBe(143);
     const ids = new Set(CATALOG_SEED.map((e) => e.id));
-    expect(ids.size).toBe(26);
+    expect(ids.size).toBe(143);
   });
 
   it('siembra el catálogo cuando la tabla está vacía', async () => {
@@ -18,6 +18,12 @@ describe('sembrado del catálogo', () => {
 
   it('no duplica si ya hay datos', async () => {
     await seedCatalogIfEmpty();
+    await seedCatalogIfEmpty();
+    expect(await db.exercises.count()).toBe(CATALOG_SEED.length);
+  });
+
+  it('siembra aditiva: añade los que falten si ya hay algunos', async () => {
+    await db.exercises.put({ ...CATALOG_SEED[0] });
     await seedCatalogIfEmpty();
     expect(await db.exercises.count()).toBe(CATALOG_SEED.length);
   });

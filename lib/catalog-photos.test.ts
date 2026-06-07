@@ -12,7 +12,7 @@ describe('resolveExercisePhotoUrl', () => {
     expect(resolveExercisePhotoUrl('custom-xyz')).toBeUndefined();
     expect(resolveExercisePhotoUrl('custom-xyz', undefined)).toBeUndefined();
   });
-  it('cubre los 26 ejercicios del catálogo', () => {
-    expect(Object.keys(CATALOG_PHOTOS)).toHaveLength(26);
+  it('cubre los 143 ejercicios del catálogo', () => {
+    expect(Object.keys(CATALOG_PHOTOS)).toHaveLength(143);
   });
 });
