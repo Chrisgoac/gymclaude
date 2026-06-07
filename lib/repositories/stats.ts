@@ -125,6 +125,26 @@ export async function listSessionSummaries(gymId?: string | null): Promise<Sessi
   return out;
 }
 
+export interface PeriodSummary {
+  sesiones: number;
+  volumen: number;
+}
+
+export async function getPeriodSummary(sinceTs = 0, gymId?: string | null): Promise<PeriodSummary> {
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => s.fecha >= sinceTs)
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId);
+  if (sessions.length === 0) return { sesiones: 0, volumen: 0 };
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  const les = activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
+  let volumen = 0;
+  for (const le of les) {
+    const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(le.id).toArray());
+    volumen += sets.reduce((acc, s) => acc + s.peso * s.reps, 0);
+  }
+  return { sesiones: sessions.length, volumen };
+}
+
 const dayKey = (ts: number) => {
   const d = new Date(ts);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;

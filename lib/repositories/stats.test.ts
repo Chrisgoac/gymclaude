@@ -3,7 +3,7 @@ import { db } from '@/lib/db/database';
 import { startSession, addLoggedExercise, addSet } from '@/lib/repositories/workouts';
 import {
   estimar1RM, getExerciseProgress, getExercisePRs, getVolumeByMuscle,
-  listSessionSummaries, getCurrentStreakDays,
+  listSessionSummaries, getCurrentStreakDays, getPeriodSummary,
 } from '@/lib/repositories/stats';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -99,6 +99,32 @@ describe('getCurrentStreakDays', () => {
   it('es 0 si la única sesión es de hace días (racha rota)', async () => {
     await sesionCon(Date.now() - 10 * DAY, 'seed-press-banca', [[60, 5]]);
     expect(await getCurrentStreakDays()).toBe(0);
+  });
+});
+
+describe('getPeriodSummary', () => {
+  it('cuenta sesiones y suma volumen del periodo', async () => {
+    await sesionCon(1 * DAY, 'seed-press-banca', [[60, 10]]); // 600
+    await sesionCon(3 * DAY, 'seed-sentadilla', [[100, 5]]);  // 500
+    const r = await getPeriodSummary(0);
+    expect(r.sesiones).toBe(2);
+    expect(r.volumen).toBe(1100);
+  });
+  it('respeta sinceTs', async () => {
+    await sesionCon(1 * DAY, 'seed-press-banca', [[60, 10]]);
+    await sesionCon(5 * DAY, 'seed-sentadilla', [[100, 5]]);
+    const r = await getPeriodSummary(3 * DAY);
+    expect(r.sesiones).toBe(1);
+    expect(r.volumen).toBe(500);
+  });
+  it('respeta el filtro de gimnasio', async () => {
+    const a = await startSession({ gymId: 'gymA' });
+    const le = await addLoggedExercise(a.id, 'seed-sentadilla');
+    await addSet(le.id, { peso: 100, reps: 5 });
+    await startSession({ gymId: 'gymB' });
+    const r = await getPeriodSummary(0, 'gymA');
+    expect(r.sesiones).toBe(1);
+    expect(r.volumen).toBe(500);
   });
 });
 
