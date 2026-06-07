@@ -3,7 +3,7 @@ import { db } from '@/lib/db/database';
 import { startSession, addLoggedExercise, addSet } from '@/lib/repositories/workouts';
 import {
   estimar1RM, getExerciseProgress, getExercisePRs, getVolumeByMuscle,
-  listSessionSummaries, getCurrentStreakDays, getPeriodSummary,
+  listSessionSummaries, getCurrentStreakDays, getPeriodSummary, getWeeklyVolume,
 } from '@/lib/repositories/stats';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -125,6 +125,31 @@ describe('getPeriodSummary', () => {
     const r = await getPeriodSummary(0, 'gymA');
     expect(r.sesiones).toBe(1);
     expect(r.volumen).toBe(500);
+  });
+});
+
+describe('getWeeklyVolume', () => {
+  it('agrupa el volumen por semana (lunes) y ordena ascendente', async () => {
+    // 2021-01-04 = lunes. Dos sesiones esa semana + una la semana siguiente.
+    const lunes = new Date(2021, 0, 4).getTime();
+    const miercoles = new Date(2021, 0, 6).getTime();
+    const lunesSig = new Date(2021, 0, 11).getTime();
+    await sesionCon(lunes, 'seed-press-banca', [[60, 10]]);      // 600
+    await sesionCon(miercoles, 'seed-sentadilla', [[100, 5]]);   // 500
+    await sesionCon(lunesSig, 'seed-press-banca', [[70, 10]]);   // 700
+
+    const semanas = await getWeeklyVolume(0);
+    expect(semanas).toHaveLength(2);
+    expect(semanas[0].semanaInicioTs).toBe(new Date(2021, 0, 4).getTime());
+    expect(semanas[0].volumen).toBe(1100);
+    expect(semanas[1].volumen).toBe(700);
+  });
+  it('respeta sinceTs y el gimnasio', async () => {
+    const a = await startSession({ gymId: 'gymA' });
+    await db.workoutSessions.update(a.id, { fecha: new Date(2021, 0, 4).getTime() });
+    const le = await addLoggedExercise(a.id, 'seed-sentadilla');
+    await addSet(le.id, { peso: 100, reps: 5 });
+    expect(await getWeeklyVolume(0, 'gymB')).toHaveLength(0);
   });
 });
 
