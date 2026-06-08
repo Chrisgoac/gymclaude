@@ -5,6 +5,7 @@ import type { Equipment } from '@/lib/db/types';
 import type { ModoProgresion } from '@/lib/progresion';
 import { INCREMENTO_DEFAULTS } from '@/lib/progresion';
 import { useSetting } from '@/lib/use-setting';
+import { getSetting, setSetting } from '@/lib/repositories/user-settings';
 
 const KEY = 'gymlog.suggestNextRoutine';
 const EVENT = 'settingschange';
@@ -47,8 +48,15 @@ export function useModoProgresion(): [ModoProgresion, (v: ModoProgresion) => voi
 
 /** Incrementos por equipamiento (sincronizado). Se fusiona sobre los defaults. */
 export function useIncrementos(): [Record<Equipment, number>, (p: Partial<Record<Equipment, number>>) => void] {
-  const [stored, set] = useSetting<Partial<Record<Equipment, number>>>('incrementos', {});
+  const [stored] = useSetting<Partial<Record<Equipment, number>>>('incrementos', {});
   const value = { ...INCREMENTO_DEFAULTS, ...stored };
-  const setPartial = (p: Partial<Record<Equipment, number>>) => set({ ...stored, ...p });
+  // Lee el valor actual de Dexie en el momento de escribir (no del render) para no
+  // perder ediciones rápidas en filas distintas.
+  const setPartial = (p: Partial<Record<Equipment, number>>) => {
+    void (async () => {
+      const current = (await getSetting<Partial<Record<Equipment, number>>>('incrementos')) ?? {};
+      await setSetting('incrementos', { ...current, ...p });
+    })();
+  };
   return [value, setPartial];
 }
