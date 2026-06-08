@@ -23,6 +23,7 @@ export function ExerciseForm({
   const [tipo, setTipo] = useState<ExerciseType>(existing?.tipo ?? 'compuesto');
   const [videoUrl, setVideoUrl] = useState(existing?.videoUrl ?? '');
   const [notas, setNotas] = useState(existing?.notas ?? '');
+  const [incrementoKg, setIncrementoKg] = useState(existing?.incrementoKg?.toString() ?? '');
   const [error, setError] = useState('');
 
   async function handleSubmit(e: React.FormEvent) {
@@ -31,6 +32,7 @@ export function ExerciseForm({
       setError('El nombre es obligatorio');
       return;
     }
+    const n = Number(incrementoKg);
     const data = {
       nombre: nombre.trim(),
       grupoMuscular,
@@ -38,6 +40,8 @@ export function ExerciseForm({
       tipo,
       videoUrl: videoUrl.trim() || undefined,
       notas: notas.trim() || undefined,
+      // campo opcional: vacío/NaN → undefined (no 0, que parseDecimal devolvería)
+      incrementoKg: incrementoKg.trim() === '' || Number.isNaN(n) ? undefined : Math.max(0, n),
     };
     if (existing) {
       await updateExercise(existing.id, data);
@@ -78,6 +82,10 @@ export function ExerciseForm({
       <div className="space-y-1">
         <Label htmlFor="notas">Notas (opcional)</Label>
         <Textarea id="notas" value={notas} onChange={(e) => setNotas(e.target.value)} />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="incremento">Incremento al progresar (kg, opcional)</Label>
+        <Input id="incremento" inputMode="decimal" value={incrementoKg} onChange={(e) => setIncrementoKg(e.target.value)} />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit">Guardar</Button>

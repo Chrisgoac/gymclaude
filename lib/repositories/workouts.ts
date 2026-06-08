@@ -117,12 +117,12 @@ export async function listExerciseSets(loggedExerciseId: string): Promise<Logged
   return activo(all).sort((a, b) => a.orden - b.orden);
 }
 
-/** Busca el último set (y la fecha de su sesión) del ejercicio, filtrando por gym. */
-async function findLastSetWithFecha(
+/** Localiza el loggedExercise más reciente del ejercicio (filtrando por gym) y la fecha de su sesión. */
+async function findLastLoggedExercise(
   exerciseId: string,
   excludeSessionId?: string,
   gymId?: string | null,
-): Promise<{ set: LoggedSet; fecha: number } | undefined> {
+): Promise<{ le: LoggedExercise; fecha: number } | undefined> {
   const les = activo(await db.loggedExercises.where('exerciseId').equals(exerciseId).toArray())
     .filter((le) => le.sessionId !== excludeSessionId);
   if (les.length === 0) return undefined;
@@ -140,12 +140,23 @@ async function findLastSetWithFecha(
   candidatos.sort((a, b) => (fechaBySession.get(b.sessionId) ?? 0) - (fechaBySession.get(a.sessionId) ?? 0));
   for (const le of candidatos) {
     const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(le.id).toArray());
-    if (sets.length > 0) {
-      sets.sort((a, b) => b.orden - a.orden);
-      return { set: sets[0], fecha: fechaBySession.get(le.sessionId) ?? 0 };
-    }
+    if (sets.length > 0) return { le, fecha: fechaBySession.get(le.sessionId) ?? 0 };
   }
   return undefined;
+}
+
+/** Busca el último set (y la fecha de su sesión) del ejercicio, filtrando por gym. */
+async function findLastSetWithFecha(
+  exerciseId: string,
+  excludeSessionId?: string,
+  gymId?: string | null,
+): Promise<{ set: LoggedSet; fecha: number } | undefined> {
+  const found = await findLastLoggedExercise(exerciseId, excludeSessionId, gymId);
+  if (!found) return undefined;
+  const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(found.le.id).toArray());
+  if (sets.length === 0) return undefined;
+  sets.sort((a, b) => b.orden - a.orden); // último set por orden (entrada más reciente)
+  return { set: sets[0], fecha: found.fecha };
 }
 
 export async function getLastSet(
@@ -164,6 +175,21 @@ export async function getLastPerformance(
   const found = await findLastSetWithFecha(exerciseId, excludeSessionId, gymId);
   if (!found) return undefined;
   return { peso: found.set.peso, reps: found.set.reps, fecha: found.fecha };
+}
+
+/** Series de trabajo (sin calentamiento) de la última sesión del ejercicio en ese gym, en orden. */
+export async function getLastWorkingSets(
+  exerciseId: string,
+  excludeSessionId?: string,
+  gymId?: string | null,
+): Promise<{ peso: number; reps: number }[] | undefined> {
+  const found = await findLastLoggedExercise(exerciseId, excludeSessionId, gymId);
+  if (!found) return undefined;
+  const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(found.le.id).toArray())
+    .filter((s) => !s.esCalentamiento)
+    .sort((a, b) => a.orden - b.orden);
+  if (sets.length === 0) return undefined;
+  return sets.map((s) => ({ peso: s.peso, reps: s.reps }));
 }
 
 /** Nº de sesiones activas sin gimnasio asignado. */

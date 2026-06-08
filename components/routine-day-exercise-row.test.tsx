@@ -23,10 +23,12 @@ it('muestra el nombre del ejercicio y guarda los objetivos', async () => {
   expect(await screen.findByText('Press de banca')).toBeInTheDocument();
 
   await userEvent.type(screen.getByLabelText('Series'), '3');
-  await userEvent.type(screen.getByLabelText('Reps'), '8');
+  await userEvent.type(screen.getByLabelText('Reps mín'), '6');
+  await userEvent.type(screen.getByLabelText('Reps (tope)'), '8');
   await waitFor(async () => {
     const stored = await db.routineExercises.get(re.id);
     expect(stored?.seriesObjetivo).toBe(3);
+    expect(stored?.repsObjetivoMin).toBe(6);
     expect(stored?.repsObjetivo).toBe(8);
   });
 });

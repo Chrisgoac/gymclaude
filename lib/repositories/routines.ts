@@ -99,7 +99,7 @@ export async function getRoutineExerciseTarget(
 
 export async function updateRoutineExercise(
   id: string,
-  changes: Partial<Pick<RoutineExercise, 'seriesObjetivo' | 'repsObjetivo' | 'descansoSegundos' | 'notas'>>,
+  changes: Partial<Pick<RoutineExercise, 'seriesObjetivo' | 'repsObjetivo' | 'repsObjetivoMin' | 'descansoSegundos' | 'notas'>>,
 ): Promise<void> {
   await db.routineExercises.update(id, { ...changes, updatedAt: now() });
 }

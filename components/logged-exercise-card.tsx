@@ -5,13 +5,15 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/database';
 import type { LoggedExercise } from '@/lib/db/types';
 import {
-  addSet, updateSet, softDeleteSet, listExerciseSets, getLastSet, getLastPerformance,
+  addSet, updateSet, softDeleteSet, listExerciseSets, getLastWorkingSets, getLastPerformance,
   softDeleteLoggedExercise,
 } from '@/lib/repositories/workouts';
 import { getRoutineExerciseTarget } from '@/lib/repositories/routines';
 import { getPhoto } from '@/lib/repositories/exercise-photos';
 import { resolveExercisePhotoUrl } from '@/lib/catalog-photos';
 import { formatHaceDias } from '@/lib/fecha';
+import { calcularSugerencia, describeMotivo, inferirSalto } from '@/lib/progresion';
+import { useModoProgresion, useIncrementos } from '@/lib/settings';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -42,6 +44,26 @@ export function LoggedExerciseCard({
     [routineId, loggedExercise.exerciseId],
   );
   const [restKey, setRestKey] = useState(0);
+  const [modo] = useModoProgresion();
+  const [incrementos] = useIncrementos();
+
+  const sugerencia = useLiveQuery(async () => {
+    if (!ejercicio) return undefined;
+    const ultimo = await getLastWorkingSets(loggedExercise.exerciseId, sessionId, gymId);
+    const salto = inferirSalto((ultimo ?? []).map((s) => s.peso), {
+      equipamiento: ejercicio.equipamiento,
+      defaults: incrementos,
+      override: ejercicio.incrementoKg,
+    });
+    const sug = calcularSugerencia({
+      modo,
+      ultimo,
+      objetivo: routineId ? objetivo ?? undefined : undefined,
+      salto,
+      esCorporal: ejercicio.equipamiento === 'peso_corporal',
+    });
+    return { sug, badge: describeMotivo(sug, salto) };
+  }, [ejercicio, loggedExercise.exerciseId, sessionId, gymId, routineId, objetivo, modo, incrementos]);
 
   async function añadirSerie() {
     const actuales = sets ?? [];
@@ -49,8 +71,8 @@ export function LoggedExerciseCard({
       const ultimaSerie = actuales[actuales.length - 1];
       await addSet(loggedExercise.id, { peso: ultimaSerie.peso, reps: ultimaSerie.reps });
     } else {
-      const previa = await getLastSet(loggedExercise.exerciseId, sessionId, gymId);
-      await addSet(loggedExercise.id, { peso: previa?.peso ?? 0, reps: previa?.reps ?? 0 });
+      const sug = sugerencia?.sug;
+      await addSet(loggedExercise.id, { peso: sug?.pesoSugerido ?? 0, reps: sug?.repsSugeridas ?? 0 });
     }
     setRestKey((k) => k + 1);
   }
@@ -78,7 +100,7 @@ export function LoggedExerciseCard({
         </button>
       </div>
 
-      {(ultima || objetivo) && (
+      {(ultima || objetivo || sugerencia?.badge) && (
         <div className="space-y-0.5 border-b-2 border-foreground bg-card px-3 py-2">
           {ultima && (
             <p className="label-mono text-[10px] text-muted-foreground">
@@ -92,6 +114,11 @@ export function LoggedExerciseCard({
                 ? ` · ${objetivo.seriesObjetivo ?? '—'} × ${objetivo.repsObjetivo ?? '—'}`
                 : ''}
               {objetivo.descansoSegundos ? ` · desc. ${objetivo.descansoSegundos}s` : ''}
+            </p>
+          )}
+          {sugerencia?.badge && (
+            <p className="label-mono text-[10px] font-semibold text-primary">
+              {sugerencia.badge}
             </p>
           )}
         </div>

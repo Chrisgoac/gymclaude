@@ -2,10 +2,10 @@ import { db } from '@/lib/db/database';
 import type { Exercise } from '@/lib/db/types';
 
 export type NewExerciseInput = Pick<Exercise, 'nombre' | 'grupoMuscular' | 'equipamiento' | 'tipo'> &
-  Partial<Pick<Exercise, 'videoUrl' | 'notas'>>;
+  Partial<Pick<Exercise, 'videoUrl' | 'notas' | 'incrementoKg'>>;
 
 export type ExerciseChanges = Partial<
-  Pick<Exercise, 'nombre' | 'grupoMuscular' | 'equipamiento' | 'tipo' | 'videoUrl' | 'notas'>
+  Pick<Exercise, 'nombre' | 'grupoMuscular' | 'equipamiento' | 'tipo' | 'videoUrl' | 'notas' | 'incrementoKg'>
 >;
 
 export async function createExercise(input: NewExerciseInput): Promise<Exercise> {
