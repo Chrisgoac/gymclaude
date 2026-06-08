@@ -41,3 +41,75 @@ export function inferirSalto(
   }
   return opts.defaults[opts.equipamiento] ?? 2.5;
 }
+
+export type ModoProgresion = 'doble' | 'objetivo' | 'repite' | 'off';
+
+export type Motivo = 'subio-peso' | 'subio-reps' | 'repite' | 'sin-historial' | 'libre' | 'off';
+
+export interface Sugerencia {
+  pesoSugerido: number;
+  repsSugeridas: number;
+  motivo: Motivo;
+}
+
+export interface SugerenciaInput {
+  modo: ModoProgresion;
+  /** Series de trabajo (sin calentamiento) de la última sesión del ejercicio, mismo gym. undefined = sin historial. */
+  ultimo?: { peso: number; reps: number }[];
+  /** Objetivo de la rutina. undefined = entreno libre. */
+  objetivo?: { repsObjetivo?: number; repsObjetivoMin?: number };
+  /** Salto de peso resuelto por inferirSalto. */
+  salto: number;
+  esCorporal: boolean;
+}
+
+function rango(objetivo: { repsObjetivo?: number; repsObjetivoMin?: number }): { min: number; tope: number } {
+  const tope = objetivo.repsObjetivo ?? 0;
+  const minRaw = objetivo.repsObjetivoMin ?? tope - 4;
+  const min = Math.max(1, Math.min(minRaw, tope));
+  return { min, tope };
+}
+
+export function calcularSugerencia(input: SugerenciaInput): Sugerencia {
+  const { modo, ultimo, objetivo, salto, esCorporal } = input;
+  const ultimoSet = ultimo && ultimo.length > 0 ? ultimo[ultimo.length - 1] : undefined;
+
+  if (modo === 'off') {
+    return { pesoSugerido: ultimoSet?.peso ?? 0, repsSugeridas: ultimoSet?.reps ?? 0, motivo: 'off' };
+  }
+  if (!objetivo) {
+    return { pesoSugerido: ultimoSet?.peso ?? 0, repsSugeridas: ultimoSet?.reps ?? 0, motivo: 'libre' };
+  }
+  if (!ultimo || ultimo.length === 0) {
+    return { pesoSugerido: 0, repsSugeridas: objetivo.repsObjetivo ?? 0, motivo: 'sin-historial' };
+  }
+
+  const basePeso = ultimoSet!.peso;
+  const { min, tope } = rango(objetivo);
+  const objetivoReps = modo === 'doble' ? tope : (objetivo.repsObjetivo ?? 0);
+  const exito = ultimo.every((s) => s.reps >= objetivoReps);
+
+  if (esCorporal) {
+    if (exito) return { pesoSugerido: basePeso, repsSugeridas: ultimoSet!.reps + 1, motivo: 'subio-reps' };
+    return { pesoSugerido: basePeso, repsSugeridas: objetivoReps, motivo: 'repite' };
+  }
+
+  if (modo === 'doble') {
+    if (exito) return { pesoSugerido: basePeso + salto, repsSugeridas: min, motivo: 'subio-peso' };
+    return { pesoSugerido: basePeso, repsSugeridas: Math.min(tope, ultimoSet!.reps + 1), motivo: 'subio-reps' };
+  }
+
+  // modo 'objetivo' | 'repite'
+  if (exito) return { pesoSugerido: basePeso + salto, repsSugeridas: objetivoReps, motivo: 'subio-peso' };
+  return { pesoSugerido: basePeso, repsSugeridas: objetivoReps, motivo: 'repite' };
+}
+
+/** Texto corto para el badge de la card de entreno. null = no mostrar badge. */
+export function describeMotivo(s: Sugerencia, salto: number): string | null {
+  switch (s.motivo) {
+    case 'subio-peso': return `▲ +${salto} kg`;
+    case 'subio-reps': return '▲ +1 rep';
+    case 'repite': return '= repite';
+    default: return null;
+  }
+}
