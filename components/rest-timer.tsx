@@ -40,7 +40,7 @@ export function RestTimer({ startKey, targetSeconds }: { startKey: number; targe
   if (!corriendo) return null;
 
   const restante = tieneObjetivo ? (targetSeconds as number) - transcurridos : 0;
-  const terminado = tieneObjetivo && restante <= 0;
+  const terminado = tieneObjetivo && restante <= 0 && !parado;
   const display = tieneObjetivo ? formatSegundos(Math.max(0, restante)) : formatSegundos(transcurridos);
 
   return (

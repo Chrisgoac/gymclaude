@@ -37,3 +37,20 @@ it('vibra exactamente una vez al llegar a 0 (cuenta atrás)', async () => {
     vi.useRealTimers();
   }
 });
+
+it('en cuenta arriba (sin objetivo) nunca vibra', async () => {
+  vi.useFakeTimers();
+  const vibrate = vi.fn();
+  vi.stubGlobal('navigator', { vibrate });
+
+  try {
+    render(<RestTimer startKey={1} />);
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(vibrate).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  }
+});
