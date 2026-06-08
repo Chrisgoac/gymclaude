@@ -6,7 +6,7 @@ import {
   addLoggedExercise, listSessionExercises, softDeleteLoggedExercise,
   addSet, updateSet, softDeleteSet, listExerciseSets, getLastSet,
   countSessionsWithoutGym, assignGymToSessionsWithoutGym,
-  getLastRoutineSession, getLastPerformance,
+  getLastRoutineSession, getLastPerformance, getLastWorkingSets,
 } from '@/lib/repositories/workouts';
 
 beforeEach(async () => {
@@ -197,5 +197,29 @@ describe('getLastPerformance', () => {
     const le = await addLoggedExercise(s.id, 'seed-sentadilla');
     await addSet(le.id, { peso: 100, reps: 3 });
     expect(await getLastPerformance('seed-sentadilla', s.id)).toBeUndefined();
+  });
+});
+
+describe('getLastWorkingSets', () => {
+  it('getLastWorkingSets devuelve las series de trabajo de la última sesión, sin calentamiento', async () => {
+    const s1 = await startSession({ gymId: 'g1' });
+    const le1 = await addLoggedExercise(s1.id, 'ex-1');
+    await addSet(le1.id, { peso: 30, reps: 12, esCalentamiento: true });
+    await addSet(le1.id, { peso: 40, reps: 12 });
+    await addSet(le1.id, { peso: 40, reps: 11 });
+
+    const res = await getLastWorkingSets('ex-1', undefined, 'g1');
+    expect(res).toEqual([
+      { peso: 40, reps: 12 },
+      { peso: 40, reps: 11 },
+    ]);
+  });
+
+  it('getLastWorkingSets filtra por gimnasio', async () => {
+    const sA = await startSession({ gymId: 'gA' });
+    const leA = await addLoggedExercise(sA.id, 'ex-2');
+    await addSet(leA.id, { peso: 50, reps: 10 });
+    const res = await getLastWorkingSets('ex-2', undefined, 'gB');
+    expect(res).toBeUndefined();
   });
 });
