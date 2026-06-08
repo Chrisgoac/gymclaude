@@ -141,7 +141,7 @@ export function LoggedExerciseCard({
       </ul>
 
       <div className="space-y-2 border-t-2 border-foreground p-3">
-        <RestTimer startKey={restKey} targetSeconds={objetivo?.descansoSegundos} />
+        <RestTimer key={restKey} startKey={restKey} targetSeconds={objetivo?.descansoSegundos} />
         <Button type="button" variant="outline" className="w-full" onClick={añadirSerie}>
           Añadir serie
         </Button>

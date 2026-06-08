@@ -1,55 +1,52 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatSegundos } from '@/lib/fecha';
 
 /**
- * Cronómetro de descanso. Arranca cada vez que cambia `startKey` (>0).
- * Con `targetSeconds`: cuenta atrás y avisa (parpadeo + vibración) al llegar a 0.
+ * Cronómetro de descanso. El padre lo remonta (key={startKey}) en cada serie para reiniciarlo.
+ * Con `targetSeconds`: cuenta atrás y avisa (parpadeo + vibración) una sola vez al llegar a 0.
  * Sin `targetSeconds`: cuenta hacia arriba como cronómetro libre.
  * Tocarlo lo detiene.
  */
 export function RestTimer({ startKey, targetSeconds }: { startKey: number; targetSeconds?: number }) {
-  const [activo, setActivo] = useState(false);
+  const corriendo = startKey > 0;
+  const tieneObjetivo = typeof targetSeconds === 'number' && targetSeconds > 0;
   const [transcurridos, setTranscurridos] = useState(0);
+  const [parado, setParado] = useState(false);
+  const haVibrado = useRef(false);
 
-  // (Re)arranca cuando cambia startKey.
-  useEffect(() => {
-    if (startKey > 0) {
-      setActivo(true);
-      setTranscurridos(0);
-    }
-  }, [startKey]);
+  const congelado = tieneObjetivo && transcurridos >= (targetSeconds as number);
 
-  // Tic de 1s mientras está activo.
+  // Tic de 1s mientras corre, no está parado, ni congelado al alcanzar el objetivo.
+  // setState solo dentro del callback del intervalo (permitido por la regla de hooks).
   useEffect(() => {
-    if (!activo) return;
+    if (!corriendo || parado || congelado) return;
     const id = setInterval(() => setTranscurridos((t) => t + 1), 1000);
     return () => clearInterval(id);
-  }, [activo]);
+  }, [corriendo, parado, congelado]);
 
-  // Vibra al llegar a 0 (solo cuenta atrás) y detiene el timer para que ocurra una sola vez.
+  // Vibra una sola vez al alcanzar el objetivo (efecto = llamada a sistema externo + ref, no setState).
   useEffect(() => {
     const tieneObj = typeof targetSeconds === 'number' && targetSeconds > 0;
-    if (tieneObj && targetSeconds - transcurridos <= 0) {
-      setActivo(false);
+    if (tieneObj && transcurridos >= (targetSeconds as number) && !haVibrado.current) {
+      haVibrado.current = true;
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         navigator.vibrate?.(200);
       }
     }
   }, [transcurridos, targetSeconds]);
 
-  if (startKey === 0) return null;
+  if (!corriendo) return null;
 
-  const tieneObjetivo = typeof targetSeconds === 'number' && targetSeconds > 0;
-  const restante = tieneObjetivo ? targetSeconds - transcurridos : 0;
+  const restante = tieneObjetivo ? (targetSeconds as number) - transcurridos : 0;
   const terminado = tieneObjetivo && restante <= 0;
   const display = tieneObjetivo ? formatSegundos(Math.max(0, restante)) : formatSegundos(transcurridos);
 
   return (
     <button
       type="button"
-      onClick={() => setActivo(false)}
+      onClick={() => setParado(true)}
       className={`label-mono flex w-full items-center justify-center gap-2 border-2 border-foreground px-3 py-2 text-sm tabular-nums ${
         terminado ? 'animate-pulse bg-primary text-primary-foreground' : 'bg-card text-foreground'
       }`}
@@ -57,7 +54,7 @@ export function RestTimer({ startKey, targetSeconds }: { startKey: number; targe
     >
       <span className="text-[10px] opacity-70">DESCANSO</span>
       <span className="font-[family-name:var(--font-display)] text-lg leading-none">{display}</span>
-      {!activo && <span className="text-[10px] opacity-70">(parado)</span>}
+      {parado && <span className="text-[10px] opacity-70">(parado)</span>}
     </button>
   );
 }

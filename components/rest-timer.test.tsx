@@ -1,4 +1,4 @@
-import { it, expect, vi, afterEach } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { RestTimer } from '@/components/rest-timer';
 
