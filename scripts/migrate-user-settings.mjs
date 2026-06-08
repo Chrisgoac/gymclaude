@@ -31,4 +31,12 @@ await sql`
   )
 `;
 
+const cols = await sql`
+  SELECT table_name, column_name
+  FROM information_schema.columns
+  WHERE table_name = 'user_settings'
+  ORDER BY table_name, column_name`;
+
+console.log('Columnas presentes tras la migración:');
+for (const c of cols) console.log(`  - ${c.table_name}.${c.column_name}`);
 console.log('Tabla user_settings creada (o ya existía). OK');
