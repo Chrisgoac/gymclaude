@@ -40,6 +40,7 @@ export function ExerciseForm({
       tipo,
       videoUrl: videoUrl.trim() || undefined,
       notas: notas.trim() || undefined,
+      // campo opcional: vacío/NaN → undefined (no 0, que parseDecimal devolvería)
       incrementoKg: incrementoKg.trim() === '' || Number.isNaN(n) ? undefined : Math.max(0, n),
     };
     if (existing) {
