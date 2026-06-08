@@ -47,4 +47,16 @@ describe('incrementos por equipamiento', () => {
     localStorage.setItem('gymlog.incrementos', '{no json');
     expect(getIncrementos()).toEqual(INCREMENTO_DEFAULTS);
   });
+  it('setIncrementos con objeto completo round-trip', () => {
+    setIncrementos({ ...INCREMENTO_DEFAULTS, barra: 5 });
+    expect(getIncrementos().barra).toBe(5);
+    expect(getIncrementos().mancuerna).toBe(INCREMENTO_DEFAULTS.mancuerna);
+  });
+  it('getIncrementos devuelve la misma referencia si el storage no cambia', () => {
+    // Prime the cache with a known stored value, then verify two consecutive reads are the same object.
+    setIncrementos({ barra: 10 });
+    const a = getIncrementos();
+    const b = getIncrementos();
+    expect(a).toBe(b);
+  });
 });
