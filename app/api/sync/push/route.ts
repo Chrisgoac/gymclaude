@@ -25,7 +25,9 @@ export async function POST(req: Request) {
         .limit(1);
       if (!resolveServerWrite(existing[0]?.updatedAt, rec.updatedAt)) continue;
       const values = { ...rec, userId, serverUpdatedAt };
-      await db.insert(table).values(values).onConflictDoUpdate({ target: table.id, set: values });
+      // user_settings tiene PK compuesta (user_id, id); las demás tablas, id simple.
+      const conflictTarget = name === 'userSettings' ? [table.userId, table.id] : table.id;
+      await db.insert(table).values(values).onConflictDoUpdate({ target: conflictTarget, set: values });
     }
   }
   return NextResponse.json({ ok: true });
