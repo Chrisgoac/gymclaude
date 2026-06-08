@@ -36,7 +36,13 @@ export default function RegistroPage() {
 
       <div className="space-y-4">
         {(ejercicios ?? []).map((le) => (
-          <LoggedExerciseCard key={le.id} loggedExercise={le} sessionId={sessionId} gymId={session.gymId ?? undefined} />
+          <LoggedExerciseCard
+            key={le.id}
+            loggedExercise={le}
+            sessionId={sessionId}
+            gymId={session.gymId ?? undefined}
+            routineId={session.routineId ?? undefined}
+          />
         ))}
       </div>
 

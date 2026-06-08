@@ -117,11 +117,12 @@ export async function listExerciseSets(loggedExerciseId: string): Promise<Logged
   return activo(all).sort((a, b) => a.orden - b.orden);
 }
 
-export async function getLastSet(
+/** Busca el último set (y la fecha de su sesión) del ejercicio, filtrando por gym. */
+async function findLastSetWithFecha(
   exerciseId: string,
   excludeSessionId?: string,
   gymId?: string | null,
-): Promise<LoggedSet | undefined> {
+): Promise<{ set: LoggedSet; fecha: number } | undefined> {
   const les = activo(await db.loggedExercises.where('exerciseId').equals(exerciseId).toArray())
     .filter((le) => le.sessionId !== excludeSessionId);
   if (les.length === 0) return undefined;
@@ -141,10 +142,28 @@ export async function getLastSet(
     const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(le.id).toArray());
     if (sets.length > 0) {
       sets.sort((a, b) => b.orden - a.orden);
-      return sets[0];
+      return { set: sets[0], fecha: fechaBySession.get(le.sessionId) ?? 0 };
     }
   }
   return undefined;
+}
+
+export async function getLastSet(
+  exerciseId: string,
+  excludeSessionId?: string,
+  gymId?: string | null,
+): Promise<LoggedSet | undefined> {
+  return (await findLastSetWithFecha(exerciseId, excludeSessionId, gymId))?.set;
+}
+
+export async function getLastPerformance(
+  exerciseId: string,
+  excludeSessionId?: string,
+  gymId?: string | null,
+): Promise<{ peso: number; reps: number; fecha: number } | undefined> {
+  const found = await findLastSetWithFecha(exerciseId, excludeSessionId, gymId);
+  if (!found) return undefined;
+  return { peso: found.set.peso, reps: found.set.reps, fecha: found.fecha };
 }
 
 /** Nº de sesiones activas sin gimnasio asignado. */

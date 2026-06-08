@@ -88,6 +88,15 @@ export async function listRoutineExercises(routineId: string): Promise<RoutineEx
   return activo(all).sort((a, b) => a.orden - b.orden);
 }
 
+/** Objetivos (series/reps/descanso) de un ejercicio dentro de una rutina; undefined si no está. */
+export async function getRoutineExerciseTarget(
+  routineId: string,
+  exerciseId: string,
+): Promise<RoutineExercise | undefined> {
+  const res = await listRoutineExercises(routineId);
+  return res.find((re) => re.exerciseId === exerciseId);
+}
+
 export async function updateRoutineExercise(
   id: string,
   changes: Partial<Pick<RoutineExercise, 'seriesObjetivo' | 'repsObjetivo' | 'descansoSegundos' | 'notas'>>,
