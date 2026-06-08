@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
 import { db } from '@/lib/db/database';
-import { getSetting, setSetting, deleteSetting } from '@/lib/repositories/user-settings';
+import { getSetting, setSetting, deleteSetting, migrarAjustesLocales } from '@/lib/repositories/user-settings';
 
 beforeEach(async () => {
   await db.userSettings.clear();
@@ -43,5 +43,31 @@ describe('user-settings repo', () => {
   it('valor corrupto → undefined', async () => {
     await db.userSettings.put({ id: 'roto', userId: null, valor: '{no json', updatedAt: 1, deletedAt: null });
     expect(await getSetting('roto')).toBeUndefined();
+  });
+});
+
+describe('migrarAjustesLocales', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('siembra modo e incrementos desde localStorage', async () => {
+    localStorage.setItem('gymlog.modoProgresion', 'doble');
+    localStorage.setItem('gymlog.incrementos', JSON.stringify({ maquina: 7.5 }));
+    await migrarAjustesLocales();
+    expect(await getSetting<string>('modoProgresion')).toBe('doble');
+    expect(await getSetting<Record<string, number>>('incrementos')).toEqual({ maquina: 7.5 });
+  });
+
+  it('es idempotente: no pisa un valor ya existente', async () => {
+    await setSetting('modoProgresion', 'off');
+    localStorage.setItem('gymlog.modoProgresion', 'doble');
+    await migrarAjustesLocales();
+    expect(await getSetting<string>('modoProgresion')).toBe('off');
+  });
+
+  it('sin nada en localStorage no crea filas', async () => {
+    await migrarAjustesLocales();
+    expect(await db.userSettings.count()).toBe(0);
   });
 });

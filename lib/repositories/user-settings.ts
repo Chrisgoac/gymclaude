@@ -32,3 +32,25 @@ export async function deleteSetting(clave: string): Promise<void> {
   const ts = now();
   await db.userSettings.update(clave, { deletedAt: ts, updatedAt: ts });
 }
+
+/**
+ * Migra una sola vez los ajustes de la fase A que vivían en localStorage al store
+ * sincronizado. Idempotente: si la clave ya existe en userSettings, no la toca.
+ */
+export async function migrarAjustesLocales(): Promise<void> {
+  if (typeof localStorage === 'undefined') return;
+  const fuentes: { clave: string; lsKey: string; parse: (raw: string) => unknown }[] = [
+    { clave: 'modoProgresion', lsKey: 'gymlog.modoProgresion', parse: (raw) => raw },
+    { clave: 'incrementos', lsKey: 'gymlog.incrementos', parse: (raw) => JSON.parse(raw) },
+  ];
+  for (const { clave, lsKey, parse } of fuentes) {
+    const raw = localStorage.getItem(lsKey);
+    if (raw == null) continue;
+    if (await db.userSettings.get(clave)) continue; // ya migrado → no pisar
+    try {
+      await setSetting(clave, parse(raw));
+    } catch {
+      // valor corrupto en localStorage: se ignora
+    }
+  }
+}
