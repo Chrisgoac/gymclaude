@@ -18,6 +18,7 @@ export async function POST(req: Request) {
     const table = SERVER_TABLES[name] as any;
     if (!table) continue;
     for (const rec of records as any[]) {
+      // El filtro por (id, userId) localiza la fila correcta también para user_settings (PK compuesta).
       const existing = await db
         .select({ updatedAt: table.updatedAt })
         .from(table)
