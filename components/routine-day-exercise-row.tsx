@@ -31,21 +31,26 @@ export function RoutineDayExerciseRow({ routineExercise }: { routineExercise: Ro
           Quitar
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <Label htmlFor={`series-${routineExercise.id}`} className="text-xs">Series</Label>
           <Input id={`series-${routineExercise.id}`} inputMode="numeric" defaultValue={routineExercise.seriesObjetivo ?? ''}
             onChange={(e) => updateRoutineExercise(routineExercise.id, { seriesObjetivo: parseNum(e.target.value) })} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor={`reps-${routineExercise.id}`} className="text-xs">Reps</Label>
-          <Input id={`reps-${routineExercise.id}`} inputMode="numeric" defaultValue={routineExercise.repsObjetivo ?? ''}
-            onChange={(e) => updateRoutineExercise(routineExercise.id, { repsObjetivo: parseNum(e.target.value) })} />
-        </div>
-        <div className="space-y-1">
           <Label htmlFor={`descanso-${routineExercise.id}`} className="text-xs">Descanso (segs)</Label>
           <Input id={`descanso-${routineExercise.id}`} inputMode="numeric" defaultValue={routineExercise.descansoSegundos ?? ''}
             onChange={(e) => updateRoutineExercise(routineExercise.id, { descansoSegundos: parseNum(e.target.value) })} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`repsmin-${routineExercise.id}`} className="text-xs">Reps mín</Label>
+          <Input id={`repsmin-${routineExercise.id}`} inputMode="numeric" defaultValue={routineExercise.repsObjetivoMin ?? ''}
+            onChange={(e) => updateRoutineExercise(routineExercise.id, { repsObjetivoMin: parseNum(e.target.value) })} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`reps-${routineExercise.id}`} className="text-xs">Reps (tope)</Label>
+          <Input id={`reps-${routineExercise.id}`} inputMode="numeric" defaultValue={routineExercise.repsObjetivo ?? ''}
+            onChange={(e) => updateRoutineExercise(routineExercise.id, { repsObjetivo: parseNum(e.target.value) })} />
         </div>
       </div>
     </li>
