@@ -100,3 +100,14 @@ describe('getRoutineExerciseTarget', () => {
     expect(await getRoutineExerciseTarget(r.id, 'seed-press-banca')).toBeUndefined();
   });
 });
+
+describe('repsObjetivoMin / incrementoKg', () => {
+  it('updateRoutineExercise persiste repsObjetivoMin', async () => {
+    const r = await createRoutine({ nombre: 'R' });
+    const re = await addExerciseToRoutine(r.id, { exerciseId: 'ex-1' });
+    await updateRoutineExercise(re.id, { repsObjetivo: 12, repsObjetivoMin: 8 });
+    const leido = (await listRoutineExercises(r.id))[0];
+    expect(leido.repsObjetivoMin).toBe(8);
+    expect(leido.repsObjetivo).toBe(12);
+  });
+});

@@ -23,6 +23,8 @@ export interface Exercise extends SyncMeta {
   tipo: ExerciseType;
   videoUrl?: string;
   notas?: string;
+  /** Override manual del salto de peso al progresar (kg). Gana sobre la inferencia. */
+  incrementoKg?: number;
   descripcion?: string; // catálogo: posición inicial / overview
   execution?: string;   // catálogo: pasos de ejecución
   esPersonalizado: boolean;
@@ -60,6 +62,8 @@ export interface RoutineExercise extends SyncMeta {
   orden: number;
   seriesObjetivo?: number;
   repsObjetivo?: number;
+  /** Tope inferior del rango de reps (doble progresión). Sin valor → se asume tope−4. */
+  repsObjetivoMin?: number;
   descansoSegundos?: number;
   notas?: string;
 }
