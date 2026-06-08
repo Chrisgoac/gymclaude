@@ -34,6 +34,12 @@ describe('user-settings repo', () => {
     const row = await db.userSettings.get('x');
     expect(row!.deletedAt).not.toBeNull();
   });
+  it('setSetting tras deleteSetting reactiva la clave', async () => {
+    await setSetting('x', 1);
+    await deleteSetting('x');
+    await setSetting('x', 2);
+    expect(await getSetting<number>('x')).toBe(2);
+  });
   it('valor corrupto → undefined', async () => {
     await db.userSettings.put({ id: 'roto', userId: null, valor: '{no json', updatedAt: 1, deletedAt: null });
     expect(await getSetting('roto')).toBeUndefined();
