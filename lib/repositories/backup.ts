@@ -43,6 +43,13 @@ export async function importData(backup: BackupFile): Promise<void> {
     throw new Error('Fichero de copia no válido');
   }
   const d = backup.data;
+  // Refresca updatedAt en todo lo importado: si las fechas del fichero son
+  // anteriores a la marca de agua del sync, los registros quedarían "huérfanos"
+  // y no se subirían nunca. Importar = "esto manda aquí", así que se re-sincroniza.
+  const ts = Date.now();
+  for (const arr of Object.values(d)) {
+    for (const rec of arr as { updatedAt: number }[]) rec.updatedAt = ts;
+  }
   const tables = [
     db.gyms, db.exercises, db.routines, db.routineExercises,
     db.workoutSessions, db.loggedExercises, db.loggedSets, db.exercisePhotos,

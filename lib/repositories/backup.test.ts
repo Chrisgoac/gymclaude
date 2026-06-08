@@ -61,6 +61,27 @@ it('exporta e importa las fotos de ejercicio', async () => {
   expect(await db.exercisePhotos.count()).toBe(1);
 });
 
+it('al importar refresca updatedAt para que el sync los suba', async () => {
+  const antiguo = 1000; // fecha vieja, anterior a cualquier marca de agua
+  const backup = {
+    app: 'gymlog' as const,
+    version: 6,
+    exportedAt: antiguo,
+    data: {
+      gyms: [], exercises: [],
+      routines: [{ id: 'r1', userId: null, nombre: 'R', orden: 0, archivada: false, updatedAt: antiguo, deletedAt: null }],
+      routineExercises: [{ id: 're1', routineId: 'r1', exerciseId: 'seed-press-banca', orden: 0, updatedAt: antiguo, deletedAt: null }],
+      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [],
+    },
+  };
+  const t0 = Date.now();
+  await importData(backup);
+  const r = await db.routines.get('r1');
+  const re = await db.routineExercises.get('re1');
+  expect(r!.updatedAt).toBeGreaterThanOrEqual(t0);
+  expect(re!.updatedAt).toBeGreaterThanOrEqual(t0);
+});
+
 it('rechaza un fichero no válido', async () => {
   await expect(importData({ app: 'otra-cosa' } as never)).rejects.toThrow();
 });
