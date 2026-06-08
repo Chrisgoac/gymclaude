@@ -1,16 +1,21 @@
 'use client';
 
+import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/database';
 import type { LoggedExercise } from '@/lib/db/types';
 import {
-  addSet, updateSet, softDeleteSet, listExerciseSets, getLastSet, softDeleteLoggedExercise,
+  addSet, updateSet, softDeleteSet, listExerciseSets, getLastSet, getLastPerformance,
+  softDeleteLoggedExercise,
 } from '@/lib/repositories/workouts';
+import { getRoutineExerciseTarget } from '@/lib/repositories/routines';
 import { getPhoto } from '@/lib/repositories/exercise-photos';
 import { resolveExercisePhotoUrl } from '@/lib/catalog-photos';
+import { formatHaceDias } from '@/lib/fecha';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { RestTimer } from '@/components/rest-timer';
 
 import { parseEntero, parseDecimal } from '@/lib/num';
 
@@ -18,24 +23,36 @@ export function LoggedExerciseCard({
   loggedExercise,
   sessionId,
   gymId,
+  routineId,
 }: {
   loggedExercise: LoggedExercise;
   sessionId: string;
   gymId?: string;
+  routineId?: string;
 }) {
   const ejercicio = useLiveQuery(() => db.exercises.get(loggedExercise.exerciseId), [loggedExercise.exerciseId]);
   const sets = useLiveQuery(() => listExerciseSets(loggedExercise.id), [loggedExercise.id]);
   const foto = useLiveQuery(() => getPhoto(loggedExercise.exerciseId), [loggedExercise.exerciseId]);
+  const ultima = useLiveQuery(
+    () => getLastPerformance(loggedExercise.exerciseId, sessionId, gymId),
+    [loggedExercise.exerciseId, sessionId, gymId],
+  );
+  const objetivo = useLiveQuery(
+    () => (routineId ? getRoutineExerciseTarget(routineId, loggedExercise.exerciseId) : undefined),
+    [routineId, loggedExercise.exerciseId],
+  );
+  const [restKey, setRestKey] = useState(0);
 
   async function añadirSerie() {
     const actuales = sets ?? [];
     if (actuales.length > 0) {
-      const ultima = actuales[actuales.length - 1];
-      await addSet(loggedExercise.id, { peso: ultima.peso, reps: ultima.reps });
-      return;
+      const ultimaSerie = actuales[actuales.length - 1];
+      await addSet(loggedExercise.id, { peso: ultimaSerie.peso, reps: ultimaSerie.reps });
+    } else {
+      const previa = await getLastSet(loggedExercise.exerciseId, sessionId, gymId);
+      await addSet(loggedExercise.id, { peso: previa?.peso ?? 0, reps: previa?.reps ?? 0 });
     }
-    const previa = await getLastSet(loggedExercise.exerciseId, sessionId, gymId);
-    await addSet(loggedExercise.id, { peso: previa?.peso ?? 0, reps: previa?.reps ?? 0 });
+    setRestKey((k) => k + 1);
   }
 
   return (
@@ -60,6 +77,25 @@ export function LoggedExerciseCard({
           Quitar
         </button>
       </div>
+
+      {(ultima || objetivo) && (
+        <div className="space-y-0.5 border-b-2 border-foreground bg-card px-3 py-2">
+          {ultima && (
+            <p className="label-mono text-[10px] text-muted-foreground">
+              ÚLTIMA VEZ · {ultima.peso} × {ultima.reps} · {formatHaceDias(ultima.fecha)}
+            </p>
+          )}
+          {objetivo && (objetivo.seriesObjetivo || objetivo.repsObjetivo || objetivo.descansoSegundos) && (
+            <p className="label-mono text-[10px] text-muted-foreground">
+              OBJETIVO
+              {objetivo.seriesObjetivo || objetivo.repsObjetivo
+                ? ` · ${objetivo.seriesObjetivo ?? '—'} × ${objetivo.repsObjetivo ?? '—'}`
+                : ''}
+              {objetivo.descansoSegundos ? ` · desc. ${objetivo.descansoSegundos}s` : ''}
+            </p>
+          )}
+        </div>
+      )}
 
       <ul className="divide-y-2 divide-foreground">
         {(sets ?? []).map((set, i) => (
@@ -104,7 +140,8 @@ export function LoggedExerciseCard({
         ))}
       </ul>
 
-      <div className="border-t-2 border-foreground p-3">
+      <div className="space-y-2 border-t-2 border-foreground p-3">
+        <RestTimer startKey={restKey} targetSeconds={objetivo?.descansoSegundos} />
         <Button type="button" variant="outline" className="w-full" onClick={añadirSerie}>
           Añadir serie
         </Button>
