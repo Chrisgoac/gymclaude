@@ -70,4 +70,12 @@ describe('migrarAjustesLocales', () => {
     await migrarAjustesLocales();
     expect(await db.userSettings.count()).toBe(0);
   });
+
+  it('no re-siembra si la clave está borrada (tombstone)', async () => {
+    await setSetting('modoProgresion', 'off');
+    await deleteSetting('modoProgresion');
+    localStorage.setItem('gymlog.modoProgresion', 'doble');
+    await migrarAjustesLocales();
+    expect(await getSetting<string>('modoProgresion')).toBeUndefined();
+  });
 });
