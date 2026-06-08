@@ -50,3 +50,14 @@ describe('applyIncoming', () => {
     expect((await db.routines.get('r1'))?.deletedAt).toBe(200);
   });
 });
+
+it('userSettings converge por id-clave (LWW)', async () => {
+  await db.userSettings.clear();
+  await db.userSettings.put({ id: 'modoProgresion', userId: 'u1', valor: '"off"', updatedAt: 100, deletedAt: null });
+  await applyIncoming([{ table: 'userSettings', records: [
+    { id: 'modoProgresion', userId: 'u1', valor: '"doble"', updatedAt: 200, deletedAt: null } as unknown as SyncMeta,
+  ] }]);
+  const row = await db.userSettings.get('modoProgresion');
+  expect(row!.valor).toBe('"doble"'); // gana el updatedAt mayor
+  expect(await db.userSettings.count()).toBe(1); // mismo id → no duplica
+});
