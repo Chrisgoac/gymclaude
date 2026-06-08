@@ -6,7 +6,7 @@ import {
   addLoggedExercise, listSessionExercises, softDeleteLoggedExercise,
   addSet, updateSet, softDeleteSet, listExerciseSets, getLastSet,
   countSessionsWithoutGym, assignGymToSessionsWithoutGym,
-  getLastRoutineSession,
+  getLastRoutineSession, getLastPerformance,
 } from '@/lib/repositories/workouts';
 
 beforeEach(async () => {
@@ -164,5 +164,38 @@ describe('gimnasios', () => {
     expect(await countSessionsWithoutGym()).toBe(0);
     const todas = await listSessions();
     expect(todas.every((s) => s.gymId === 'g1')).toBe(true);
+  });
+});
+
+describe('getLastPerformance', () => {
+  it('devuelve peso, reps y fecha del último set del mismo ejercicio', async () => {
+    const vieja = await startSession({});
+    const le = await addLoggedExercise(vieja.id, 'seed-sentadilla');
+    await addSet(le.id, { peso: 80, reps: 5 });
+    await addSet(le.id, { peso: 85, reps: 6 });
+    await new Promise((res) => setTimeout(res, 3));
+    const nueva = await startSession({});
+    const perf = await getLastPerformance('seed-sentadilla', nueva.id);
+    expect(perf).toMatchObject({ peso: 85, reps: 6, fecha: vieja.fecha });
+  });
+
+  it('filtra por gimnasio igual que getLastSet', async () => {
+    const a = await startSession({ gymId: 'gymA' });
+    const leA = await addLoggedExercise(a.id, 'seed-sentadilla');
+    await addSet(leA.id, { peso: 100, reps: 5 });
+    await new Promise((res) => setTimeout(res, 3));
+    const b = await startSession({ gymId: 'gymB' });
+    const leB = await addLoggedExercise(b.id, 'seed-sentadilla');
+    await addSet(leB.id, { peso: 80, reps: 5 });
+    await new Promise((res) => setTimeout(res, 3));
+    const nueva = await startSession({ gymId: 'gymA' });
+    expect(await getLastPerformance('seed-sentadilla', nueva.id, 'gymA')).toMatchObject({ peso: 100 });
+  });
+
+  it('undefined si no hay histórico (excluyendo la sesión actual)', async () => {
+    const s = await startSession({});
+    const le = await addLoggedExercise(s.id, 'seed-sentadilla');
+    await addSet(le.id, { peso: 100, reps: 3 });
+    expect(await getLastPerformance('seed-sentadilla', s.id)).toBeUndefined();
   });
 });
