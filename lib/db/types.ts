@@ -23,10 +23,10 @@ export interface Exercise extends SyncMeta {
   tipo: ExerciseType;
   videoUrl?: string;
   notas?: string;
-  /** Override manual del salto de peso al progresar (kg). Gana sobre la inferencia. */
-  incrementoKg?: number;
   descripcion?: string; // catálogo: posición inicial / overview
   execution?: string;   // catálogo: pasos de ejecución
+  /** Override manual del salto de peso al progresar (kg). Gana sobre la inferencia. */
+  incrementoKg?: number;
   esPersonalizado: boolean;
 }
 

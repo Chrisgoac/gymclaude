@@ -46,4 +46,11 @@ describe('repositorio de ejercicios', () => {
     expect(stored?.deletedAt).not.toBeNull();
     expect(await listExercises()).toHaveLength(0);
   });
+
+  it('persiste incrementoKg al actualizar el ejercicio', async () => {
+    const ex = await createExercise({ nombre: 'Press banca', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto' });
+    await updateExercise(ex.id, { incrementoKg: 1.25 });
+    const leido = await getExercise(ex.id);
+    expect(leido?.incrementoKg).toBe(1.25);
+  });
 });
