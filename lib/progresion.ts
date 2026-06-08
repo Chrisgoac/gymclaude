@@ -29,7 +29,7 @@ export function inferirSalto(
   pesos: number[],
   opts: { equipamiento: Equipment; defaults: Record<Equipment, number>; override?: number },
 ): number {
-  if (opts.override && opts.override > 0) return opts.override;
+  if (opts.override != null && opts.override > 0) return opts.override;
   const distintos = [...new Set(pesos.filter((p) => p > 0))].sort((a, b) => a - b);
   if (distintos.length >= 2) {
     // Escalar ×100 para trabajar con enteros (evita errores de coma flotante con 2,5 / 1,25).

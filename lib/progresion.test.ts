@@ -10,8 +10,12 @@ describe('inferirSalto', () => {
   it('soporta saltos de 2,5', () => {
     expect(inferirSalto([40, 42.5, 45], { equipamiento: 'barra', defaults })).toBe(2.5);
   });
-  it('redondea ruido al valor sano más cercano', () => {
+  it('redondea ruido al valor sano más cercano (coincidencia exacta: 7,5)', () => {
     expect(inferirSalto([40, 47.5], { equipamiento: 'maquina', defaults })).toBe(7.5);
+  });
+  it('snap real: una diferencia no-sana se redondea al paso sano más cercano', () => {
+    // 48 − 40 = 8 → no está en SANE_STEPS → snap a 7.5
+    expect(inferirSalto([40, 48], { equipamiento: 'maquina', defaults })).toBe(7.5);
   });
   it('sin historial suficiente → default por equipamiento', () => {
     expect(inferirSalto([], { equipamiento: 'mancuerna', defaults })).toBe(2);
