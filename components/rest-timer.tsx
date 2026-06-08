@@ -28,12 +28,14 @@ export function RestTimer({ startKey, targetSeconds }: { startKey: number; targe
     return () => clearInterval(id);
   }, [activo]);
 
-  // Vibra al llegar a 0 (solo cuenta atrás). Recalcula "terminado" aquí dentro.
+  // Vibra al llegar a 0 (solo cuenta atrás) y detiene el timer para que ocurra una sola vez.
   useEffect(() => {
     const tieneObj = typeof targetSeconds === 'number' && targetSeconds > 0;
-    if (tieneObj && targetSeconds - transcurridos <= 0
-        && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      navigator.vibrate?.(200);
+    if (tieneObj && targetSeconds - transcurridos <= 0) {
+      setActivo(false);
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate?.(200);
+      }
     }
   }, [transcurridos, targetSeconds]);
 
