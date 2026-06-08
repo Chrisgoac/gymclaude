@@ -77,7 +77,7 @@ export function calcularSugerencia(input: SugerenciaInput): Sugerencia {
   if (modo === 'off') {
     return { pesoSugerido: ultimoSet?.peso ?? 0, repsSugeridas: ultimoSet?.reps ?? 0, motivo: 'off' };
   }
-  if (!objetivo) {
+  if (!objetivo || !objetivo.repsObjetivo) {
     return { pesoSugerido: ultimoSet?.peso ?? 0, repsSugeridas: ultimoSet?.reps ?? 0, motivo: 'libre' };
   }
   if (!ultimo || ultimo.length === 0) {
@@ -104,7 +104,10 @@ export function calcularSugerencia(input: SugerenciaInput): Sugerencia {
   return { pesoSugerido: basePeso, repsSugeridas: objetivoReps, motivo: 'repite' };
 }
 
-/** Texto corto para el badge de la card de entreno. null = no mostrar badge. */
+/**
+ * Texto corto para el badge de la card de entreno. null = no mostrar badge.
+ * El `salto` debe ser el mismo valor pasado a `calcularSugerencia` para que el badge y el peso sugerido sean coherentes.
+ */
 export function describeMotivo(s: Sugerencia, salto: number): string | null {
   switch (s.motivo) {
     case 'subio-peso': return `▲ +${salto} kg`;

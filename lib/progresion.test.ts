@@ -39,7 +39,13 @@ describe('calcularSugerencia', () => {
   it('sin objetivo (entreno libre) → repite el último, motivo libre', () => {
     const s = calcularSugerencia({ modo: 'objetivo', ultimo: [{ peso: 30, reps: 10 }], objetivo: undefined, salto: 5, esCorporal: false });
     expect(s.pesoSugerido).toBe(30);
+    expect(s.repsSugeridas).toBe(10);
     expect(s.motivo).toBe('libre');
+  });
+  it('objetivo sin repsObjetivo (solo repsObjetivoMin) → libre, no sube peso', () => {
+    const s = calcularSugerencia({ modo: 'objetivo', ultimo: [{ peso: 40, reps: 12 }], objetivo: { repsObjetivoMin: 8 }, salto: 5, esCorporal: false });
+    expect(s.motivo).toBe('libre');
+    expect(s.pesoSugerido).toBe(40);
   });
   it('sin historial → peso 0, reps = objetivo, motivo sin-historial', () => {
     const s = calcularSugerencia({ modo: 'objetivo', ultimo: undefined, objetivo, salto: 5, esCorporal: false });
@@ -70,11 +76,19 @@ describe('calcularSugerencia', () => {
     expect(s.pesoSugerido).toBe(55);
     expect(s.motivo).toBe('subio-peso');
   });
+  it('repite · fallo → mismo peso, reps al objetivo, motivo repite', () => {
+    const s = calcularSugerencia({ modo: 'repite', ultimo: [{ peso: 50, reps: 8 }], objetivo: { repsObjetivo: 12, repsObjetivoMin: 8 }, salto: 5, esCorporal: false });
+    expect(s).toEqual({ pesoSugerido: 50, repsSugeridas: 12, motivo: 'repite' });
+  });
   it('peso corporal · éxito → no toca peso, sube reps', () => {
     const s = calcularSugerencia({ modo: 'objetivo', ultimo: [{ peso: 0, reps: 12 }], objetivo, salto: 5, esCorporal: true });
     expect(s.pesoSugerido).toBe(0);
     expect(s.repsSugeridas).toBe(13);
     expect(s.motivo).toBe('subio-reps');
+  });
+  it('corporal + doble · éxito → peso 0, +1 rep, motivo subio-reps', () => {
+    const s = calcularSugerencia({ modo: 'doble', ultimo: [{ peso: 0, reps: 12 }], objetivo: { repsObjetivo: 12, repsObjetivoMin: 8 }, salto: 2.5, esCorporal: true });
+    expect(s).toEqual({ pesoSugerido: 0, repsSugeridas: 13, motivo: 'subio-reps' });
   });
 });
 
