@@ -4,6 +4,7 @@ import {
   createRoutine, listRoutines, getRoutine, updateRoutine, softDeleteRoutine,
   reorderRoutines,
   addExerciseToRoutine, listRoutineExercises, updateRoutineExercise, softDeleteRoutineExercise,
+  getRoutineExerciseTarget,
 } from '@/lib/repositories/routines';
 
 beforeEach(async () => {
@@ -81,5 +82,21 @@ describe('ejercicios de la rutina', () => {
     expect(await db.routineExercises.get(re.id)).toMatchObject({ seriesObjetivo: 4, repsObjetivo: 10, descansoSegundos: 120 });
     await softDeleteRoutineExercise(re.id);
     expect(await listRoutineExercises(r.id)).toHaveLength(0);
+  });
+});
+
+describe('getRoutineExerciseTarget', () => {
+  it('devuelve los objetivos del ejercicio en la rutina', async () => {
+    const r = await createRoutine({ nombre: 'R' });
+    await addExerciseToRoutine(r.id, {
+      exerciseId: 'seed-press-banca', seriesObjetivo: 4, repsObjetivo: 10, descansoSegundos: 90,
+    });
+    const t = await getRoutineExerciseTarget(r.id, 'seed-press-banca');
+    expect(t).toMatchObject({ seriesObjetivo: 4, repsObjetivo: 10, descansoSegundos: 90 });
+  });
+
+  it('undefined si el ejercicio no está en la rutina', async () => {
+    const r = await createRoutine({ nombre: 'R' });
+    expect(await getRoutineExerciseTarget(r.id, 'seed-press-banca')).toBeUndefined();
   });
 });
