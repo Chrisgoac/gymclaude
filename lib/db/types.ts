@@ -103,3 +103,10 @@ export interface SyncState {
   key: string;
   value: number;
 }
+
+export interface UserSetting extends SyncMeta {
+  /** null en local hasta el primer push (igual que el resto de entidades). */
+  userId: string | null;
+  /** Valor serializado como JSON (número, booleano u objeto). */
+  valor: string;
+}

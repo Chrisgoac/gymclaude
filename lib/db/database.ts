@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Exercise, Routine, RoutineExercise,
-  WorkoutSession, LoggedExercise, LoggedSet, SyncState, Gym, ExercisePhoto,
+  WorkoutSession, LoggedExercise, LoggedSet, SyncState, Gym, ExercisePhoto, UserSetting,
 } from './types';
 
 export class GymLogDB extends Dexie {
@@ -14,6 +14,7 @@ export class GymLogDB extends Dexie {
   syncState!: Table<SyncState, string>;
   gyms!: Table<Gym, string>;
   exercisePhotos!: Table<ExercisePhoto, string>;
+  userSettings!: Table<UserSetting, string>;
 
   constructor() {
     super('gymlog');
@@ -106,6 +107,10 @@ export class GymLogDB extends Dexie {
       await tx.table('loggedSets').toCollection().modify((s) => {
         if (esDecimal(s.reps)) { s.reps = Math.round(s.reps); s.updatedAt = Date.now(); }
       });
+    });
+    // v11: store de ajustes sincronizados (id = clave del ajuste).
+    this.version(11).stores({
+      userSettings: 'id, deletedAt',
     });
   }
 }
