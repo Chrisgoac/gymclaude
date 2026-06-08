@@ -10,6 +10,7 @@ beforeEach(async () => {
   await db.loggedExercises.clear();
   await db.loggedSets.clear();
   await db.exercises.clear();
+  await db.routineExercises.clear();
   await db.exercises.put({
     id: 'seed-press-banca', userId: null, nombre: 'Press de banca', grupoMuscular: 'pecho',
     equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 0, deletedAt: null,
@@ -36,6 +37,32 @@ it('muestra el ejercicio y añade una serie con peso y reps', async () => {
     expect(sets).toHaveLength(1);
     expect(sets[0]).toMatchObject({ peso: 60, reps: 8 });
   });
+});
+
+it('autorrellena la primera serie con la sugerencia y muestra el badge ▲ +5 kg', async () => {
+  await db.exercises.put({
+    id: 'ex-1', userId: null, nombre: 'Press', grupoMuscular: 'pecho',
+    equipamiento: 'maquina', tipo: 'compuesto', esPersonalizado: false,
+    updatedAt: 1, deletedAt: null,
+  });
+  const prev = await startSession({ routineId: 'r1', gymId: 'g1' });
+  const lePrev = await addLoggedExercise(prev.id, 'ex-1');
+  await addSet(lePrev.id, { peso: 40, reps: 12 });
+  await addSet(lePrev.id, { peso: 40, reps: 12 });
+  await db.routineExercises.put({
+    id: 're-1', routineId: 'r1', exerciseId: 'ex-1', orden: 0,
+    seriesObjetivo: 3, repsObjetivo: 12, updatedAt: 1, deletedAt: null,
+  });
+
+  const sesion = await startSession({ routineId: 'r1', gymId: 'g1' });
+  const le = await addLoggedExercise(sesion.id, 'ex-1');
+
+  render(<LoggedExerciseCard loggedExercise={le} sessionId={sesion.id} gymId="g1" routineId="r1" />);
+
+  expect(await screen.findByText('▲ +5 kg')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Añadir serie' }));
+  const peso = await screen.findByLabelText('Peso');
+  expect((peso as HTMLInputElement).value).toBe('45');
 });
 
 it('muestra "Última vez" con el peso y reps del entreno anterior', async () => {
