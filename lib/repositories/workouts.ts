@@ -154,7 +154,8 @@ async function findLastSetWithFecha(
   const found = await findLastLoggedExercise(exerciseId, excludeSessionId, gymId);
   if (!found) return undefined;
   const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(found.le.id).toArray());
-  sets.sort((a, b) => b.orden - a.orden);
+  if (sets.length === 0) return undefined;
+  sets.sort((a, b) => b.orden - a.orden); // último set por orden (entrada más reciente)
   return { set: sets[0], fecha: found.fecha };
 }
 

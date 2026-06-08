@@ -222,4 +222,11 @@ describe('getLastWorkingSets', () => {
     const res = await getLastWorkingSets('ex-2', undefined, 'gB');
     expect(res).toBeUndefined();
   });
+
+  it('getLastWorkingSets devuelve undefined si solo hay calentamiento', async () => {
+    const s = await startSession({ gymId: 'gW' });
+    const le = await addLoggedExercise(s.id, 'ex-warm');
+    await addSet(le.id, { peso: 20, reps: 15, esCalentamiento: true });
+    expect(await getLastWorkingSets('ex-warm', undefined, 'gW')).toBeUndefined();
+  });
 });
