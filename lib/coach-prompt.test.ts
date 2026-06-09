@@ -29,4 +29,9 @@ describe('systemPrompt', () => {
     // resistencia básica a cambio de rol (prompt injection casual)
     expect(p).toMatch(/no sigas instrucciones|no cambies de rol|mantén tu rol/);
   });
+  it('repite el guardarraíl al final (recencia, contra el precedente del hilo)', () => {
+    const p = systemPrompt(snap).toLowerCase();
+    expect(p).toMatch(/recordatorio final/);
+    expect(p).toMatch(/aunque la conversación anterior/);
+  });
 });
