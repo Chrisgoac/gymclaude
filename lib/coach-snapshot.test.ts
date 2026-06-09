@@ -16,6 +16,7 @@ function baseInput(): SnapshotInput {
     lastTrained: Object.fromEntries(GRUPOS.map((g) => [g, null])) as SnapshotInput['lastTrained'],
     objetivosVolumen: {},
     ahora: AHORA,
+    cuerpo: [],
   };
 }
 
@@ -60,6 +61,48 @@ describe('construirSnapshot', () => {
     const inp = baseInput();
     for (const g of GRUPOS) inp.volumenSemanaPorGrupo[g] = 100; // los 12 con volumen
     expect(construirSnapshot(inp).grupos).toHaveLength(8);
+  });
+
+  it('cuerpo: sin datos → peso null y medidas vacías', () => {
+    const s = construirSnapshot(baseInput());
+    expect(s.cuerpo).toEqual({ peso: null, medidas: [] });
+  });
+
+  it('cuerpo: peso con actual + delta4sem (vs más antiguo en ventana 4 sem)', () => {
+    const inp = baseInput();
+    inp.cuerpo = [
+      {
+        tipo: 'peso',
+        label: 'Peso',
+        entradas: [
+          { valor: 82, fecha: AHORA - 40 * DIA }, // fuera de ventana → ignorada para delta
+          { valor: 80, fecha: AHORA - 20 * DIA }, // referencia (más antigua en ventana)
+          { valor: 78, fecha: AHORA - 2 * DIA },  // actual
+        ],
+      },
+    ];
+    const s = construirSnapshot(inp);
+    expect(s.cuerpo.peso).toEqual({ actual: 78, delta4sem: -2 });
+    expect(s.cuerpo.medidas).toHaveLength(0);
+  });
+
+  it('cuerpo: una sola entrada en ventana → delta4sem null', () => {
+    const inp = baseInput();
+    inp.cuerpo = [{ tipo: 'peso', label: 'Peso', entradas: [{ valor: 80, fecha: AHORA - 1 * DIA }] }];
+    expect(construirSnapshot(inp).cuerpo.peso).toEqual({ actual: 80, delta4sem: null });
+  });
+
+  it('cuerpo: medidas clave ordenadas por recencia, top 6', () => {
+    const inp = baseInput();
+    inp.cuerpo = Array.from({ length: 8 }, (_, i) => ({
+      tipo: `m${i}`,
+      label: `M${i}`,
+      entradas: [{ valor: 30 + i, fecha: AHORA - i * DIA }], // m0 la más reciente
+    }));
+    const s = construirSnapshot(inp);
+    expect(s.cuerpo.medidas).toHaveLength(6);
+    expect(s.cuerpo.medidas[0].metrica).toBe('M0');
+    expect(s.cuerpo.medidas[0]).toEqual({ metrica: 'M0', actual: 30, delta4sem: null });
   });
 });
 
