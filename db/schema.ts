@@ -1,4 +1,4 @@
-import { pgTable, text, doublePrecision, integer, bigint, boolean, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, doublePrecision, integer, bigint, boolean, jsonb, primaryKey } from 'drizzle-orm/pg-core';
 
 // Columnas comunes de sincronización en cada tabla.
 const sync = {
@@ -26,6 +26,7 @@ export const routines = pgTable('routines', {
   descripcion: text('descripcion'),
   orden: integer('orden'),
   archivada: boolean('archivada').notNull(),
+  mesocycleId: text('mesocycle_id'),
 });
 
 export const routineExercises = pgTable('routine_exercises', {
@@ -111,4 +112,15 @@ export const progressPhotos = pgTable('progress_photos', {
   fecha: bigint('fecha', { mode: 'number' }).notNull(),
   angulo: text('angulo').notNull(),
   nota: text('nota'),
+});
+
+export const mesocycles = pgTable('mesocycles', {
+  ...sync,
+  nombre: text('nombre').notNull(),
+  objetivo: text('objetivo').notNull(),
+  semanas: integer('semanas').notNull(),
+  diasPorSemana: integer('dias_por_semana').notNull(),
+  notas: text('notas'),
+  progresion: jsonb('progresion').notNull(),
+  fechaInicio: bigint('fecha_inicio', { mode: 'number' }).notNull(),
 });
