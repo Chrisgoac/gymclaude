@@ -170,6 +170,42 @@ function inicioSemana(ts: number): number {
   return d.getTime();
 }
 
+export interface WeeklySummary {
+  sesiones: number;
+  volumenSemana: number;
+  volumenSemanaPrevia: number;
+  deltaPct: number | null;
+}
+
+/** Resumen de la semana ISO actual (lunes) vs la previa. `now` inyectable para tests. */
+export async function getWeeklySummary(gymId?: string | null, now: number = Date.now()): Promise<WeeklySummary> {
+  const inicioActual = inicioSemana(now);
+  const inicioPrevia = inicioSemana(inicioActual - 1);
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId)
+    .filter((s) => s.fecha >= inicioPrevia);
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  const les = sessionIds.size === 0
+    ? []
+    : activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
+  const volBySession = new Map<string, number>();
+  for (const le of les) {
+    const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(le.id).toArray());
+    const vol = sets.reduce((acc, s) => acc + s.peso * s.reps, 0);
+    volBySession.set(le.sessionId, (volBySession.get(le.sessionId) ?? 0) + vol);
+  }
+  let sesiones = 0, volumenSemana = 0, volumenSemanaPrevia = 0;
+  for (const s of sessions) {
+    const vol = volBySession.get(s.id) ?? 0;
+    if (s.fecha >= inicioActual) { sesiones++; volumenSemana += vol; }
+    else { volumenSemanaPrevia += vol; }
+  }
+  const deltaPct = volumenSemanaPrevia > 0
+    ? Math.round(((volumenSemana - volumenSemanaPrevia) / volumenSemanaPrevia) * 100)
+    : null;
+  return { sesiones, volumenSemana, volumenSemanaPrevia, deltaPct };
+}
+
 export async function getWeeklyVolume(sinceTs = 0, gymId?: string | null): Promise<WeeklyVolumePoint[]> {
   const sessions = activo(await db.workoutSessions.toArray())
     .filter((s) => s.fecha >= sinceTs)

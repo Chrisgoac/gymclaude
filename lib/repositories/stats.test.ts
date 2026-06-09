@@ -4,10 +4,12 @@ import { startSession, addLoggedExercise, addSet } from '@/lib/repositories/work
 import {
   estimar1RM, getExerciseProgress, getExercisePRs, getVolumeByMuscle,
   listSessionSummaries, getCurrentStreakDays, getPeriodSummary, getWeeklyVolume,
-  listEstancados,
+  listEstancados, getWeeklySummary,
 } from '@/lib/repositories/stats';
 
 const DAY = 24 * 60 * 60 * 1000;
+// 2026-06-10 es miércoles. Semana actual: lun 8 … dom 14. Semana previa: lun 1 … dom 7.
+const NOW_WED = new Date('2026-06-10T12:00:00').getTime();
 
 beforeEach(async () => {
   await db.workoutSessions.clear();
@@ -247,4 +249,32 @@ describe('filtro por gimnasio', () => {
     expect(sinB).toHaveLength(1);
     expect(sinB[0].fecha).toBe(1000); // solo la sesión A
   });
+});
+
+it('getWeeklySummary cuenta sesiones de la semana y compara volumen vs previa', async () => {
+  const seed = async (id: string, fecha: number, peso: number) => {
+    await db.workoutSessions.put({ id, userId: null, gymId: 'g1', fecha, updatedAt: 1, deletedAt: null });
+    const le = { id: `${id}-le`, sessionId: id, exerciseId: 'ws-ex', orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.put(le);
+    await db.loggedSets.put({ id: `${id}-set`, loggedExerciseId: le.id, orden: 0, peso, reps: 10, updatedAt: 1, deletedAt: null });
+  };
+  await seed('ws-a', NOW_WED, 50);
+  await seed('ws-b', NOW_WED - 2 * DAY, 40);
+  await seed('ws-c', NOW_WED - 7 * DAY, 30);
+
+  const r = await getWeeklySummary('g1', NOW_WED);
+  expect(r.sesiones).toBe(2);
+  expect(r.volumenSemana).toBe(900);
+  expect(r.volumenSemanaPrevia).toBe(300);
+  expect(r.deltaPct).toBe(200);
+});
+
+it('getWeeklySummary deltaPct null sin semana previa', async () => {
+  await db.workoutSessions.put({ id: 'wx-a', userId: null, gymId: 'g9', fecha: NOW_WED, updatedAt: 1, deletedAt: null });
+  const le = { id: 'wx-le', sessionId: 'wx-a', exerciseId: 'wx-ex', orden: 0, updatedAt: 1, deletedAt: null };
+  await db.loggedExercises.put(le);
+  await db.loggedSets.put({ id: 'wx-set', loggedExerciseId: 'wx-le', orden: 0, peso: 20, reps: 5, updatedAt: 1, deletedAt: null });
+  const r = await getWeeklySummary('g9', NOW_WED);
+  expect(r.sesiones).toBe(1);
+  expect(r.deltaPct).toBeNull();
 });
