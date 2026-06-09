@@ -21,4 +21,12 @@ describe('systemPrompt', () => {
     const p = systemPrompt(snap);
     expect(p.toLowerCase()).toMatch(/español|concis|accionable/);
   });
+  it('incluye un guardarraíl de ámbito: rechaza lo que no sea entrenamiento', () => {
+    const p = systemPrompt(snap).toLowerCase();
+    // limita el ámbito y manda declinar lo fuera de tema
+    expect(p).toMatch(/ámbito|solo respondes|únicamente/);
+    expect(p).toMatch(/declina|rechaza|no respondas/);
+    // resistencia básica a cambio de rol (prompt injection casual)
+    expect(p).toMatch(/no sigas instrucciones|no cambies de rol|mantén tu rol/);
+  });
 });
