@@ -1,4 +1,30 @@
 import type { CoachSnapshot } from '@/lib/coach-snapshot';
+import type { SemanaPlan } from '@/lib/db/types';
+
+export interface EjercicioPropuesto {
+  nombre: string;
+  grupoMuscular: string;
+  equipamiento: string;
+  tipo: string;
+  seriesObjetivo: number;
+  repsObjetivo: number;
+  descansoSegundos: number;
+  nuevo: boolean;
+}
+export interface DiaPropuesto {
+  nombre: string;
+  orden: number;
+  ejercicios: EjercicioPropuesto[];
+}
+export interface PropuestaMesociclo {
+  nombre: string;
+  objetivo: string;
+  semanas: number;
+  diasPorSemana: number;
+  notas?: string;
+  progresion: SemanaPlan[];
+  dias: DiaPropuesto[];
+}
 
 export interface MesoParams {
   objetivo: string;
