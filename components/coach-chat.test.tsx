@@ -17,7 +17,7 @@ vi.mock('@/lib/coach-snapshot', () => ({ recogerSnapshot: (...a: unknown[]) => r
 
 import { CoachChat } from '@/components/coach-chat';
 
-const SNAP = { estancados: [], semana: { sesiones: 0, objetivo: 3, volumen: 0, deltaPct: null, prs: [] }, grupos: [] };
+const SNAP = { estancados: [], semana: { sesiones: 0, objetivo: 3, volumen: 0, deltaPct: null, prs: [] }, grupos: [], cuerpo: { peso: null, medidas: [] } };
 
 beforeEach(() => {
   sendMessage.mockReset();

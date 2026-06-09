@@ -6,6 +6,7 @@ const snap: CoachSnapshot = {
   estancados: [{ ejercicio: 'Sentadilla', sesionesSinMejora: 4 }],
   semana: { sesiones: 2, objetivo: 3, volumen: 9000, deltaPct: 12, prs: [{ ejercicio: 'Press', tipo: 'peso' }] },
   grupos: [{ grupo: 'Pecho', volumenSemana: 1200, diasSinEntrenar: 2, objetivo: 1500 }],
+  cuerpo: { peso: null, medidas: [] },
 };
 
 describe('systemPrompt', () => {

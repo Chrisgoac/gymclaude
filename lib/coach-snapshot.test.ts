@@ -16,6 +16,7 @@ function baseInput(): SnapshotInput {
     lastTrained: Object.fromEntries(GRUPOS.map((g) => [g, null])) as SnapshotInput['lastTrained'],
     objetivosVolumen: {},
     ahora: AHORA,
+    cuerpo: [],
   };
 }
 
@@ -61,6 +62,48 @@ describe('construirSnapshot', () => {
     for (const g of GRUPOS) inp.volumenSemanaPorGrupo[g] = 100; // los 12 con volumen
     expect(construirSnapshot(inp).grupos).toHaveLength(8);
   });
+
+  it('cuerpo: sin datos → peso null y medidas vacías', () => {
+    const s = construirSnapshot(baseInput());
+    expect(s.cuerpo).toEqual({ peso: null, medidas: [] });
+  });
+
+  it('cuerpo: peso con actual + delta4sem (vs más antiguo en ventana 4 sem)', () => {
+    const inp = baseInput();
+    inp.cuerpo = [
+      {
+        tipo: 'peso',
+        label: 'Peso',
+        entradas: [
+          { valor: 82, fecha: AHORA - 40 * DIA }, // fuera de ventana → ignorada para delta
+          { valor: 80, fecha: AHORA - 20 * DIA }, // referencia (más antigua en ventana)
+          { valor: 78, fecha: AHORA - 2 * DIA },  // actual
+        ],
+      },
+    ];
+    const s = construirSnapshot(inp);
+    expect(s.cuerpo.peso).toEqual({ actual: 78, delta4sem: -2 });
+    expect(s.cuerpo.medidas).toHaveLength(0);
+  });
+
+  it('cuerpo: una sola entrada en ventana → delta4sem null', () => {
+    const inp = baseInput();
+    inp.cuerpo = [{ tipo: 'peso', label: 'Peso', entradas: [{ valor: 80, fecha: AHORA - 1 * DIA }] }];
+    expect(construirSnapshot(inp).cuerpo.peso).toEqual({ actual: 80, delta4sem: null });
+  });
+
+  it('cuerpo: medidas clave ordenadas por recencia, top 6', () => {
+    const inp = baseInput();
+    inp.cuerpo = Array.from({ length: 8 }, (_, i) => ({
+      tipo: `m${i}`,
+      label: `M${i}`,
+      entradas: [{ valor: 30 + i, fecha: AHORA - i * DIA }], // m0 la más reciente
+    }));
+    const s = construirSnapshot(inp);
+    expect(s.cuerpo.medidas).toHaveLength(6);
+    expect(s.cuerpo.medidas[0].metrica).toBe('M0');
+    expect(s.cuerpo.medidas[0]).toEqual({ metrica: 'M0', actual: 30, delta4sem: null });
+  });
 });
 
 import { recogerSnapshot } from '@/lib/coach-snapshot';
@@ -85,4 +128,21 @@ it('recogerSnapshot reúne las señales reales en el snapshot', async () => {
   const pecho = snap.grupos.find((g) => g.grupo === 'Pecho');
   expect(pecho?.volumenSemana).toBe(500);
   expect(pecho?.diasSinEntrenar).toBe(0);
+});
+
+it('recogerSnapshot incluye peso y medidas corporales', async () => {
+  await Promise.all([
+    db.workoutSessions.clear(), db.loggedExercises.clear(), db.loggedSets.clear(),
+    db.exercises.clear(), db.userSettings.clear(), db.bodyMetrics.clear(),
+  ]);
+  const NOW = new Date('2026-06-10T12:00:00').getTime();
+  const DIAMS = 86400000;
+  await db.bodyMetrics.bulkPut([
+    { id: 'p1', userId: null, tipo: 'peso', valor: 80, fecha: NOW - 20 * DIAMS, updatedAt: 1, deletedAt: null },
+    { id: 'p2', userId: null, tipo: 'peso', valor: 78, fecha: NOW - 1 * DIAMS, updatedAt: 1, deletedAt: null },
+    { id: 'c1', userId: null, tipo: 'cintura', valor: 85, fecha: NOW - 2 * DIAMS, updatedAt: 1, deletedAt: null },
+  ]);
+  const snap = await recogerSnapshot('g1', NOW);
+  expect(snap.cuerpo.peso).toEqual({ actual: 78, delta4sem: -2 });
+  expect(snap.cuerpo.medidas.map((m) => m.metrica)).toContain('Cintura');
 });
