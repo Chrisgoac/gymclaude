@@ -108,3 +108,18 @@ export async function softDeleteRoutineExercise(id: string): Promise<void> {
   const ts = now();
   await db.routineExercises.update(id, { deletedAt: ts, updatedAt: ts });
 }
+
+/** Marca (o desmarca con null) la pertenencia de una rutina a un mesociclo. */
+export async function setRoutineMesocycle(routineId: string, mesocycleId: string | null): Promise<void> {
+  await db.routines.update(routineId, { mesocycleId, updatedAt: now() });
+}
+
+/** Rutinas activas que NO pertenecen a ningún mesociclo. */
+export async function listStandaloneRoutines(): Promise<Routine[]> {
+  return (await listRoutines()).filter((r) => !r.mesocycleId);
+}
+
+/** Rutinas activas de un mesociclo, en orden. */
+export async function listRoutinesByMesocycle(mesocycleId: string): Promise<Routine[]> {
+  return (await listRoutines()).filter((r) => r.mesocycleId === mesocycleId);
+}
