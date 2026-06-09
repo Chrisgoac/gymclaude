@@ -34,7 +34,7 @@ it('renderiza el hilo sembrado', () => {
       { id: 'a', role: 'user', parts: [{ type: 'text', text: '¿subo peso?' }] },
       { id: 'b', role: 'assistant', parts: [{ type: 'text', text: 'Sí, +2.5kg' }] },
     ],
-    sendMessage, status: 'ready', error: undefined,
+    sendMessage, setMessages, status: 'ready', error: undefined,
   });
   render(<CoachChat seed={[]} />);
   expect(screen.getByText('¿subo peso?')).toBeInTheDocument();
@@ -61,7 +61,7 @@ it('un chip de insight rápido envía su pregunta', async () => {
 });
 
 it('muestra un aviso de error cuando status es error', () => {
-  useChat.mockReturnValue({ messages: [], sendMessage, status: 'error', error: new Error('x') });
+  useChat.mockReturnValue({ messages: [], sendMessage, setMessages, status: 'error', error: new Error('x') });
   render(<CoachChat seed={[]} />);
   expect(screen.getByText(/no se pudo contactar/i)).toBeInTheDocument();
 });
@@ -80,4 +80,5 @@ it('el botón Borrar conversación limpia el hilo (Dexie + UI)', async () => {
   await userEvent.click(screen.getByRole('button', { name: /borrar conversación/i }));
   expect(clearThread).toHaveBeenCalledTimes(1);
   expect(setMessages).toHaveBeenCalledWith([]);
+  expect(clearThread.mock.invocationCallOrder[0]).toBeLessThan(setMessages.mock.invocationCallOrder[0]);
 });

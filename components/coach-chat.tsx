@@ -48,16 +48,20 @@ export function CoachChat({ seed }: { seed: CoachMessage[] }) {
   }
 
   async function borrar() {
-    await clearThread();
-    setMessages([]);
+    try {
+      await clearThread();
+      setMessages([]);
+    } catch {
+      // si falla el borrado en Dexie, dejamos el hilo intacto para reintentar
+    }
   }
 
   return (
     <div className="space-y-4">
       {messages.length > 0 && (
         <div className="flex justify-end">
-          <button type="button" onClick={() => void borrar()}
-            className="label-mono border-2 border-foreground bg-card px-2 py-1 text-[10px] text-muted-foreground active:translate-x-[1px] active:translate-y-[1px]">
+          <button type="button" onClick={() => void borrar()} disabled={ocupado}
+            className="label-mono border-2 border-foreground bg-card px-2 py-1 text-[10px] text-muted-foreground active:translate-x-[1px] active:translate-y-[1px] disabled:opacity-50">
             Borrar conversación
           </button>
         </div>
