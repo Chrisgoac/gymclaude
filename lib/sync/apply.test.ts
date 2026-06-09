@@ -81,3 +81,13 @@ it('bodyMetrics se aplican por id (LWW)', async () => {
   expect(m?.valor).toBe(80);
   expect(await db.bodyMetrics.count()).toBe(1);
 });
+
+it('progressPhotos se aplican por id (LWW)', async () => {
+  await db.progressPhotos.clear();
+  await applyIncoming([{ table: 'progressPhotos', records: [
+    { id: 'pp1', userId: 'u1', url: 'u', key: 'k', fecha: 100, angulo: 'frente', nota: null, updatedAt: 100, deletedAt: null },
+  ] as unknown as import('@/lib/db/types').SyncMeta[] }]);
+  const p = await db.progressPhotos.get('pp1');
+  expect(p?.key).toBe('k');
+  expect(await db.progressPhotos.count()).toBe(1);
+});

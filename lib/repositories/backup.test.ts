@@ -71,7 +71,7 @@ it('al importar refresca updatedAt para que el sync los suba', async () => {
       gyms: [], exercises: [],
       routines: [{ id: 'r1', userId: null, nombre: 'R', orden: 0, archivada: false, updatedAt: antiguo, deletedAt: null }],
       routineExercises: [{ id: 're1', routineId: 'r1', exerciseId: 'seed-press-banca', orden: 0, updatedAt: antiguo, deletedAt: null }],
-      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [], coachMessages: [], bodyMetrics: [],
+      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [], coachMessages: [], bodyMetrics: [], progressPhotos: [],
     },
   };
   const t0 = Date.now();
@@ -115,4 +115,14 @@ it('exporta e importa bodyMetrics', async () => {
   await db.bodyMetrics.clear();
   await importData(backup);
   expect((await db.bodyMetrics.get('bk1'))?.valor).toBe(79.5);
+});
+
+it('exporta e importa progressPhotos', async () => {
+  await db.progressPhotos.clear();
+  await db.progressPhotos.put({ id: 'bk1', userId: null, url: 'u', key: 'k', fecha: 5, angulo: 'frente', nota: 'x', updatedAt: 5, deletedAt: null });
+  const backup = await exportData();
+  expect(backup.data.progressPhotos).toHaveLength(1);
+  await db.progressPhotos.clear();
+  await importData(backup);
+  expect((await db.progressPhotos.get('bk1'))?.key).toBe('k');
 });

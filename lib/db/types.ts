@@ -37,6 +37,17 @@ export interface ExercisePhoto extends SyncMeta {
   key: string;   // object key en R2
 }
 
+export type AnguloFoto = 'frente' | 'lado' | 'espalda';
+
+export interface ProgressPhoto extends SyncMeta {
+  userId: string | null;
+  url: string;
+  key: string;
+  fecha: number;
+  angulo: AnguloFoto;
+  nota: string | null;
+}
+
 export const MUSCLE_GROUPS: MuscleGroup[] = [
   'pecho', 'espalda', 'hombros', 'biceps', 'triceps',
   'cuadriceps', 'femoral', 'gluteo', 'gemelo', 'abdomen', 'antebrazo', 'otro',

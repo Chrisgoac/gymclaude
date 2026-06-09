@@ -103,3 +103,12 @@ export const bodyMetrics = pgTable('body_metrics', {
   valor: doublePrecision('valor').notNull(),
   fecha: bigint('fecha', { mode: 'number' }).notNull(),
 });
+
+export const progressPhotos = pgTable('progress_photos', {
+  ...sync,
+  url: text('url').notNull(),
+  key: text('key').notNull(),
+  fecha: bigint('fecha', { mode: 'number' }).notNull(),
+  angulo: text('angulo').notNull(),
+  nota: text('nota'),
+});
