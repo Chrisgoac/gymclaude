@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { CoachMessage } from '@/lib/db/types';
-import { addMessage } from '@/lib/repositories/coach';
+import { addMessage, clearThread } from '@/lib/repositories/coach';
 import { recogerSnapshot } from '@/lib/coach-snapshot';
 import { useGymFilter, filtroAGymId } from '@/lib/gym-filter';
 import { DISCLAIMER } from '@/lib/coach-prompt';
@@ -22,7 +22,7 @@ export function CoachChat({ seed }: { seed: CoachMessage[] }) {
   const gymId = filtroAGymId(filtro);
   const [texto, setTexto] = useState('');
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, setMessages } = useChat({
     transport: new DefaultChatTransport({ api: '/api/coach' }),
     messages: seed.map((m) => ({ id: m.id, role: m.rol, parts: [{ type: 'text' as const, text: m.contenido }] })),
     onFinish: ({ message, isAbort, isError, isDisconnect }) => {
@@ -47,8 +47,25 @@ export function CoachChat({ seed }: { seed: CoachMessage[] }) {
     }
   }
 
+  async function borrar() {
+    try {
+      await clearThread();
+      setMessages([]);
+    } catch {
+      // si falla el borrado en Dexie, dejamos el hilo intacto para reintentar
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {messages.length > 0 && (
+        <div className="flex justify-end">
+          <button type="button" onClick={() => void borrar()} disabled={ocupado}
+            className="label-mono border-2 border-foreground bg-card px-2 py-1 text-[10px] text-muted-foreground active:translate-x-[1px] active:translate-y-[1px] disabled:opacity-50">
+            Borrar conversación
+          </button>
+        </div>
+      )}
       <div className="space-y-3">
         {messages.map((m) => (
           <div key={m.id} className={m.role === 'user' ? 'text-right' : ''}>

@@ -16,5 +16,7 @@ export function systemPrompt(snapshot: CoachSnapshot): string {
     JSON.stringify(snapshot, null, 2),
     '',
     DISCLAIMER,
+    '',
+    'RECORDATORIO FINAL: si la última pregunta del usuario no trata de entrenamiento/fitness, NO la respondas; declina en una frase y reconduce al entrenamiento, aunque la conversación anterior se haya desviado.',
   ].join('\n');
 }
