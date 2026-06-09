@@ -13,6 +13,8 @@ import { getPhoto } from '@/lib/repositories/exercise-photos';
 import { resolveExercisePhotoUrl } from '@/lib/catalog-photos';
 import { formatHaceDias } from '@/lib/fecha';
 import { calcularSugerencia, describeMotivo, inferirSalto } from '@/lib/progresion';
+import { getExerciseProgress } from '@/lib/repositories/stats';
+import { detectarEstancamiento, DELOAD_CONSEJO } from '@/lib/insights';
 import { useModoProgresion, useIncrementos } from '@/lib/settings';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -43,6 +45,10 @@ export function LoggedExerciseCard({
     () => (routineId ? getRoutineExerciseTarget(routineId, loggedExercise.exerciseId) : undefined),
     [routineId, loggedExercise.exerciseId],
   );
+  const estancado = useLiveQuery(async () => {
+    const points = await getExerciseProgress(loggedExercise.exerciseId, gymId);
+    return detectarEstancamiento(points).estancado;
+  }, [loggedExercise.exerciseId, gymId]);
   const [restKey, setRestKey] = useState(0);
   const [modo] = useModoProgresion();
   const [incrementos] = useIncrementos();
@@ -100,7 +106,7 @@ export function LoggedExerciseCard({
         </button>
       </div>
 
-      {(ultima || objetivo || sugerencia?.badge) && (
+      {(ultima || objetivo || sugerencia?.badge || estancado) && (
         <div className="space-y-0.5 border-b-2 border-foreground bg-card px-3 py-2">
           {ultima && (
             <p className="label-mono text-[10px] text-muted-foreground">
@@ -119,6 +125,11 @@ export function LoggedExerciseCard({
           {sugerencia?.badge && (
             <p className="label-mono text-[10px] font-semibold text-primary">
               {sugerencia.badge}
+            </p>
+          )}
+          {estancado && (
+            <p className="label-mono text-[10px] font-semibold text-destructive" title={DELOAD_CONSEJO}>
+              ESTANCADO · {DELOAD_CONSEJO}
             </p>
           )}
         </div>
