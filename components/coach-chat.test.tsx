@@ -56,6 +56,12 @@ it('un chip de insight rápido envía su pregunta', async () => {
   expect(sendMessage.mock.calls[0][0]).toEqual({ text: 'Analiza mi semana' });
 });
 
+it('muestra un aviso de error cuando status es error', () => {
+  useChat.mockReturnValue({ messages: [], sendMessage, status: 'error', error: new Error('x') });
+  render(<CoachChat seed={[]} />);
+  expect(screen.getByText(/no se pudo contactar/i)).toBeInTheDocument();
+});
+
 it('muestra el disclaimer', () => {
   render(<CoachChat seed={[]} />);
   expect(screen.getByText(/no consejo médico/i)).toBeInTheDocument();

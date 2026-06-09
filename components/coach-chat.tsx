@@ -25,7 +25,8 @@ export function CoachChat({ seed }: { seed: CoachMessage[] }) {
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: '/api/coach' }),
     messages: seed.map((m) => ({ id: m.id, role: m.rol, parts: [{ type: 'text' as const, text: m.contenido }] })),
-    onFinish: ({ message }) => {
+    onFinish: ({ message, isAbort, isError, isDisconnect }) => {
+      if (isAbort || isError || isDisconnect) return;
       const t = textoDe(message);
       if (t) void addMessage('assistant', t);
     },
@@ -38,8 +39,12 @@ export function CoachChat({ seed }: { seed: CoachMessage[] }) {
     if (!q || ocupado) return;
     setTexto('');
     await addMessage('user', q);
-    const snapshot = await recogerSnapshot(gymId);
-    void sendMessage({ text: q }, { body: { snapshot } });
+    try {
+      const snapshot = await recogerSnapshot(gymId);
+      await sendMessage({ text: q }, { body: { snapshot } });
+    } catch {
+      setTexto(q); // restaura para reintentar; el status de useChat ya refleja el error de red del propio send
+    }
   }
 
   return (
@@ -53,6 +58,9 @@ export function CoachChat({ seed }: { seed: CoachMessage[] }) {
           </div>
         ))}
         {ocupado && <p className="label-mono text-[10px] text-muted-foreground">El coach está pensando…</p>}
+        {status === 'error' && (
+          <p className="label-mono text-[10px] text-destructive">No se pudo contactar al coach. Reintenta.</p>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -65,7 +73,7 @@ export function CoachChat({ seed }: { seed: CoachMessage[] }) {
       </div>
 
       <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); void enviar(texto); }}>
-        <Input placeholder="Pregunta a tu coach…" value={texto} onChange={(e) => setTexto(e.target.value)} className="flex-1" />
+        <Input aria-label="Pregunta a tu coach" placeholder="Pregunta a tu coach…" value={texto} onChange={(e) => setTexto(e.target.value)} className="flex-1" />
         <Button type="submit" disabled={ocupado || texto.trim() === ''}>Enviar</Button>
       </form>
 
