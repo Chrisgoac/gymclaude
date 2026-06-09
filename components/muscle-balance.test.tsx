@@ -32,6 +32,7 @@ describe('MuscleBalance', () => {
       <MuscleBalance
         data={[{ grupo: 'pecho', volumen: 300 }]}
         objetivos={{ pecho: 400 } as Partial<Record<import('@/lib/db/types').MuscleGroup, number>>}
+        volumenSemana={{ pecho: 300 } as Record<import('@/lib/db/types').MuscleGroup, number>}
       />,
     );
     expect(screen.getByText(/75% meta/)).toBeInTheDocument();

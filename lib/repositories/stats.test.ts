@@ -7,6 +7,7 @@ import {
   listEstancados, getWeeklySummary, getPRsThisWeek,
   getLastTrainedByMuscle, weeklyVolumeDeltas,
 } from '@/lib/repositories/stats';
+import { getVolumenSemanaByMuscle } from '@/lib/repositories/stats';
 
 const DAY = 24 * 60 * 60 * 1000;
 // 2026-06-10 es miércoles. Semana actual: lun 8 … dom 14. Semana previa: lun 1 … dom 7.
@@ -382,4 +383,21 @@ it('weeklyVolumeDeltas deltaPct null si la semana previa tuvo 0 volumen', () => 
     { semanaInicioTs: 2, volumen: 100 },
   ]);
   expect(out[1].deltaPct).toBeNull();
+});
+
+it('getVolumenSemanaByMuscle suma solo el volumen de la semana actual por grupo', async () => {
+  const NOW = new Date('2026-06-10T12:00:00').getTime(); // miércoles
+  const D = 86400000;
+  await db.exercises.put({ id: 'vsm-ex', userId: null, nombre: 'X', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  const seed = async (sid: string, fecha: number, peso: number) => {
+    await db.workoutSessions.put({ id: sid, userId: null, gymId: 'gvsm', fecha, updatedAt: 1, deletedAt: null });
+    const le = { id: `${sid}-le`, sessionId: sid, exerciseId: 'vsm-ex', orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.put(le);
+    await db.loggedSets.put({ id: `${sid}-set`, loggedExerciseId: le.id, orden: 0, peso, reps: 10, updatedAt: 1, deletedAt: null });
+  };
+  await seed('vsm-now', NOW, 50);          // esta semana → 500
+  await seed('vsm-prev', NOW - 7 * D, 40); // semana previa → NO cuenta
+  const r = await getVolumenSemanaByMuscle('gvsm', NOW);
+  expect(r.pecho).toBe(500);
+  expect(r.espalda).toBe(0); // grupo sin volumen → 0
 });

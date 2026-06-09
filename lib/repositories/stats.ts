@@ -90,6 +90,14 @@ export interface VolumeByMuscle {
   volumen: number;
 }
 
+/** Volumen (kg·rep) por grupo muscular de la semana ISO actual; 0 para grupos sin volumen. `now` inyectable. */
+export async function getVolumenSemanaByMuscle(gymId?: string | null, now: number = Date.now()): Promise<Record<MuscleGroup, number>> {
+  const arr = await getVolumeByMuscle(inicioSemana(now), gymId);
+  const result = Object.fromEntries(MUSCLE_GROUPS.map((g) => [g, 0])) as Record<MuscleGroup, number>;
+  for (const v of arr) result[v.grupo] = v.volumen;
+  return result;
+}
+
 export async function getVolumeByMuscle(sinceTs = 0, gymId?: string | null): Promise<VolumeByMuscle[]> {
   const sessions = activo(await db.workoutSessions.toArray())
     .filter((s) => s.fecha >= sinceTs)
