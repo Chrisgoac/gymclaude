@@ -180,6 +180,7 @@ export interface WeeklySummary {
 /** Resumen de la semana ISO actual (lunes) vs la previa. `now` inyectable para tests. */
 export async function getWeeklySummary(gymId?: string | null, now: number = Date.now()): Promise<WeeklySummary> {
   const inicioActual = inicioSemana(now);
+  // inicioActual - 1 ms cae en el domingo de la semana previa → inicioSemana lo lleva a su lunes.
   const inicioPrevia = inicioSemana(inicioActual - 1);
   const sessions = activo(await db.workoutSessions.toArray())
     .filter((s) => gymId == null || (s.gymId ?? null) === gymId)

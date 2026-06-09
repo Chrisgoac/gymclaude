@@ -276,5 +276,7 @@ it('getWeeklySummary deltaPct null sin semana previa', async () => {
   await db.loggedSets.put({ id: 'wx-set', loggedExerciseId: 'wx-le', orden: 0, peso: 20, reps: 5, updatedAt: 1, deletedAt: null });
   const r = await getWeeklySummary('g9', NOW_WED);
   expect(r.sesiones).toBe(1);
+  expect(r.volumenSemana).toBe(100);
+  expect(r.volumenSemanaPrevia).toBe(0);
   expect(r.deltaPct).toBeNull();
 });
