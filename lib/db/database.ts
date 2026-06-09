@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Exercise, Routine, RoutineExercise,
-  WorkoutSession, LoggedExercise, LoggedSet, SyncState, Gym, ExercisePhoto, UserSetting, CoachMessage, BodyMetric,
+  WorkoutSession, LoggedExercise, LoggedSet, SyncState, Gym, ExercisePhoto, UserSetting, CoachMessage, BodyMetric, ProgressPhoto,
 } from './types';
 
 export class GymLogDB extends Dexie {
@@ -17,6 +17,7 @@ export class GymLogDB extends Dexie {
   userSettings!: Table<UserSetting, string>;
   coachMessages!: Table<CoachMessage, string>;
   bodyMetrics!: Table<BodyMetric, string>;
+  progressPhotos!: Table<ProgressPhoto, string>;
 
   constructor() {
     super('gymlog');
@@ -121,6 +122,10 @@ export class GymLogDB extends Dexie {
     // v13: métricas corporales (peso + medidas), sincronizadas.
     this.version(13).stores({
       bodyMetrics: 'id, tipo, fecha, deletedAt',
+    });
+    // v14: fotos de progreso corporal, sincronizadas.
+    this.version(14).stores({
+      progressPhotos: 'id, fecha, angulo, deletedAt',
     });
   }
 }
