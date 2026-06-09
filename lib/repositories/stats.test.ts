@@ -179,6 +179,23 @@ describe('listEstancados', () => {
     const enG2 = await listEstancados('g2');
     expect(enG2.map((e) => e.exerciseId)).not.toContain('ex-est');
   });
+
+  it('listEstancados NO incluye un ejercicio que sigue mejorando', async () => {
+    await db.exercises.put({
+      id: 'ex-prog', userId: null, nombre: 'Press progresando', grupoMuscular: 'pecho',
+      equipamiento: 'maquina', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null,
+    });
+    const pesos = [40, 42.5, 45, 47.5]; // sube cada sesión → nuevo 1RM máx en la última
+    for (let i = 0; i < 4; i++) {
+      const s = { id: `sp${i}`, userId: null, gymId: 'gP', fecha: 2000 + i * 86400000, updatedAt: 1, deletedAt: null };
+      await db.workoutSessions.put(s);
+      const le = { id: `lep${i}`, sessionId: s.id, exerciseId: 'ex-prog', orden: 0, updatedAt: 1, deletedAt: null };
+      await db.loggedExercises.put(le);
+      await db.loggedSets.put({ id: `setp${i}`, loggedExerciseId: le.id, orden: 0, peso: pesos[i], reps: 10, updatedAt: 1, deletedAt: null });
+    }
+    const res = await listEstancados('gP');
+    expect(res.map((e) => e.exerciseId)).not.toContain('ex-prog');
+  });
 });
 
 describe('filtro por gimnasio', () => {

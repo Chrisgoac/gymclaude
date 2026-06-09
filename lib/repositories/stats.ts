@@ -220,15 +220,17 @@ export async function listEstancados(gymId?: string | null): Promise<Estancado[]
   if (sessionIds.size === 0) return [];
   const les = activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
   const exerciseIds = [...new Set(les.map((le) => le.exerciseId))];
+  const exercises = await db.exercises.bulkGet(exerciseIds);
+  const nombreBy = new Map<string, string>();
+  for (const e of exercises) if (e) nombreBy.set(e.id, e.nombre);
   const out: Estancado[] = [];
   for (const exerciseId of exerciseIds) {
     const points = await getExerciseProgress(exerciseId, gymId);
     const e = detectarEstancamiento(points);
     if (!e.estancado) continue;
-    const ex = await db.exercises.get(exerciseId);
     out.push({
       exerciseId,
-      nombre: ex?.nombre ?? '—',
+      nombre: nombreBy.get(exerciseId) ?? '—',
       sesionesSinMejora: e.sesionesSinMejora,
       ultimaMejoraFecha: e.ultimaMejoraFecha,
     });
