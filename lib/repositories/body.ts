@@ -10,6 +10,12 @@ export async function listMetrics(tipo: string): Promise<BodyMetric[]> {
   return all.sort((a, b) => a.fecha - b.fecha);
 }
 
+/** Todas las entradas activas (de todos los tipos), orden cronológico asc. */
+export async function listAllMetrics(): Promise<BodyMetric[]> {
+  const all = activo(await db.bodyMetrics.toArray());
+  return all.sort((a, b) => a.fecha - b.fecha);
+}
+
 /** Tipos de métrica con al menos una entrada activa. */
 export async function listTipos(): Promise<string[]> {
   const all = activo(await db.bodyMetrics.toArray());

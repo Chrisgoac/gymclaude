@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
 import { db } from '@/lib/db/database';
-import { addMetric, listMetrics, listTipos, deleteMetric } from '@/lib/repositories/body';
+import { addMetric, listMetrics, listTipos, deleteMetric, listAllMetrics } from '@/lib/repositories/body';
 
 beforeEach(async () => {
   await db.bodyMetrics.clear();
@@ -40,5 +40,13 @@ describe('body repo', () => {
     await deleteMetric(m.id);
     expect(await listMetrics('peso')).toHaveLength(0);
     expect(await db.bodyMetrics.count()).toBe(1);
+  });
+  it('listAllMetrics devuelve todas las activas ordenadas por fecha asc', async () => {
+    await db.bodyMetrics.clear();
+    await addMetric('peso', 80, 2000);
+    await addMetric('cintura', 84, 1000);
+    const todas = await listAllMetrics();
+    expect(todas.map((m) => m.fecha)).toEqual([1000, 2000]);
+    expect(todas).toHaveLength(2);
   });
 });
