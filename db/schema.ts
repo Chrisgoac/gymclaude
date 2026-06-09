@@ -89,3 +89,10 @@ export const userSettings = pgTable('user_settings', {
 }, (t) => ({
   pk: primaryKey({ columns: [t.userId, t.id] }),
 }));
+
+export const coachMessages = pgTable('coach_messages', {
+  ...sync,
+  rol: text('rol').notNull(),
+  contenido: text('contenido').notNull(),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+});
