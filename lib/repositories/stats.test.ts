@@ -305,3 +305,33 @@ it('getPRsThisWeek detecta PR de peso esta semana y excluye sin-mejora / sin-his
   expect(ids).not.toContain('pr-nuevo');
   expect(prs.find((p) => p.exerciseId === 'pr-sube')?.tipo).toBe('peso');
 });
+
+it('getPRsThisWeek detecta PR de 1RM (mismo/menor peso, más reps)', async () => {
+  const seedReps = async (sid: string, exerciseId: string, fecha: number, peso: number, reps: number) => {
+    await db.workoutSessions.put({ id: sid, userId: null, gymId: 'g1rm', fecha, updatedAt: 1, deletedAt: null });
+    const le = { id: `${sid}-le`, sessionId: sid, exerciseId, orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.put(le);
+    await db.loggedSets.put({ id: `${sid}-set`, loggedExerciseId: le.id, orden: 0, peso, reps, updatedAt: 1, deletedAt: null });
+  };
+  await db.exercises.put({ id: 'pr-1rm', userId: null, nombre: 'Reps', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await seedReps('r1', 'pr-1rm', NOW_WED - 7 * DAY, 80, 1); // previo: 1RM=80
+  await seedReps('r2', 'pr-1rm', NOW_WED, 70, 8);            // semana: peso menor pero 1RM≈88.7
+  const prs = await getPRsThisWeek('g1rm', NOW_WED);
+  const pr = prs.find((p) => p.exerciseId === 'pr-1rm');
+  expect(pr).toBeDefined();
+  expect(pr?.tipo).toBe('1rm');
+});
+
+it('getPRsThisWeek no marca PR si igualas el peso previo sin superarlo', async () => {
+  const seedSet = async (sid: string, exerciseId: string, fecha: number, peso: number) => {
+    await db.workoutSessions.put({ id: sid, userId: null, gymId: 'geq', fecha, updatedAt: 1, deletedAt: null });
+    const le = { id: `${sid}-le`, sessionId: sid, exerciseId, orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.put(le);
+    await db.loggedSets.put({ id: `${sid}-set`, loggedExerciseId: le.id, orden: 0, peso, reps: 5, updatedAt: 1, deletedAt: null });
+  };
+  await db.exercises.put({ id: 'pr-eq', userId: null, nombre: 'Eq', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await seedSet('eq1', 'pr-eq', NOW_WED - 7 * DAY, 60);
+  await seedSet('eq2', 'pr-eq', NOW_WED, 60); // mismo peso y reps → ni peso ni 1RM superan
+  const prs = await getPRsThisWeek('geq', NOW_WED);
+  expect(prs.map((p) => p.exerciseId)).not.toContain('pr-eq');
+});

@@ -255,7 +255,7 @@ export interface Estancado {
   ultimaMejoraFecha: number | null;
 }
 
-/** Ejercicios entrenados (en ese gym) cuyo mejor 1RM estimado está estancado. */
+/** Un PR batido esta semana. */
 export interface PRSemana {
   exerciseId: string;
   nombre: string;
@@ -296,6 +296,7 @@ export async function getPRsThisWeek(gymId?: string | null, now: number = Date.n
   return out;
 }
 
+/** Ejercicios entrenados (en ese gym) cuyo mejor 1RM estimado está estancado. */
 export async function listEstancados(gymId?: string | null): Promise<Estancado[]> {
   const sessions = activo(await db.workoutSessions.toArray())
     .filter((s) => gymId == null || (s.gymId ?? null) === gymId);
