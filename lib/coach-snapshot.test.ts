@@ -62,3 +62,28 @@ describe('construirSnapshot', () => {
     expect(construirSnapshot(inp).grupos).toHaveLength(8);
   });
 });
+
+import 'fake-indexeddb/auto';
+import { recogerSnapshot } from '@/lib/coach-snapshot';
+import { db } from '@/lib/db/database';
+import { setSetting } from '@/lib/repositories/user-settings';
+
+it('recogerSnapshot reúne las señales reales en el snapshot', async () => {
+  await Promise.all([
+    db.workoutSessions.clear(), db.loggedExercises.clear(), db.loggedSets.clear(),
+    db.exercises.clear(), db.userSettings.clear(),
+  ]);
+  const NOW = new Date('2026-06-10T12:00:00').getTime(); // miércoles
+  await db.exercises.put({ id: 'snap-ex', userId: null, nombre: 'Press banca', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await db.workoutSessions.put({ id: 'snap-s', userId: null, gymId: 'g1', fecha: NOW, updatedAt: 1, deletedAt: null });
+  await db.loggedExercises.put({ id: 'snap-le', sessionId: 'snap-s', exerciseId: 'snap-ex', orden: 0, updatedAt: 1, deletedAt: null });
+  await db.loggedSets.put({ id: 'snap-set', loggedExerciseId: 'snap-le', orden: 0, peso: 50, reps: 10, updatedAt: 1, deletedAt: null });
+  await setSetting('objetivoSemanal', 4);
+
+  const snap = await recogerSnapshot('g1', NOW);
+  expect(snap.semana.sesiones).toBe(1);
+  expect(snap.semana.objetivo).toBe(4);
+  const pecho = snap.grupos.find((g) => g.grupo === 'Pecho');
+  expect(pecho?.volumenSemana).toBe(500);
+  expect(pecho?.diasSinEntrenar).toBe(0);
+});

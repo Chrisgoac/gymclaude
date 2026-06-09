@@ -2,6 +2,11 @@ import type { MuscleGroup } from '@/lib/db/types';
 import { MUSCLE_GROUPS } from '@/lib/db/types';
 import { muscleGroupLabel } from '@/lib/labels';
 import type { Estancado, WeeklySummary, PRSemana } from '@/lib/repositories/stats';
+import {
+  listEstancados, getWeeklySummary, getPRsThisWeek,
+  getVolumenSemanaByMuscle, getLastTrainedByMuscle,
+} from '@/lib/repositories/stats';
+import { getSetting } from '@/lib/repositories/user-settings';
 
 const DIA = 86400000;
 const MAX_ESTANCADOS = 5;
@@ -65,4 +70,21 @@ export function construirSnapshot(input: SnapshotInput): CoachSnapshot {
     });
 
   return { estancados, semana, grupos };
+}
+
+/** Consulta las señales de A/C (filtradas por gym) y arma el snapshot del coach. */
+export async function recogerSnapshot(gymId?: string | null, now: number = Date.now()): Promise<CoachSnapshot> {
+  const [estancados, semana, prs, volumenSemanaPorGrupo, lastTrained] = await Promise.all([
+    listEstancados(gymId),
+    getWeeklySummary(gymId, now),
+    getPRsThisWeek(gymId, now),
+    getVolumenSemanaByMuscle(gymId, now),
+    getLastTrainedByMuscle(gymId),
+  ]);
+  const objetivoSemanal = (await getSetting<number>('objetivoSemanal')) ?? 3;
+  const objetivosVolumen = (await getSetting<Partial<Record<MuscleGroup, number>>>('objetivosVolumen')) ?? {};
+  return construirSnapshot({
+    estancados, semana, objetivoSemanal, prs,
+    volumenSemanaPorGrupo, lastTrained, objetivosVolumen, ahora: now,
+  });
 }
