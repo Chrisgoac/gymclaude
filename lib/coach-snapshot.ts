@@ -8,6 +8,7 @@ const MAX_ESTANCADOS = 5;
 const MAX_GRUPOS = 8;
 
 export interface SnapshotInput {
+  /** Ya ordenados (peor primero) por el llamante; construirSnapshot solo recorta a los primeros 5. */
   estancados: Estancado[];
   semana: WeeklySummary;
   objetivoSemanal: number;
@@ -45,18 +46,23 @@ export function construirSnapshot(input: SnapshotInput): CoachSnapshot {
   };
 
   const grupos = MUSCLE_GROUPS
-    .map((g) => {
-      const vol = input.volumenSemanaPorGrupo[g] ?? 0;
-      const ult = input.lastTrained[g] ?? null;
-      const objetivo = input.objetivosVolumen[g] ?? null;
-      const diasSinEntrenar = ult == null ? null : Math.floor((input.ahora - ult) / DIA);
-      return { grupo: muscleGroupLabel[g], volumenSemana: Math.round(vol), diasSinEntrenar, objetivo, _vol: vol, _ult: ult };
-    })
-    .filter((g) => g._vol > 0 || g.objetivo != null || g._ult != null)
-    .sort((a, b) => b._vol - a._vol)
+    .filter(
+      (g) =>
+        (input.volumenSemanaPorGrupo[g] ?? 0) > 0 ||
+        input.objetivosVolumen[g] != null ||
+        (input.lastTrained[g] ?? null) != null,
+    )
+    .sort((a, b) => (input.volumenSemanaPorGrupo[b] ?? 0) - (input.volumenSemanaPorGrupo[a] ?? 0))
     .slice(0, MAX_GRUPOS)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    .map(({ _vol, _ult, ...rest }) => rest);
+    .map((g) => {
+      const ult = input.lastTrained[g] ?? null;
+      return {
+        grupo: muscleGroupLabel[g],
+        volumenSemana: Math.round(input.volumenSemanaPorGrupo[g] ?? 0),
+        diasSinEntrenar: ult == null ? null : Math.floor((input.ahora - ult) / DIA),
+        objetivo: input.objetivosVolumen[g] ?? null,
+      };
+    });
 
   return { estancados, semana, grupos };
 }

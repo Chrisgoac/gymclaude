@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { construirSnapshot, type SnapshotInput } from '@/lib/coach-snapshot';
+import type { MuscleGroup } from '@/lib/db/types';
 
 const DIA = 86400000;
 const AHORA = 100 * DIA;
-const GRUPOS = ['pecho','espalda','hombros','biceps','triceps','cuadriceps','femoral','gluteo','gemelo','abdomen','antebrazo','otro'];
+const GRUPOS: MuscleGroup[] = ['pecho','espalda','hombros','biceps','triceps','cuadriceps','femoral','gluteo','gemelo','abdomen','antebrazo','otro'];
 
 function baseInput(): SnapshotInput {
   return {
@@ -53,5 +54,11 @@ describe('construirSnapshot', () => {
 
   it('grupos: excluye los sin volumen/objetivo/entrenamiento; lista vacía', () => {
     expect(construirSnapshot(baseInput()).grupos).toHaveLength(0);
+  });
+
+  it('grupos: limita a 8 grupos', () => {
+    const inp = baseInput();
+    for (const g of GRUPOS) inp.volumenSemanaPorGrupo[g] = 100; // los 12 con volumen
+    expect(construirSnapshot(inp).grupos).toHaveLength(8);
   });
 });
