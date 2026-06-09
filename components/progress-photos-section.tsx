@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { listPhotos } from '@/lib/repositories/progress-photos';
 import { ProgressPhotoUpload } from '@/components/progress-photo-upload';
 import { ProgressGallery } from '@/components/progress-gallery';
+import { ProgressCompare } from '@/components/progress-compare';
 
 export function ProgressPhotosSection() {
   const fotos = useLiveQuery(() => listPhotos(), []);
@@ -17,7 +18,10 @@ export function ProgressPhotosSection() {
       ) : fotos.length === 0 ? (
         <p className="text-muted-foreground">Aún no has subido fotos. Añade la primera arriba.</p>
       ) : (
-        <ProgressGallery fotos={fotos} />
+        <>
+          <ProgressGallery fotos={fotos} />
+          <ProgressCompare fotos={fotos} />
+        </>
       )}
     </section>
   );
