@@ -27,4 +27,13 @@ describe('MuscleBalance', () => {
     );
     expect(screen.getByText(/hace 20d/)).toBeInTheDocument();
   });
+  it('muestra el % de meta de volumen por grupo', () => {
+    render(
+      <MuscleBalance
+        data={[{ grupo: 'pecho', volumen: 300 }]}
+        objetivos={{ pecho: 400 } as Partial<Record<import('@/lib/db/types').MuscleGroup, number>>}
+      />,
+    );
+    expect(screen.getByText(/75% meta/)).toBeInTheDocument();
+  });
 });
