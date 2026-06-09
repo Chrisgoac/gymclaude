@@ -9,6 +9,7 @@ import {
   getWeeklyVolume,
   getCurrentStreakDays,
   listEstancados,
+  getLastTrainedByMuscle,
 } from '@/lib/repositories/stats';
 import { ExerciseProgress } from '@/components/exercise-progress';
 import { WeeklyVolumeChart } from '@/components/weekly-volume-chart';
@@ -37,6 +38,8 @@ export default function ProgresoPage() {
   const semanal = useLiveQuery(() => getWeeklyVolume(sinceTs, gymId), [sinceTs, gymId]);
   const volumen = useLiveQuery(() => getVolumeByMuscle(sinceTs, gymId), [sinceTs, gymId]);
   const estancados = useLiveQuery(() => listEstancados(gymId), [gymId]);
+  const lastTrained = useLiveQuery(() => getLastTrainedByMuscle(gymId), [gymId]);
+  const [ahora] = useState(() => Date.now());
   const [seleccion, setSeleccion] = useState('');
 
   return (
@@ -91,7 +94,7 @@ export default function ProgresoPage() {
 
       <section className="space-y-2">
         <h2 className="label-mono text-[10px] text-muted-foreground">Balance muscular</h2>
-        <MuscleBalance data={volumen ?? []} />
+        <MuscleBalance data={volumen ?? []} lastTrained={lastTrained} ahora={ahora} />
       </section>
     </div>
   );
