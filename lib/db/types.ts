@@ -103,3 +103,12 @@ export interface SyncState {
   key: string;
   value: number;
 }
+
+/** Ajuste de usuario sincronizado. OJO: `id` ES la clave del ajuste (ej. 'modoProgresion'),
+ *  no un UUID — así dos dispositivos convergen por LWW sobre la misma fila. */
+export interface UserSetting extends SyncMeta {
+  /** null en local hasta el primer push (igual que el resto de entidades). */
+  userId: string | null;
+  /** Valor serializado como JSON (número, booleano u objeto). */
+  valor: string;
+}

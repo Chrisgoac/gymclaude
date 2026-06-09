@@ -4,12 +4,17 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { runSync } from '@/lib/sync/sync';
 import { httpTransport } from '@/lib/sync/http-transport';
+import { migrarAjustesLocales } from '@/lib/repositories/user-settings';
 
 type Estado = 'idle' | 'syncing' | 'offline' | 'error';
 
 export function SyncProvider() {
   const { isSignedIn } = useAuth();
   const [estado, setEstado] = useState<Estado>('idle');
+
+  useEffect(() => {
+    void migrarAjustesLocales();
+  }, []);
 
   useEffect(() => {
     if (!isSignedIn) return;

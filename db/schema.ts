@@ -1,4 +1,4 @@
-import { pgTable, text, doublePrecision, integer, bigint, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, doublePrecision, integer, bigint, boolean, primaryKey } from 'drizzle-orm/pg-core';
 
 // Columnas comunes de sincronización en cada tabla.
 const sync = {
@@ -78,3 +78,14 @@ export const exercisePhotos = pgTable('exercise_photos', {
   url: text('url').notNull(),
   key: text('key').notNull(),
 });
+
+export const userSettings = pgTable('user_settings', {
+  id: text('id').notNull(),
+  userId: text('user_id').notNull(),
+  valor: text('valor').notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+  deletedAt: bigint('deleted_at', { mode: 'number' }),
+  serverUpdatedAt: bigint('server_updated_at', { mode: 'number' }).notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.userId, t.id] }),
+}));

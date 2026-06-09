@@ -18,6 +18,7 @@ export async function POST(req: Request) {
     const table = SERVER_TABLES[name] as any;
     if (!table) continue;
     for (const rec of records as any[]) {
+      // El filtro por (id, userId) localiza la fila correcta también para user_settings (PK compuesta).
       const existing = await db
         .select({ updatedAt: table.updatedAt })
         .from(table)
@@ -25,7 +26,9 @@ export async function POST(req: Request) {
         .limit(1);
       if (!resolveServerWrite(existing[0]?.updatedAt, rec.updatedAt)) continue;
       const values = { ...rec, userId, serverUpdatedAt };
-      await db.insert(table).values(values).onConflictDoUpdate({ target: table.id, set: values });
+      // user_settings tiene PK compuesta (user_id, id); las demás tablas, id simple.
+      const conflictTarget = name === 'userSettings' ? [table.userId, table.id] : table.id;
+      await db.insert(table).values(values).onConflictDoUpdate({ target: conflictTarget, set: values });
     }
   }
   return NextResponse.json({ ok: true });

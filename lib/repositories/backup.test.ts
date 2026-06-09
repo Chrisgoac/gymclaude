@@ -71,7 +71,7 @@ it('al importar refresca updatedAt para que el sync los suba', async () => {
       gyms: [], exercises: [],
       routines: [{ id: 'r1', userId: null, nombre: 'R', orden: 0, archivada: false, updatedAt: antiguo, deletedAt: null }],
       routineExercises: [{ id: 're1', routineId: 'r1', exerciseId: 'seed-press-banca', orden: 0, updatedAt: antiguo, deletedAt: null }],
-      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [],
+      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [],
     },
   };
   const t0 = Date.now();
@@ -84,4 +84,15 @@ it('al importar refresca updatedAt para que el sync los suba', async () => {
 
 it('rechaza un fichero no válido', async () => {
   await expect(importData({ app: 'otra-cosa' } as never)).rejects.toThrow();
+});
+
+it('exporta e importa userSettings', async () => {
+  await db.userSettings.clear();
+  await db.userSettings.put({ id: 'objetivoSemanal', userId: null, valor: '4', updatedAt: 1, deletedAt: null });
+  const backup = await exportData();
+  expect(backup.data.userSettings).toHaveLength(1);
+  await db.userSettings.clear();
+  await importData(backup);
+  const row = await db.userSettings.get('objetivoSemanal');
+  expect(row?.valor).toBe('4');
 });
