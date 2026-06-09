@@ -4,7 +4,7 @@ import { startSession, addLoggedExercise, addSet } from '@/lib/repositories/work
 import {
   estimar1RM, getExerciseProgress, getExercisePRs, getVolumeByMuscle,
   listSessionSummaries, getCurrentStreakDays, getPeriodSummary, getWeeklyVolume,
-  listEstancados, getWeeklySummary,
+  listEstancados, getWeeklySummary, getPRsThisWeek,
 } from '@/lib/repositories/stats';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -279,4 +279,29 @@ it('getWeeklySummary deltaPct null sin semana previa', async () => {
   expect(r.volumenSemana).toBe(100);
   expect(r.volumenSemanaPrevia).toBe(0);
   expect(r.deltaPct).toBeNull();
+});
+
+it('getPRsThisWeek detecta PR de peso esta semana y excluye sin-mejora / sin-histórico', async () => {
+  const seedSet = async (sid: string, exerciseId: string, fecha: number, peso: number) => {
+    await db.workoutSessions.put({ id: sid, userId: null, gymId: 'gpr', fecha, updatedAt: 1, deletedAt: null });
+    const le = { id: `${sid}-le`, sessionId: sid, exerciseId, orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.put(le);
+    await db.loggedSets.put({ id: `${sid}-set`, loggedExerciseId: le.id, orden: 0, peso, reps: 5, updatedAt: 1, deletedAt: null });
+  };
+  await db.exercises.put({ id: 'pr-sube', userId: null, nombre: 'Sube', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await db.exercises.put({ id: 'pr-baja', userId: null, nombre: 'Baja', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await db.exercises.put({ id: 'pr-nuevo', userId: null, nombre: 'Nuevo', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+
+  await seedSet('pr-s1', 'pr-sube', NOW_WED - 7 * DAY, 60);
+  await seedSet('pr-s2', 'pr-sube', NOW_WED, 65);
+  await seedSet('pr-b1', 'pr-baja', NOW_WED - 7 * DAY, 80);
+  await seedSet('pr-b2', 'pr-baja', NOW_WED, 70);
+  await seedSet('pr-n1', 'pr-nuevo', NOW_WED, 50);
+
+  const prs = await getPRsThisWeek('gpr', NOW_WED);
+  const ids = prs.map((p) => p.exerciseId);
+  expect(ids).toContain('pr-sube');
+  expect(ids).not.toContain('pr-baja');
+  expect(ids).not.toContain('pr-nuevo');
+  expect(prs.find((p) => p.exerciseId === 'pr-sube')?.tipo).toBe('peso');
 });

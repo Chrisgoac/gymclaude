@@ -256,6 +256,46 @@ export interface Estancado {
 }
 
 /** Ejercicios entrenados (en ese gym) cuyo mejor 1RM estimado está estancado. */
+export interface PRSemana {
+  exerciseId: string;
+  nombre: string;
+  tipo: 'peso' | '1rm';
+}
+
+/** Ejercicios que batieron su récord (peso o 1RM estimado) esta semana respecto a su histórico previo. */
+export async function getPRsThisWeek(gymId?: string | null, now: number = Date.now()): Promise<PRSemana[]> {
+  const inicio = inicioSemana(now);
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId)
+    .filter((s) => s.fecha >= inicio);
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  if (sessionIds.size === 0) return [];
+  const lesWeek = activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
+  const exerciseIds = [...new Set(lesWeek.map((le) => le.exerciseId))];
+  const exercises = await db.exercises.bulkGet(exerciseIds);
+  const nombreBy = new Map<string, string>();
+  for (const e of exercises) if (e) nombreBy.set(e.id, e.nombre);
+  const out: PRSemana[] = [];
+  for (const exerciseId of exerciseIds) {
+    const data = await setsDeEjercicio(exerciseId, gymId);
+    const week = data.filter((d) => d.fecha >= inicio);
+    const before = data.filter((d) => d.fecha < inicio);
+    if (week.length === 0 || before.length === 0) continue; // sin histórico previo → no es "batir"
+    const maxPesoWeek = Math.max(...week.map((d) => d.set.peso));
+    const maxPesoBefore = Math.max(...before.map((d) => d.set.peso));
+    if (maxPesoWeek > maxPesoBefore) {
+      out.push({ exerciseId, nombre: nombreBy.get(exerciseId) ?? '—', tipo: 'peso' });
+      continue;
+    }
+    const max1rmWeek = Math.max(...week.map((d) => estimar1RM(d.set.peso, d.set.reps)));
+    const max1rmBefore = Math.max(...before.map((d) => estimar1RM(d.set.peso, d.set.reps)));
+    if (max1rmWeek > max1rmBefore) {
+      out.push({ exerciseId, nombre: nombreBy.get(exerciseId) ?? '—', tipo: '1rm' });
+    }
+  }
+  return out;
+}
+
 export async function listEstancados(gymId?: string | null): Promise<Estancado[]> {
   const sessions = activo(await db.workoutSessions.toArray())
     .filter((s) => gymId == null || (s.gymId ?? null) === gymId);
