@@ -5,6 +5,7 @@ import {
   reorderRoutines,
   addExerciseToRoutine, listRoutineExercises, updateRoutineExercise, softDeleteRoutineExercise,
   getRoutineExerciseTarget,
+  listStandaloneRoutines, listRoutinesByMesocycle, setRoutineMesocycle,
 } from '@/lib/repositories/routines';
 
 beforeEach(async () => {
@@ -110,4 +111,16 @@ describe('repsObjetivoMin / incrementoKg', () => {
     expect(leido.repsObjetivoMin).toBe(8);
     expect(leido.repsObjetivo).toBe(12);
   });
+});
+
+it('listStandaloneRoutines excluye las de un mesociclo; byMesocycle las incluye', async () => {
+  await db.routines.clear();
+  const libre = await createRoutine({ nombre: 'Libre' });
+  const dia = await createRoutine({ nombre: 'Push' });
+  await setRoutineMesocycle(dia.id, 'meso-1');
+  const standalone = await listStandaloneRoutines();
+  expect(standalone.map((r) => r.id)).toContain(libre.id);
+  expect(standalone.map((r) => r.id)).not.toContain(dia.id);
+  const delMeso = await listRoutinesByMesocycle('meso-1');
+  expect(delMeso.map((r) => r.id)).toEqual([dia.id]);
 });

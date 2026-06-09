@@ -59,12 +59,30 @@ export const EQUIPMENTS: Equipment[] = [
 
 export const EXERCISE_TYPES: ExerciseType[] = ['compuesto', 'aislamiento'];
 
+export interface SemanaPlan {
+  semana: number;
+  descarga: boolean;
+  ajuste: string;
+}
+
+export interface Mesocycle extends SyncMeta {
+  userId: string | null;
+  nombre: string;
+  objetivo: string;
+  semanas: number;
+  diasPorSemana: number;
+  notas: string | null;
+  progresion: SemanaPlan[];
+  fechaInicio: number;
+}
+
 export interface Routine extends SyncMeta {
   userId: string | null;
   nombre: string;
   descripcion?: string;
   orden: number;
   archivada: boolean;
+  mesocycleId?: string | null;
 }
 
 export interface RoutineExercise extends SyncMeta {

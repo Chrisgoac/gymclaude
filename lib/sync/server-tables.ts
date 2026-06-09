@@ -14,4 +14,5 @@ export const SERVER_TABLES: Record<string, PgTable> = {
   coachMessages: schema.coachMessages,
   bodyMetrics: schema.bodyMetrics,
   progressPhotos: schema.progressPhotos,
+  mesocycles: schema.mesocycles,
 };

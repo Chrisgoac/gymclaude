@@ -1,7 +1,7 @@
 import { db } from '@/lib/db/database';
 import type {
   Exercise, ExercisePhoto, Gym, Routine, RoutineExercise,
-  WorkoutSession, LoggedExercise, LoggedSet, UserSetting, CoachMessage, BodyMetric, ProgressPhoto,
+  WorkoutSession, LoggedExercise, LoggedSet, UserSetting, CoachMessage, BodyMetric, ProgressPhoto, Mesocycle,
 } from '@/lib/db/types';
 
 export interface BackupFile {
@@ -21,13 +21,14 @@ export interface BackupFile {
     coachMessages: CoachMessage[];
     bodyMetrics: BodyMetric[];
     progressPhotos: ProgressPhoto[];
+    mesocycles: Mesocycle[];
   };
 }
 
 export async function exportData(): Promise<BackupFile> {
   return {
     app: 'gymlog',
-    version: 10,
+    version: 11,
     exportedAt: Date.now(),
     data: {
       gyms: await db.gyms.toArray(),
@@ -42,6 +43,7 @@ export async function exportData(): Promise<BackupFile> {
       coachMessages: await db.coachMessages.toArray(),
       bodyMetrics: await db.bodyMetrics.toArray(),
       progressPhotos: await db.progressPhotos.toArray(),
+      mesocycles: await db.mesocycles.toArray(),
     },
   };
 }
@@ -61,7 +63,7 @@ export async function importData(backup: BackupFile): Promise<void> {
   const tables = [
     db.gyms, db.exercises, db.routines, db.routineExercises,
     db.workoutSessions, db.loggedExercises, db.loggedSets, db.exercisePhotos,
-    db.userSettings, db.coachMessages, db.bodyMetrics, db.progressPhotos,
+    db.userSettings, db.coachMessages, db.bodyMetrics, db.progressPhotos, db.mesocycles,
   ] as const;
   await db.transaction('rw', tables, async () => {
     if (d.gyms?.length) await db.gyms.bulkPut(d.gyms);
@@ -76,5 +78,6 @@ export async function importData(backup: BackupFile): Promise<void> {
     if (d.coachMessages?.length) await db.coachMessages.bulkPut(d.coachMessages);
     if (d.bodyMetrics?.length) await db.bodyMetrics.bulkPut(d.bodyMetrics);
     if (d.progressPhotos?.length) await db.progressPhotos.bulkPut(d.progressPhotos);
+    if (d.mesocycles?.length) await db.mesocycles.bulkPut(d.mesocycles);
   });
 }
