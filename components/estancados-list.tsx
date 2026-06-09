@@ -10,7 +10,7 @@ export function EstancadosList({ data }: { data: Estancado[] }) {
         <li key={e.exerciseId} className="flex items-center justify-between gap-2 px-3 py-2">
           <span className="font-medium">{e.nombre}</span>
           <span className="label-mono text-[10px] text-destructive">
-            {e.sesionesSinMejora} sesiones sin mejorar
+            {e.sesionesSinMejora} {e.sesionesSinMejora === 1 ? 'sesión' : 'sesiones'} sin mejorar
           </span>
         </li>
       ))}
