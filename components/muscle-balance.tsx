@@ -6,6 +6,7 @@ import { muscleGroupLabel } from '@/lib/labels';
 const DIA = 86400000;
 const UMBRAL_DESCUIDADO_DIAS = 10;
 
+// `lastTrained` y `ahora` van juntos: si pasas lastTrained, pasa también `ahora` (Date.now() vía useState lazy del padre).
 export function MuscleBalance({
   data,
   lastTrained,
@@ -30,7 +31,7 @@ export function MuscleBalance({
         const vol = volByGrupo.get(g) ?? 0;
         const ult = lastTrained?.[g] ?? null;
         const dias = ult == null ? null : Math.floor((ts - ult) / DIA);
-        const descuidado = lastTrained != null && (ult == null || (dias as number) > UMBRAL_DESCUIDADO_DIAS);
+        const descuidado = lastTrained != null && (ult == null || (dias !== null && dias > UMBRAL_DESCUIDADO_DIAS));
         return (
           <div key={g}>
             <div className="label-mono mb-1 flex items-center justify-between text-[10px] text-muted-foreground">

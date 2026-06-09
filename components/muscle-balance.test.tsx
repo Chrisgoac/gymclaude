@@ -16,4 +16,15 @@ describe('MuscleBalance', () => {
     render(<MuscleBalance data={[]} />);
     expect(screen.getByText(/Aún no hay volumen/i)).toBeInTheDocument();
   });
+  it('marca un grupo descuidado con "hace N días"', () => {
+    const ahora = 100 * 86400000; // día 100
+    render(
+      <MuscleBalance
+        data={[{ grupo: 'pecho', volumen: 500 }]}
+        lastTrained={{ pecho: 80 * 86400000 /* hace 20 días */ } as unknown as Record<import('@/lib/db/types').MuscleGroup, number | null>}
+        ahora={ahora}
+      />,
+    );
+    expect(screen.getByText(/hace 20d/)).toBeInTheDocument();
+  });
 });
