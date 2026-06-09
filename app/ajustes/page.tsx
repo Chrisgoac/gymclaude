@@ -164,8 +164,9 @@ export default function AjustesPage() {
                 onBlur={(e) => {
                   const raw = e.target.value.trim();
                   if (raw === '') { aplicarObjetivoVolumen(g, null); return; }
-                  const n = Math.max(0, Math.round(Number(raw)));
-                  if (Number.isNaN(n)) { e.target.value = String(objetivosVolumen[g] ?? ''); return; }
+                  const parsed = Number(raw);
+                  if (Number.isNaN(parsed) || parsed < 0) { e.target.value = String(objetivosVolumen[g] ?? ''); return; }
+                  const n = Math.round(parsed);
                   aplicarObjetivoVolumen(g, n === 0 ? null : n);
                 }}
               />
