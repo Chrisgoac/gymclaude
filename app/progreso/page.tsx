@@ -50,10 +50,13 @@ export default function ProgresoPage() {
         <WeeklyDigest gymId={gymId} />
       </section>
 
-      <section className="grid grid-cols-3 gap-2">
-        <StatCard valor={`${racha ?? 0}`} unidad="🔥 racha días" destacado />
-        <StatCard valor={`${resumen?.sesiones ?? 0}`} unidad="sesiones" />
-        <StatCard valor={formatoVolumen(resumen?.volumen ?? 0)} unidad="volumen" />
+      <section className="space-y-2">
+        <h2 className="label-mono text-[10px] text-muted-foreground">Periodo seleccionado</h2>
+        <div className="grid grid-cols-3 gap-2">
+          <StatCard valor={`${racha ?? 0}`} unidad="🔥 racha días" destacado />
+          <StatCard valor={`${resumen?.sesiones ?? 0}`} unidad="sesiones" />
+          <StatCard valor={formatoVolumen(resumen?.volumen ?? 0)} unidad="volumen" />
+        </div>
       </section>
 
       <section className="space-y-2">

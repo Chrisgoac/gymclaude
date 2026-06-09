@@ -19,7 +19,7 @@ export function WeeklyDigest({ gymId }: { gymId?: string }) {
         <StatCard valor={delta == null ? '—' : `${delta >= 0 ? '▲' : '▼'}${Math.abs(delta)}%`} unidad="vol vs previa" />
       </div>
       {prs && prs.length > 0 && (
-        <ul className="brutal-box divide-y-2 divide-foreground">
+        <ul className="brutal-box divide-y-2 divide-foreground" aria-label="PRs esta semana">
           {prs.map((p) => (
             <li key={p.exerciseId} className="flex items-center justify-between gap-2 px-3 py-2">
               <span className="font-medium">{p.nombre}</span>
