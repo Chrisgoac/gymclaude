@@ -91,3 +91,11 @@ it('progressPhotos se aplican por id (LWW)', async () => {
   expect(p?.key).toBe('k');
   expect(await db.progressPhotos.count()).toBe(1);
 });
+
+it('mesocycles se aplican por id (LWW)', async () => {
+  await db.mesocycles.clear();
+  await applyIncoming([{ table: 'mesocycles', records: [
+    { id: 'me1', userId: 'u1', nombre: 'H', objetivo: 'hipertrofia', semanas: 6, diasPorSemana: 4, notas: null, progresion: [], fechaInicio: 1, updatedAt: 100, deletedAt: null },
+  ] as unknown as import('@/lib/db/types').SyncMeta[] }]);
+  expect((await db.mesocycles.get('me1'))?.nombre).toBe('H');
+});

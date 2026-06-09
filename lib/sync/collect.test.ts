@@ -74,6 +74,13 @@ describe('collectDirty', () => {
     expect(changes.find((c) => c.table === 'progressPhotos')?.records).toHaveLength(1);
   });
 
+  it('sincroniza mesocycles', async () => {
+    await db.mesocycles.clear();
+    await db.mesocycles.put({ id: 'me-c1', userId: null, nombre: 'H', objetivo: 'fuerza', semanas: 4, diasPorSemana: 3, notas: null, progresion: [], fechaInicio: 1, updatedAt: 1000, deletedAt: null });
+    const changes = await collectDirty(0);
+    expect(changes.find((c) => c.table === 'mesocycles')?.records).toHaveLength(1);
+  });
+
   it('sólo sincroniza ejercicios personalizados, no los del catálogo (seed)', async () => {
     await db.exercises.put({
       id: 'seed-x', userId: null, nombre: 'Seed', grupoMuscular: 'pecho',
