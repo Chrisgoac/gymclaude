@@ -74,17 +74,23 @@ export function construirSnapshot(input: SnapshotInput): CoachSnapshot {
 
 /** Consulta las señales de A/C (filtradas por gym) y arma el snapshot del coach. */
 export async function recogerSnapshot(gymId?: string | null, now: number = Date.now()): Promise<CoachSnapshot> {
-  const [estancados, semana, prs, volumenSemanaPorGrupo, lastTrained] = await Promise.all([
+  const [estancados, semana, prs, volumenSemanaPorGrupo, lastTrained, objetivoSemanalRaw, objetivosVolumenRaw] = await Promise.all([
     listEstancados(gymId),
     getWeeklySummary(gymId, now),
     getPRsThisWeek(gymId, now),
     getVolumenSemanaByMuscle(gymId, now),
     getLastTrainedByMuscle(gymId),
+    getSetting<number>('objetivoSemanal'),
+    getSetting<Partial<Record<MuscleGroup, number>>>('objetivosVolumen'),
   ]);
-  const objetivoSemanal = (await getSetting<number>('objetivoSemanal')) ?? 3;
-  const objetivosVolumen = (await getSetting<Partial<Record<MuscleGroup, number>>>('objetivosVolumen')) ?? {};
   return construirSnapshot({
-    estancados, semana, objetivoSemanal, prs,
-    volumenSemanaPorGrupo, lastTrained, objetivosVolumen, ahora: now,
+    estancados,
+    semana,
+    objetivoSemanal: objetivoSemanalRaw ?? 3,
+    prs,
+    volumenSemanaPorGrupo,
+    lastTrained,
+    objetivosVolumen: objetivosVolumenRaw ?? {},
+    ahora: now,
   });
 }

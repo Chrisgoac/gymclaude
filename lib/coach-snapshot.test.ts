@@ -63,7 +63,6 @@ describe('construirSnapshot', () => {
   });
 });
 
-import 'fake-indexeddb/auto';
 import { recogerSnapshot } from '@/lib/coach-snapshot';
 import { db } from '@/lib/db/database';
 import { setSetting } from '@/lib/repositories/user-settings';
