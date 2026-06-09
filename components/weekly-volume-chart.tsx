@@ -15,7 +15,7 @@ export function WeeklyVolumeChart({ data }: { data: WeeklyVolumePoint[] }) {
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={barras} margin={{ top: 16, right: 8, bottom: 0, left: -16 }}>
           <XAxis dataKey="semana" fontSize={11} tickLine={false} axisLine={{ stroke: 'currentColor' }} />
-          <YAxis fontSize={11} tickLine={false} axisLine={{ stroke: 'currentColor' }} />
+          <YAxis domain={[0, (max: number) => Math.ceil(max * 1.1)]} fontSize={11} tickLine={false} axisLine={{ stroke: 'currentColor' }} />
           <Tooltip
             cursor={{ fill: 'currentColor', fillOpacity: 0.08 }}
             contentStyle={{ border: '2px solid currentColor', borderRadius: 0, fontFamily: 'var(--font-mono)', fontSize: 12 }}
