@@ -34,4 +34,11 @@ describe('detectarEstancamiento', () => {
     const r = detectarEstancamiento(pts([100, 100, 110, 108]), 3);
     expect(r.estancado).toBe(false);
   });
+
+  it('respeta un n distinto del default (n=2)', () => {
+    // 3 sesiones, n=2: reciente=max(últimas 2)=[100,100]=100; previo=max(primera)=105 → estancado
+    expect(detectarEstancamiento(pts([105, 100, 100]), 2).estancado).toBe(true);
+    // con un nuevo máximo en la última y n=2 → no estancado
+    expect(detectarEstancamiento(pts([100, 100, 106]), 2).estancado).toBe(false);
+  });
 });
