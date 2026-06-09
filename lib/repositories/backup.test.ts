@@ -71,7 +71,7 @@ it('al importar refresca updatedAt para que el sync los suba', async () => {
       gyms: [], exercises: [],
       routines: [{ id: 'r1', userId: null, nombre: 'R', orden: 0, archivada: false, updatedAt: antiguo, deletedAt: null }],
       routineExercises: [{ id: 're1', routineId: 'r1', exerciseId: 'seed-press-banca', orden: 0, updatedAt: antiguo, deletedAt: null }],
-      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [], coachMessages: [],
+      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [], coachMessages: [], bodyMetrics: [],
     },
   };
   const t0 = Date.now();
@@ -105,4 +105,14 @@ it('exporta e importa coachMessages', async () => {
   await db.coachMessages.clear();
   await importData(backup);
   expect((await db.coachMessages.get('b1'))?.contenido).toBe('hey');
+});
+
+it('exporta e importa bodyMetrics', async () => {
+  await db.bodyMetrics.clear();
+  await db.bodyMetrics.put({ id: 'bk1', userId: null, tipo: 'peso', valor: 79.5, fecha: 5, updatedAt: 5, deletedAt: null });
+  const backup = await exportData();
+  expect(backup.data.bodyMetrics).toHaveLength(1);
+  await db.bodyMetrics.clear();
+  await importData(backup);
+  expect((await db.bodyMetrics.get('bk1'))?.valor).toBe(79.5);
 });

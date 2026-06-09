@@ -71,3 +71,13 @@ it('coachMessages se aplican por id (LWW)', async () => {
   expect(m?.contenido).toBe('hola');
   expect(await db.coachMessages.count()).toBe(1);
 });
+
+it('bodyMetrics se aplican por id (LWW)', async () => {
+  await db.bodyMetrics.clear();
+  await applyIncoming([{ table: 'bodyMetrics', records: [
+    { id: 'bm1', userId: 'u1', tipo: 'peso', valor: 80, fecha: 100, updatedAt: 100, deletedAt: null },
+  ] as unknown as import('@/lib/db/types').SyncMeta[] }]);
+  const m = await db.bodyMetrics.get('bm1');
+  expect(m?.valor).toBe(80);
+  expect(await db.bodyMetrics.count()).toBe(1);
+});

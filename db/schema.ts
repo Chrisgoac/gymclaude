@@ -96,3 +96,10 @@ export const coachMessages = pgTable('coach_messages', {
   contenido: text('contenido').notNull(),
   createdAt: bigint('created_at', { mode: 'number' }).notNull(),
 });
+
+export const bodyMetrics = pgTable('body_metrics', {
+  ...sync,
+  tipo: text('tipo').notNull(),
+  valor: doublePrecision('valor').notNull(),
+  fecha: bigint('fecha', { mode: 'number' }).notNull(),
+});

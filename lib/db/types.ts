@@ -120,3 +120,13 @@ export interface CoachMessage extends SyncMeta {
   /** epoch ms; ordena el hilo. */
   createdAt: number;
 }
+
+export interface BodyMetric extends SyncMeta {
+  userId: string | null;
+  /** clave predefinida ('peso','cintura',...) o personalizada. */
+  tipo: string;
+  /** kg para peso, cm para medidas (o la unidad de la personalizada). */
+  valor: number;
+  /** epoch ms; ordena la serie. */
+  fecha: number;
+}
