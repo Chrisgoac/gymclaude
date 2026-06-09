@@ -17,14 +17,15 @@ export async function listTipos(): Promise<string[]> {
 }
 
 /** Añade una medición. `fecha` por defecto = ahora. */
-export async function addMetric(tipo: string, valor: number, fecha: number = now()): Promise<BodyMetric> {
+export async function addMetric(tipo: string, valor: number, fecha?: number): Promise<BodyMetric> {
+  const ts = now();
   const m: BodyMetric = {
     id: crypto.randomUUID(),
     userId: null,
     tipo,
     valor,
-    fecha,
-    updatedAt: now(),
+    fecha: fecha ?? ts,
+    updatedAt: ts,
     deletedAt: null,
   };
   await db.bodyMetrics.put(m);
