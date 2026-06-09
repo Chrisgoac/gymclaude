@@ -5,6 +5,7 @@ import {
   estimar1RM, getExerciseProgress, getExercisePRs, getVolumeByMuscle,
   listSessionSummaries, getCurrentStreakDays, getPeriodSummary, getWeeklyVolume,
   listEstancados, getWeeklySummary, getPRsThisWeek,
+  getLastTrainedByMuscle, weeklyVolumeDeltas,
 } from '@/lib/repositories/stats';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -334,4 +335,37 @@ it('getPRsThisWeek no marca PR si igualas el peso previo sin superarlo', async (
   await seedSet('eq2', 'pr-eq', NOW_WED, 60); // mismo peso y reps → ni peso ni 1RM superan
   const prs = await getPRsThisWeek('geq', NOW_WED);
   expect(prs.map((p) => p.exerciseId)).not.toContain('pr-eq');
+});
+
+it('getLastTrainedByMuscle devuelve la última fecha por grupo y null si nunca', async () => {
+  await db.exercises.put({ id: 'lt-pecho', userId: null, nombre: 'P', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  const s1 = { id: 'lt-s1', userId: null, gymId: 'glt', fecha: 1000, updatedAt: 1, deletedAt: null };
+  const s2 = { id: 'lt-s2', userId: null, gymId: 'glt', fecha: 5000, updatedAt: 1, deletedAt: null };
+  await db.workoutSessions.bulkPut([s1, s2]);
+  await db.loggedExercises.bulkPut([
+    { id: 'lt-le1', sessionId: 'lt-s1', exerciseId: 'lt-pecho', orden: 0, updatedAt: 1, deletedAt: null },
+    { id: 'lt-le2', sessionId: 'lt-s2', exerciseId: 'lt-pecho', orden: 0, updatedAt: 1, deletedAt: null },
+  ]);
+  const r = await getLastTrainedByMuscle('glt');
+  expect(r.pecho).toBe(5000);
+  expect(r.gemelo).toBeNull();
+});
+
+it('weeklyVolumeDeltas calcula el % vs la barra anterior (primera = null)', () => {
+  const out = weeklyVolumeDeltas([
+    { semanaInicioTs: 1, volumen: 100 },
+    { semanaInicioTs: 2, volumen: 150 },
+    { semanaInicioTs: 3, volumen: 75 },
+  ]);
+  expect(out[0].deltaPct).toBeNull();
+  expect(out[1].deltaPct).toBe(50);
+  expect(out[2].deltaPct).toBe(-50);
+});
+
+it('weeklyVolumeDeltas deltaPct null si la semana previa tuvo 0 volumen', () => {
+  const out = weeklyVolumeDeltas([
+    { semanaInicioTs: 1, volumen: 0 },
+    { semanaInicioTs: 2, volumen: 100 },
+  ]);
+  expect(out[1].deltaPct).toBeNull();
 });
