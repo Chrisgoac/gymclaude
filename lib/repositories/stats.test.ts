@@ -351,6 +351,20 @@ it('getLastTrainedByMuscle devuelve la última fecha por grupo y null si nunca',
   expect(r.gemelo).toBeNull();
 });
 
+it('getLastTrainedByMuscle ignora sesiones de otro gym', async () => {
+  await db.exercises.put({ id: 'lti-pecho', userId: null, nombre: 'P', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await db.workoutSessions.bulkPut([
+    { id: 'lti-g', userId: null, gymId: 'gA', fecha: 5000, updatedAt: 1, deletedAt: null },
+    { id: 'lti-o', userId: null, gymId: 'gB', fecha: 9999, updatedAt: 1, deletedAt: null },
+  ]);
+  await db.loggedExercises.bulkPut([
+    { id: 'lti-leg', sessionId: 'lti-g', exerciseId: 'lti-pecho', orden: 0, updatedAt: 1, deletedAt: null },
+    { id: 'lti-leo', sessionId: 'lti-o', exerciseId: 'lti-pecho', orden: 0, updatedAt: 1, deletedAt: null },
+  ]);
+  const r = await getLastTrainedByMuscle('gA');
+  expect(r.pecho).toBe(5000); // ignora la sesión de gB (9999)
+});
+
 it('weeklyVolumeDeltas calcula el % vs la barra anterior (primera = null)', () => {
   const out = weeklyVolumeDeltas([
     { semanaInicioTs: 1, volumen: 100 },
