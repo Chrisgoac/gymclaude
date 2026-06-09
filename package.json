@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",
+    "@ai-sdk/react": "^3.0.200",
     "@aws-sdk/client-s3": "^3.1053.0",
     "@base-ui/react": "^1.5.0",
     "@clerk/nextjs": "^7.4.1",
