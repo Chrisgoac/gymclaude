@@ -38,7 +38,7 @@ export function MuscleBalance({
         const descuidado = lastTrained != null && (ult == null || (dias !== null && dias > UMBRAL_DESCUIDADO_DIAS));
         const meta = objetivos?.[g];
         const volSem = volumenSemana?.[g] ?? 0;
-        const metaPct = meta && meta > 0 ? Math.min(100, Math.round((volSem / meta) * 100)) : null;
+        const metaPct = meta && meta > 0 && volumenSemana != null ? Math.min(100, Math.round((volSem / meta) * 100)) : null;
         return (
           <div key={g}>
             <div className="label-mono mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
