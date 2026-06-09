@@ -12,6 +12,7 @@ import {
 import type { BodyMetric } from '@/lib/db/types';
 import { BodyForm } from '@/components/body-form';
 import { BodyMetricCard } from '@/components/body-metric-card';
+import { ProgressPhotosSection } from '@/components/progress-photos-section';
 
 export default function CuerpoPage() {
   const metrics = useLiveQuery(() => listAllMetrics(), []);
@@ -59,6 +60,8 @@ export default function CuerpoPage() {
           ))}
         </div>
       )}
+
+      <ProgressPhotosSection />
     </div>
   );
 }
