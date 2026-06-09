@@ -4,11 +4,12 @@ import { SignInButton, Show, UserButton } from '@clerk/nextjs';
 import { SyncProvider } from '@/components/sync-provider';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Settings } from 'lucide-react';
+import { Settings, Sparkles } from 'lucide-react';
 
 export function AuthHeader() {
   const pathname = usePathname();
   const ajustesActivo = pathname.startsWith('/ajustes');
+  const coachActivo = pathname.startsWith('/coach');
 
   return (
     <header className="sticky top-0 z-30 border-b-2 border-foreground bg-card">
@@ -25,8 +26,19 @@ export function AuthHeader() {
         </div>
         <div className="flex items-center gap-3">
           <Link
+            href="/coach"
+            aria-label="Coach IA"
+            aria-current={coachActivo ? 'page' : undefined}
+            className={`grid size-8 place-items-center border-2 border-foreground transition-transform active:translate-x-[1px] active:translate-y-[1px] ${
+              coachActivo ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground'
+            }`}
+          >
+            <Sparkles className="size-4" strokeWidth={2} aria-hidden="true" />
+          </Link>
+          <Link
             href="/ajustes"
             aria-label="Ajustes"
+            aria-current={ajustesActivo ? 'page' : undefined}
             className={`grid size-8 place-items-center border-2 border-foreground transition-transform active:translate-x-[1px] active:translate-y-[1px] ${
               ajustesActivo ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground'
             }`}
