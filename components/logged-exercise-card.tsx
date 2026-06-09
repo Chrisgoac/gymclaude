@@ -46,9 +46,9 @@ export function LoggedExerciseCard({
     [routineId, loggedExercise.exerciseId],
   );
   const estancado = useLiveQuery(async () => {
-    const points = await getExerciseProgress(loggedExercise.exerciseId, gymId);
+    const points = await getExerciseProgress(loggedExercise.exerciseId, gymId, 0, sessionId);
     return detectarEstancamiento(points).estancado;
-  }, [loggedExercise.exerciseId, gymId]);
+  }, [loggedExercise.exerciseId, gymId, sessionId]);
   const [restKey, setRestKey] = useState(0);
   const [modo] = useModoProgresion();
   const [incrementos] = useIncrementos();

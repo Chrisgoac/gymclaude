@@ -9,8 +9,13 @@ export function estimar1RM(peso: number, reps: number): number {
   return Math.round(peso * (1 + reps / 30) * 10) / 10;
 }
 
-async function setsDeEjercicio(exerciseId: string, gymId?: string | null): Promise<{ set: LoggedSet; fecha: number }[]> {
-  const les = activo(await db.loggedExercises.where('exerciseId').equals(exerciseId).toArray());
+async function setsDeEjercicio(
+  exerciseId: string,
+  gymId?: string | null,
+  excludeSessionId?: string,
+): Promise<{ set: LoggedSet; fecha: number }[]> {
+  const les = activo(await db.loggedExercises.where('exerciseId').equals(exerciseId).toArray())
+    .filter((le) => le.sessionId !== excludeSessionId);
   if (les.length === 0) return [];
   const sessionIds = [...new Set(les.map((le) => le.sessionId))];
   const sessions = await db.workoutSessions.bulkGet(sessionIds);
@@ -41,8 +46,9 @@ export async function getExerciseProgress(
   exerciseId: string,
   gymId?: string | null,
   sinceTs = 0,
+  excludeSessionId?: string,
 ): Promise<ExerciseProgressPoint[]> {
-  const data = await setsDeEjercicio(exerciseId, gymId);
+  const data = await setsDeEjercicio(exerciseId, gymId, excludeSessionId);
   const byFecha = new Map<number, LoggedSet[]>();
   for (const { set, fecha } of data) {
     const arr = byFecha.get(fecha) ?? [];
