@@ -56,4 +56,14 @@ describe('POST /api/coach', () => {
     expect(opts.system).toContain('Sentadilla');
     expect(await res.text()).toBe('stream-ok');
   });
+  it('400 con body no-JSON', async () => {
+    auth.mockResolvedValue({ userId: 'u1' });
+    const res = await POST(new Request('http://localhost/api/coach', { method: 'POST', body: 'no-json{' }));
+    expect(res.status).toBe(400);
+  });
+  it('400 si messages no es un array', async () => {
+    auth.mockResolvedValue({ userId: 'u1' });
+    const res = await POST(new Request('http://localhost/api/coach', { method: 'POST', body: JSON.stringify({ snapshot: {} }) }));
+    expect(res.status).toBe(400);
+  });
 });
