@@ -22,6 +22,7 @@ export const SYNCABLE_TABLES: SyncableTable[] = [
   { name: 'exercisePhotos', table: asSync(db.exercisePhotos) },
   { name: 'userSettings', table: asSync(db.userSettings) },
   { name: 'coachMessages', table: asSync(db.coachMessages) },
+  { name: 'bodyMetrics', table: asSync(db.bodyMetrics) },
 ];
 
 export async function collectDirty(sinceUpdatedAt: number): Promise<TableChanges[]> {

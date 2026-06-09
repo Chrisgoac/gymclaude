@@ -60,6 +60,13 @@ describe('collectDirty', () => {
     expect(changes.find((c) => c.table === 'coachMessages')?.records).toHaveLength(1);
   });
 
+  it('sincroniza bodyMetrics', async () => {
+    await db.bodyMetrics.clear();
+    await db.bodyMetrics.put({ id: 'bm-c1', userId: null, tipo: 'peso', valor: 80, fecha: 1, updatedAt: 1000, deletedAt: null });
+    const changes = await collectDirty(0);
+    expect(changes.find((c) => c.table === 'bodyMetrics')?.records).toHaveLength(1);
+  });
+
   it('sólo sincroniza ejercicios personalizados, no los del catálogo (seed)', async () => {
     await db.exercises.put({
       id: 'seed-x', userId: null, nombre: 'Seed', grupoMuscular: 'pecho',
