@@ -112,3 +112,11 @@ export interface UserSetting extends SyncMeta {
   /** Valor serializado como JSON (número, booleano u objeto). */
   valor: string;
 }
+
+export interface CoachMessage extends SyncMeta {
+  userId: string | null;
+  rol: 'user' | 'assistant';
+  contenido: string;
+  /** epoch ms; ordena el hilo. */
+  createdAt: number;
+}

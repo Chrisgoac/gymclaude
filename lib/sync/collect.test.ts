@@ -53,6 +53,13 @@ describe('collectDirty', () => {
     expect(changes.find((c) => c.table === 'userSettings')?.records).toHaveLength(1);
   });
 
+  it('sincroniza coachMessages', async () => {
+    await db.coachMessages.clear();
+    await db.coachMessages.put({ id: 'cm1', userId: null, rol: 'user', contenido: 'q', createdAt: 1, updatedAt: 1000, deletedAt: null });
+    const changes = await collectDirty(0);
+    expect(changes.find((c) => c.table === 'coachMessages')?.records).toHaveLength(1);
+  });
+
   it('sólo sincroniza ejercicios personalizados, no los del catálogo (seed)', async () => {
     await db.exercises.put({
       id: 'seed-x', userId: null, nombre: 'Seed', grupoMuscular: 'pecho',

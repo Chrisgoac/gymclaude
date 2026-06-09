@@ -71,7 +71,7 @@ it('al importar refresca updatedAt para que el sync los suba', async () => {
       gyms: [], exercises: [],
       routines: [{ id: 'r1', userId: null, nombre: 'R', orden: 0, archivada: false, updatedAt: antiguo, deletedAt: null }],
       routineExercises: [{ id: 're1', routineId: 'r1', exerciseId: 'seed-press-banca', orden: 0, updatedAt: antiguo, deletedAt: null }],
-      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [],
+      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [], coachMessages: [],
     },
   };
   const t0 = Date.now();
@@ -95,4 +95,14 @@ it('exporta e importa userSettings', async () => {
   await importData(backup);
   const row = await db.userSettings.get('objetivoSemanal');
   expect(row?.valor).toBe('4');
+});
+
+it('exporta e importa coachMessages', async () => {
+  await db.coachMessages.clear();
+  await db.coachMessages.put({ id: 'b1', userId: null, rol: 'assistant', contenido: 'hey', createdAt: 5, updatedAt: 5, deletedAt: null });
+  const backup = await exportData();
+  expect(backup.data.coachMessages).toHaveLength(1);
+  await db.coachMessages.clear();
+  await importData(backup);
+  expect((await db.coachMessages.get('b1'))?.contenido).toBe('hey');
 });

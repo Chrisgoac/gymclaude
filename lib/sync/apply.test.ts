@@ -61,3 +61,13 @@ it('userSettings converge por id-clave (LWW)', async () => {
   expect(row!.valor).toBe('"doble"'); // gana el updatedAt mayor
   expect(await db.userSettings.count()).toBe(1); // mismo id → no duplica
 });
+
+it('coachMessages se aplican por id (LWW)', async () => {
+  await db.coachMessages.clear();
+  await applyIncoming([{ table: 'coachMessages', records: [
+    { id: 'm1', userId: 'u1', rol: 'user', contenido: 'hola', createdAt: 100, updatedAt: 100, deletedAt: null },
+  ] as unknown as import('@/lib/db/types').SyncMeta[] }]);
+  const m = await db.coachMessages.get('m1');
+  expect(m?.contenido).toBe('hola');
+  expect(await db.coachMessages.count()).toBe(1);
+});
