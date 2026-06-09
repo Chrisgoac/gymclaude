@@ -28,6 +28,7 @@ export function AuthHeader() {
           <Link
             href="/coach"
             aria-label="Coach IA"
+            aria-current={coachActivo ? 'page' : undefined}
             className={`grid size-8 place-items-center border-2 border-foreground transition-transform active:translate-x-[1px] active:translate-y-[1px] ${
               coachActivo ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground'
             }`}
@@ -37,6 +38,7 @@ export function AuthHeader() {
           <Link
             href="/ajustes"
             aria-label="Ajustes"
+            aria-current={ajustesActivo ? 'page' : undefined}
             className={`grid size-8 place-items-center border-2 border-foreground transition-transform active:translate-x-[1px] active:translate-y-[1px] ${
               ajustesActivo ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground'
             }`}

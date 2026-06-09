@@ -14,7 +14,7 @@ export default function EntrenarPage() {
       <Link
         href="/coach"
         aria-label="Pregunta al coach"
-        className="brutal-box flex items-center justify-between gap-3 px-3 py-2.5 transition-transform active:translate-x-[2px] active:translate-y-[2px]"
+        className="brutal-box flex items-center justify-between gap-3 px-3 py-2.5 transition-transform active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_0_var(--color-foreground)]"
       >
         <span className="flex items-center gap-2">
           <Sparkles className="size-4 text-primary" strokeWidth={2} aria-hidden="true" />
