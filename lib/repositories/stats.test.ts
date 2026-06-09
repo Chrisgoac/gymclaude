@@ -4,6 +4,7 @@ import { startSession, addLoggedExercise, addSet } from '@/lib/repositories/work
 import {
   estimar1RM, getExerciseProgress, getExercisePRs, getVolumeByMuscle,
   listSessionSummaries, getCurrentStreakDays, getPeriodSummary, getWeeklyVolume,
+  listEstancados,
 } from '@/lib/repositories/stats';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -157,6 +158,26 @@ describe('getWeeklyVolume', () => {
     const le = await addLoggedExercise(a.id, 'seed-sentadilla');
     await addSet(le.id, { peso: 100, reps: 5 });
     expect(await getWeeklyVolume(0, 'gymB')).toHaveLength(0);
+  });
+});
+
+describe('listEstancados', () => {
+  it('listEstancados detecta un ejercicio con 1RM plano (4 sesiones) y respeta el gym', async () => {
+    await db.exercises.put({
+      id: 'ex-est', userId: null, nombre: 'Press estancado', grupoMuscular: 'pecho',
+      equipamiento: 'maquina', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null,
+    });
+    for (let i = 0; i < 4; i++) {
+      const s = { id: `s${i}`, userId: null, gymId: 'g1', fecha: 1000 + i * 86400000, updatedAt: 1, deletedAt: null };
+      await db.workoutSessions.put(s);
+      const le = { id: `le${i}`, sessionId: s.id, exerciseId: 'ex-est', orden: 0, updatedAt: 1, deletedAt: null };
+      await db.loggedExercises.put(le);
+      await db.loggedSets.put({ id: `set${i}`, loggedExerciseId: le.id, orden: 0, peso: 40, reps: 10, updatedAt: 1, deletedAt: null });
+    }
+    const enG1 = await listEstancados('g1');
+    expect(enG1.map((e) => e.exerciseId)).toContain('ex-est');
+    const enG2 = await listEstancados('g2');
+    expect(enG2.map((e) => e.exerciseId)).not.toContain('ex-est');
   });
 });
 

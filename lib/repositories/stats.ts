@@ -1,5 +1,6 @@
 import { db } from '@/lib/db/database';
 import type { LoggedSet, MuscleGroup, WorkoutSession } from '@/lib/db/types';
+import { detectarEstancamiento } from '@/lib/insights';
 
 const activo = <T extends { deletedAt: number | null }>(arr: T[]) => arr.filter((x) => x.deletedAt === null);
 
@@ -202,4 +203,35 @@ export async function getCurrentStreakDays(): Promise<number> {
     cursor.setDate(cursor.getDate() - 1);
   }
   return streak;
+}
+
+export interface Estancado {
+  exerciseId: string;
+  nombre: string;
+  sesionesSinMejora: number;
+  ultimaMejoraFecha: number | null;
+}
+
+/** Ejercicios entrenados (en ese gym) cuyo mejor 1RM estimado está estancado. */
+export async function listEstancados(gymId?: string | null): Promise<Estancado[]> {
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId);
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  if (sessionIds.size === 0) return [];
+  const les = activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
+  const exerciseIds = [...new Set(les.map((le) => le.exerciseId))];
+  const out: Estancado[] = [];
+  for (const exerciseId of exerciseIds) {
+    const points = await getExerciseProgress(exerciseId, gymId);
+    const e = detectarEstancamiento(points);
+    if (!e.estancado) continue;
+    const ex = await db.exercises.get(exerciseId);
+    out.push({
+      exerciseId,
+      nombre: ex?.nombre ?? '—',
+      sesionesSinMejora: e.sesionesSinMejora,
+      ultimaMejoraFecha: e.ultimaMejoraFecha,
+    });
+  }
+  return out.sort((a, b) => b.sesionesSinMejora - a.sesionesSinMejora);
 }
