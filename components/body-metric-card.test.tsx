@@ -17,14 +17,14 @@ const bm = (id: string, valor: number, fecha: number): BodyMetric => ({
 beforeEach(() => { deleteMetric.mockClear(); });
 
 it('muestra label, valor actual y delta', () => {
-  render(<BodyMetricCard tipo="peso" def={{ label: 'Peso', unidad: 'kg' }} metrics={[bm('a', 80, 1000), bm('b', 77, 2000)]} />);
+  render(<BodyMetricCard def={{ label: 'Peso', unidad: 'kg' }} metrics={[bm('a', 80, 1000), bm('b', 77, 2000)]} />);
   expect(screen.getByText('Peso')).toBeInTheDocument();
   expect(screen.getAllByText(/77/).length).toBeGreaterThan(0);
   expect(screen.getByText(/-3/)).toBeInTheDocument(); // delta
 });
 
 it('el botón borrar llama a deleteMetric con el id', async () => {
-  render(<BodyMetricCard tipo="peso" def={{ label: 'Peso', unidad: 'kg' }} metrics={[bm('a', 80, 1000)]} />);
+  render(<BodyMetricCard def={{ label: 'Peso', unidad: 'kg' }} metrics={[bm('a', 80, 1000)]} />);
   await userEvent.click(screen.getByRole('button', { name: /eliminar/i }));
   expect(deleteMetric).toHaveBeenCalledWith('a');
 });

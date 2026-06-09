@@ -7,12 +7,9 @@ import { deleteMetric } from '@/lib/repositories/body';
 import { BodyMetricChart } from '@/components/body-metric-chart';
 
 export function BodyMetricCard({
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  tipo,
   def,
   metrics,
 }: {
-  tipo: string;
   def: MetricaDef;
   metrics: BodyMetric[];
 }) {
