@@ -129,3 +129,20 @@ it('recogerSnapshot reúne las señales reales en el snapshot', async () => {
   expect(pecho?.volumenSemana).toBe(500);
   expect(pecho?.diasSinEntrenar).toBe(0);
 });
+
+it('recogerSnapshot incluye peso y medidas corporales', async () => {
+  await Promise.all([
+    db.workoutSessions.clear(), db.loggedExercises.clear(), db.loggedSets.clear(),
+    db.exercises.clear(), db.userSettings.clear(), db.bodyMetrics.clear(),
+  ]);
+  const NOW = new Date('2026-06-10T12:00:00').getTime();
+  const DIAMS = 86400000;
+  await db.bodyMetrics.bulkPut([
+    { id: 'p1', userId: null, tipo: 'peso', valor: 80, fecha: NOW - 20 * DIAMS, updatedAt: 1, deletedAt: null },
+    { id: 'p2', userId: null, tipo: 'peso', valor: 78, fecha: NOW - 1 * DIAMS, updatedAt: 1, deletedAt: null },
+    { id: 'c1', userId: null, tipo: 'cintura', valor: 85, fecha: NOW - 2 * DIAMS, updatedAt: 1, deletedAt: null },
+  ]);
+  const snap = await recogerSnapshot('g1', NOW);
+  expect(snap.cuerpo.peso).toEqual({ actual: 78, delta4sem: -2 });
+  expect(snap.cuerpo.medidas.map((m) => m.metrica)).toContain('Cintura');
+});

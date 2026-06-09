@@ -7,6 +7,8 @@ import {
   getVolumenSemanaByMuscle, getLastTrainedByMuscle,
 } from '@/lib/repositories/stats';
 import { getSetting } from '@/lib/repositories/user-settings';
+import { listAllMetrics } from '@/lib/repositories/body';
+import { resolverMetrica, CLAVE_PERSONALIZADAS, type MetricaPersonalizada } from '@/lib/body-metrics';
 
 const DIA = 86400000;
 const MAX_ESTANCADOS = 5;
@@ -108,7 +110,7 @@ export function construirSnapshot(input: SnapshotInput): CoachSnapshot {
 
 /** Consulta las señales de A/C (filtradas por gym) y arma el snapshot del coach. */
 export async function recogerSnapshot(gymId?: string | null, now: number = Date.now()): Promise<CoachSnapshot> {
-  const [estancados, semana, prs, volumenSemanaPorGrupo, lastTrained, objetivoSemanalRaw, objetivosVolumenRaw] = await Promise.all([
+  const [estancados, semana, prs, volumenSemanaPorGrupo, lastTrained, objetivoSemanalRaw, objetivosVolumenRaw, bodyMetrics, personalizadasRaw] = await Promise.all([
     listEstancados(gymId),
     getWeeklySummary(gymId, now),
     getPRsThisWeek(gymId, now),
@@ -116,7 +118,23 @@ export async function recogerSnapshot(gymId?: string | null, now: number = Date.
     getLastTrainedByMuscle(gymId),
     getSetting<number>('objetivoSemanal'),
     getSetting<Partial<Record<MuscleGroup, number>>>('objetivosVolumen'),
+    listAllMetrics(),
+    getSetting<MetricaPersonalizada[]>(CLAVE_PERSONALIZADAS),
   ]);
+
+  const personalizadas = personalizadasRaw ?? [];
+  const porTipo = new Map<string, { valor: number; fecha: number }[]>();
+  for (const m of bodyMetrics) {
+    const arr = porTipo.get(m.tipo) ?? [];
+    arr.push({ valor: m.valor, fecha: m.fecha });
+    porTipo.set(m.tipo, arr);
+  }
+  const cuerpo = [...porTipo.entries()].map(([tipo, entradas]) => ({
+    tipo,
+    label: resolverMetrica(tipo, personalizadas).label,
+    entradas,
+  }));
+
   return construirSnapshot({
     estancados,
     semana,
@@ -126,6 +144,6 @@ export async function recogerSnapshot(gymId?: string | null, now: number = Date.
     lastTrained,
     objetivosVolumen: objetivosVolumenRaw ?? {},
     ahora: now,
-    cuerpo: [],
+    cuerpo,
   });
 }
