@@ -30,5 +30,7 @@ export async function addMessage(rol: CoachMessage['rol'], contenido: string): P
 export async function clearThread(): Promise<void> {
   const ts = now();
   const all = activo(await db.coachMessages.toArray());
-  for (const m of all) await db.coachMessages.update(m.id, { deletedAt: ts, updatedAt: ts });
+  await db.transaction('rw', db.coachMessages, async () => {
+    for (const m of all) await db.coachMessages.update(m.id, { deletedAt: ts, updatedAt: ts });
+  });
 }

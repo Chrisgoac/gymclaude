@@ -33,5 +33,7 @@ describe('coach repo', () => {
     await clearThread();
     expect(await listMessages()).toHaveLength(0);
     expect(await db.coachMessages.count()).toBe(2);
+    const rows = await db.coachMessages.toArray();
+    expect(rows.every((r) => r.deletedAt !== null)).toBe(true);
   });
 });
