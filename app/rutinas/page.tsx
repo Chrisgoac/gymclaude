@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Sparkles } from 'lucide-react';
 import { RoutineList } from '@/components/routine-list';
+import { ActiveMesocycleCard } from '@/components/active-mesocycle-card';
 
 export default function RutinasPage() {
   return (
@@ -17,6 +18,7 @@ export default function RutinasPage() {
           </Link>
         </div>
       </div>
+      <ActiveMesocycleCard />
       <RoutineList />
     </div>
   );

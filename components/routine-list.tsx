@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { listRoutines } from '@/lib/repositories/routines';
+import { listStandaloneRoutines } from '@/lib/repositories/routines';
 
 export function RoutineList() {
-  const routines = useLiveQuery(() => listRoutines(), []);
+  const routines = useLiveQuery(() => listStandaloneRoutines(), []);
 
   if (routines === undefined) return <p className="text-muted-foreground">Cargando…</p>;
   if (routines.length === 0) return <p className="text-muted-foreground">Aún no tienes rutinas.</p>;
