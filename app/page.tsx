@@ -1,4 +1,5 @@
 import { StartWorkout } from '@/components/start-workout';
+import { WeeklyDigestMini } from '@/components/weekly-digest-mini';
 
 export default function EntrenarPage() {
   return (
@@ -7,6 +8,7 @@ export default function EntrenarPage() {
         <p className="label-mono text-[11px] text-muted-foreground">Listo para mover hierro</p>
         <h1 className="text-5xl">Entrenar</h1>
       </div>
+      <WeeklyDigestMini />
       <StartWorkout />
     </div>
   );

@@ -4,10 +4,12 @@ import { startSession, addLoggedExercise, addSet } from '@/lib/repositories/work
 import {
   estimar1RM, getExerciseProgress, getExercisePRs, getVolumeByMuscle,
   listSessionSummaries, getCurrentStreakDays, getPeriodSummary, getWeeklyVolume,
-  listEstancados,
+  listEstancados, getWeeklySummary, getPRsThisWeek,
 } from '@/lib/repositories/stats';
 
 const DAY = 24 * 60 * 60 * 1000;
+// 2026-06-10 es miércoles. Semana actual: lun 8 … dom 14. Semana previa: lun 1 … dom 7.
+const NOW_WED = new Date('2026-06-10T12:00:00').getTime();
 
 beforeEach(async () => {
   await db.workoutSessions.clear();
@@ -247,4 +249,89 @@ describe('filtro por gimnasio', () => {
     expect(sinB).toHaveLength(1);
     expect(sinB[0].fecha).toBe(1000); // solo la sesión A
   });
+});
+
+it('getWeeklySummary cuenta sesiones de la semana y compara volumen vs previa', async () => {
+  const seed = async (id: string, fecha: number, peso: number) => {
+    await db.workoutSessions.put({ id, userId: null, gymId: 'g1', fecha, updatedAt: 1, deletedAt: null });
+    const le = { id: `${id}-le`, sessionId: id, exerciseId: 'ws-ex', orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.put(le);
+    await db.loggedSets.put({ id: `${id}-set`, loggedExerciseId: le.id, orden: 0, peso, reps: 10, updatedAt: 1, deletedAt: null });
+  };
+  await seed('ws-a', NOW_WED, 50);
+  await seed('ws-b', NOW_WED - 2 * DAY, 40);
+  await seed('ws-c', NOW_WED - 7 * DAY, 30);
+
+  const r = await getWeeklySummary('g1', NOW_WED);
+  expect(r.sesiones).toBe(2);
+  expect(r.volumenSemana).toBe(900);
+  expect(r.volumenSemanaPrevia).toBe(300);
+  expect(r.deltaPct).toBe(200);
+});
+
+it('getWeeklySummary deltaPct null sin semana previa', async () => {
+  await db.workoutSessions.put({ id: 'wx-a', userId: null, gymId: 'g9', fecha: NOW_WED, updatedAt: 1, deletedAt: null });
+  const le = { id: 'wx-le', sessionId: 'wx-a', exerciseId: 'wx-ex', orden: 0, updatedAt: 1, deletedAt: null };
+  await db.loggedExercises.put(le);
+  await db.loggedSets.put({ id: 'wx-set', loggedExerciseId: 'wx-le', orden: 0, peso: 20, reps: 5, updatedAt: 1, deletedAt: null });
+  const r = await getWeeklySummary('g9', NOW_WED);
+  expect(r.sesiones).toBe(1);
+  expect(r.volumenSemana).toBe(100);
+  expect(r.volumenSemanaPrevia).toBe(0);
+  expect(r.deltaPct).toBeNull();
+});
+
+it('getPRsThisWeek detecta PR de peso esta semana y excluye sin-mejora / sin-histórico', async () => {
+  const seedSet = async (sid: string, exerciseId: string, fecha: number, peso: number) => {
+    await db.workoutSessions.put({ id: sid, userId: null, gymId: 'gpr', fecha, updatedAt: 1, deletedAt: null });
+    const le = { id: `${sid}-le`, sessionId: sid, exerciseId, orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.put(le);
+    await db.loggedSets.put({ id: `${sid}-set`, loggedExerciseId: le.id, orden: 0, peso, reps: 5, updatedAt: 1, deletedAt: null });
+  };
+  await db.exercises.put({ id: 'pr-sube', userId: null, nombre: 'Sube', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await db.exercises.put({ id: 'pr-baja', userId: null, nombre: 'Baja', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await db.exercises.put({ id: 'pr-nuevo', userId: null, nombre: 'Nuevo', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+
+  await seedSet('pr-s1', 'pr-sube', NOW_WED - 7 * DAY, 60);
+  await seedSet('pr-s2', 'pr-sube', NOW_WED, 65);
+  await seedSet('pr-b1', 'pr-baja', NOW_WED - 7 * DAY, 80);
+  await seedSet('pr-b2', 'pr-baja', NOW_WED, 70);
+  await seedSet('pr-n1', 'pr-nuevo', NOW_WED, 50);
+
+  const prs = await getPRsThisWeek('gpr', NOW_WED);
+  const ids = prs.map((p) => p.exerciseId);
+  expect(ids).toContain('pr-sube');
+  expect(ids).not.toContain('pr-baja');
+  expect(ids).not.toContain('pr-nuevo');
+  expect(prs.find((p) => p.exerciseId === 'pr-sube')?.tipo).toBe('peso');
+});
+
+it('getPRsThisWeek detecta PR de 1RM (mismo/menor peso, más reps)', async () => {
+  const seedReps = async (sid: string, exerciseId: string, fecha: number, peso: number, reps: number) => {
+    await db.workoutSessions.put({ id: sid, userId: null, gymId: 'g1rm', fecha, updatedAt: 1, deletedAt: null });
+    const le = { id: `${sid}-le`, sessionId: sid, exerciseId, orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.put(le);
+    await db.loggedSets.put({ id: `${sid}-set`, loggedExerciseId: le.id, orden: 0, peso, reps, updatedAt: 1, deletedAt: null });
+  };
+  await db.exercises.put({ id: 'pr-1rm', userId: null, nombre: 'Reps', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await seedReps('r1', 'pr-1rm', NOW_WED - 7 * DAY, 80, 1); // previo: 1RM=80
+  await seedReps('r2', 'pr-1rm', NOW_WED, 70, 8);            // semana: peso menor pero 1RM≈88.7
+  const prs = await getPRsThisWeek('g1rm', NOW_WED);
+  const pr = prs.find((p) => p.exerciseId === 'pr-1rm');
+  expect(pr).toBeDefined();
+  expect(pr?.tipo).toBe('1rm');
+});
+
+it('getPRsThisWeek no marca PR si igualas el peso previo sin superarlo', async () => {
+  const seedSet = async (sid: string, exerciseId: string, fecha: number, peso: number) => {
+    await db.workoutSessions.put({ id: sid, userId: null, gymId: 'geq', fecha, updatedAt: 1, deletedAt: null });
+    const le = { id: `${sid}-le`, sessionId: sid, exerciseId, orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.put(le);
+    await db.loggedSets.put({ id: `${sid}-set`, loggedExerciseId: le.id, orden: 0, peso, reps: 5, updatedAt: 1, deletedAt: null });
+  };
+  await db.exercises.put({ id: 'pr-eq', userId: null, nombre: 'Eq', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await seedSet('eq1', 'pr-eq', NOW_WED - 7 * DAY, 60);
+  await seedSet('eq2', 'pr-eq', NOW_WED, 60); // mismo peso y reps → ni peso ni 1RM superan
+  const prs = await getPRsThisWeek('geq', NOW_WED);
+  expect(prs.map((p) => p.exerciseId)).not.toContain('pr-eq');
 });

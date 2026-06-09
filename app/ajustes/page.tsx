@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { GymManager } from '@/components/gym-manager';
 import { RoutineOrderManager } from '@/components/routine-order-manager';
 import { useSuggestNextRoutine, useModoProgresion, useIncrementos } from '@/lib/settings';
+import { useSetting } from '@/lib/use-setting';
 import { EQUIPMENTS } from '@/lib/db/types';
 import { equipmentLabel } from '@/lib/labels';
 import type { ModoProgresion } from '@/lib/progresion';
@@ -23,6 +24,7 @@ export default function AjustesPage() {
   const [sugerir, setSugerir] = useSuggestNextRoutine();
   const [modo, setModo] = useModoProgresion();
   const [incrementos, setIncrementos] = useIncrementos();
+  const [objetivoSemanal, setObjetivoSemanal] = useSetting<number>('objetivoSemanal', 3);
 
   async function exportar() {
     try {
@@ -110,6 +112,29 @@ export default function AjustesPage() {
         <p className="label-mono text-[10px] text-muted-foreground">
           Salto por defecto cuando no hay historial. Con historial, la app lo deduce de tus pesos.
         </p>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="label-mono text-[11px] text-muted-foreground">Objetivos</h2>
+        <label className="brutal-box flex items-center justify-between gap-3 px-3 py-2.5">
+          <span className="font-semibold">Sesiones objetivo por semana</span>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            key={objetivoSemanal}
+            defaultValue={objetivoSemanal}
+            className="w-20 border-2 border-input bg-card p-1 text-right text-sm tabular-nums"
+            onBlur={(e) => {
+              const n = Math.round(Number(e.target.value));
+              if (e.target.value.trim() === '' || Number.isNaN(n) || n < 1) {
+                e.target.value = String(objetivoSemanal);
+                return;
+              }
+              setObjetivoSemanal(n);
+            }}
+          />
+        </label>
       </section>
 
       <section className="space-y-3">

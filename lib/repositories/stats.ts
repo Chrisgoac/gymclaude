@@ -170,6 +170,43 @@ function inicioSemana(ts: number): number {
   return d.getTime();
 }
 
+export interface WeeklySummary {
+  sesiones: number;
+  volumenSemana: number;
+  volumenSemanaPrevia: number;
+  deltaPct: number | null;
+}
+
+/** Resumen de la semana ISO actual (lunes) vs la previa. `now` inyectable para tests. */
+export async function getWeeklySummary(gymId?: string | null, now: number = Date.now()): Promise<WeeklySummary> {
+  const inicioActual = inicioSemana(now);
+  // inicioActual - 1 ms cae en el domingo de la semana previa → inicioSemana lo lleva a su lunes.
+  const inicioPrevia = inicioSemana(inicioActual - 1);
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId)
+    .filter((s) => s.fecha >= inicioPrevia);
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  const les = sessionIds.size === 0
+    ? []
+    : activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
+  const volBySession = new Map<string, number>();
+  for (const le of les) {
+    const sets = activo(await db.loggedSets.where('loggedExerciseId').equals(le.id).toArray());
+    const vol = sets.reduce((acc, s) => acc + s.peso * s.reps, 0);
+    volBySession.set(le.sessionId, (volBySession.get(le.sessionId) ?? 0) + vol);
+  }
+  let sesiones = 0, volumenSemana = 0, volumenSemanaPrevia = 0;
+  for (const s of sessions) {
+    const vol = volBySession.get(s.id) ?? 0;
+    if (s.fecha >= inicioActual) { sesiones++; volumenSemana += vol; }
+    else { volumenSemanaPrevia += vol; }
+  }
+  const deltaPct = volumenSemanaPrevia > 0
+    ? Math.round(((volumenSemana - volumenSemanaPrevia) / volumenSemanaPrevia) * 100)
+    : null;
+  return { sesiones, volumenSemana, volumenSemanaPrevia, deltaPct };
+}
+
 export async function getWeeklyVolume(sinceTs = 0, gymId?: string | null): Promise<WeeklyVolumePoint[]> {
   const sessions = activo(await db.workoutSessions.toArray())
     .filter((s) => s.fecha >= sinceTs)
@@ -216,6 +253,47 @@ export interface Estancado {
   nombre: string;
   sesionesSinMejora: number;
   ultimaMejoraFecha: number | null;
+}
+
+/** Un PR batido esta semana. */
+export interface PRSemana {
+  exerciseId: string;
+  nombre: string;
+  tipo: 'peso' | '1rm';
+}
+
+/** Ejercicios que batieron su récord (peso o 1RM estimado) esta semana respecto a su histórico previo. */
+export async function getPRsThisWeek(gymId?: string | null, now: number = Date.now()): Promise<PRSemana[]> {
+  const inicio = inicioSemana(now);
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId)
+    .filter((s) => s.fecha >= inicio);
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  if (sessionIds.size === 0) return [];
+  const lesWeek = activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
+  const exerciseIds = [...new Set(lesWeek.map((le) => le.exerciseId))];
+  const exercises = await db.exercises.bulkGet(exerciseIds);
+  const nombreBy = new Map<string, string>();
+  for (const e of exercises) if (e) nombreBy.set(e.id, e.nombre);
+  const out: PRSemana[] = [];
+  for (const exerciseId of exerciseIds) {
+    const data = await setsDeEjercicio(exerciseId, gymId);
+    const week = data.filter((d) => d.fecha >= inicio);
+    const before = data.filter((d) => d.fecha < inicio);
+    if (week.length === 0 || before.length === 0) continue; // sin histórico previo → no es "batir"
+    const maxPesoWeek = Math.max(...week.map((d) => d.set.peso));
+    const maxPesoBefore = Math.max(...before.map((d) => d.set.peso));
+    if (maxPesoWeek > maxPesoBefore) {
+      out.push({ exerciseId, nombre: nombreBy.get(exerciseId) ?? '—', tipo: 'peso' });
+      continue;
+    }
+    const max1rmWeek = Math.max(...week.map((d) => estimar1RM(d.set.peso, d.set.reps)));
+    const max1rmBefore = Math.max(...before.map((d) => estimar1RM(d.set.peso, d.set.reps)));
+    if (max1rmWeek > max1rmBefore) {
+      out.push({ exerciseId, nombre: nombreBy.get(exerciseId) ?? '—', tipo: '1rm' });
+    }
+  }
+  return out;
 }
 
 /** Ejercicios entrenados (en ese gym) cuyo mejor 1RM estimado está estancado. */

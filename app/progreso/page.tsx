@@ -17,6 +17,7 @@ import { EstancadosList } from '@/components/estancados-list';
 import { PeriodSelector } from '@/components/period-selector';
 import { StatCard } from '@/components/stat-card';
 import { GymFilter } from '@/components/gym-filter';
+import { WeeklyDigest } from '@/components/weekly-digest';
 import { useGymFilter, filtroAGymId } from '@/lib/gym-filter';
 import { periodoASinceTs, type Periodo } from '@/lib/period';
 
@@ -44,10 +45,18 @@ export default function ProgresoPage() {
       <GymFilter />
       <PeriodSelector value={periodo} onChange={setPeriodo} />
 
-      <section className="grid grid-cols-3 gap-2">
-        <StatCard valor={`${racha ?? 0}`} unidad="🔥 racha días" destacado />
-        <StatCard valor={`${resumen?.sesiones ?? 0}`} unidad="sesiones" />
-        <StatCard valor={formatoVolumen(resumen?.volumen ?? 0)} unidad="volumen" />
+      <section className="space-y-2">
+        <h2 className="label-mono text-[10px] text-muted-foreground">Esta semana</h2>
+        <WeeklyDigest gymId={gymId} />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="label-mono text-[10px] text-muted-foreground">Periodo seleccionado</h2>
+        <div className="grid grid-cols-3 gap-2">
+          <StatCard valor={`${racha ?? 0}`} unidad="🔥 racha días" destacado />
+          <StatCard valor={`${resumen?.sesiones ?? 0}`} unidad="sesiones" />
+          <StatCard valor={formatoVolumen(resumen?.volumen ?? 0)} unidad="volumen" />
+        </div>
       </section>
 
       <section className="space-y-2">
