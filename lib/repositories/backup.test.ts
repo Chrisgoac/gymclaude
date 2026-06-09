@@ -71,7 +71,7 @@ it('al importar refresca updatedAt para que el sync los suba', async () => {
       gyms: [], exercises: [],
       routines: [{ id: 'r1', userId: null, nombre: 'R', orden: 0, archivada: false, updatedAt: antiguo, deletedAt: null }],
       routineExercises: [{ id: 're1', routineId: 'r1', exerciseId: 'seed-press-banca', orden: 0, updatedAt: antiguo, deletedAt: null }],
-      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [], coachMessages: [], bodyMetrics: [], progressPhotos: [],
+      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [], coachMessages: [], bodyMetrics: [], progressPhotos: [], mesocycles: [],
     },
   };
   const t0 = Date.now();
@@ -125,4 +125,14 @@ it('exporta e importa progressPhotos', async () => {
   await db.progressPhotos.clear();
   await importData(backup);
   expect((await db.progressPhotos.get('bk1'))?.key).toBe('k');
+});
+
+it('exporta e importa mesocycles', async () => {
+  await db.mesocycles.clear();
+  await db.mesocycles.put({ id: 'mb1', userId: null, nombre: 'H', objetivo: 'general', semanas: 5, diasPorSemana: 3, notas: null, progresion: [{ semana: 1, descarga: false, ajuste: 'x' }], fechaInicio: 5, updatedAt: 5, deletedAt: null });
+  const backup = await exportData();
+  expect(backup.data.mesocycles).toHaveLength(1);
+  await db.mesocycles.clear();
+  await importData(backup);
+  expect((await db.mesocycles.get('mb1'))?.nombre).toBe('H');
 });
