@@ -4,6 +4,7 @@ import { startSession, addLoggedExercise, addSet } from '@/lib/repositories/work
 import {
   estimar1RM, getExerciseProgress, getExercisePRs, getVolumeByMuscle,
   listSessionSummaries, getCurrentStreakDays, getPeriodSummary, getWeeklyVolume,
+  listEstancados,
 } from '@/lib/repositories/stats';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -160,6 +161,43 @@ describe('getWeeklyVolume', () => {
   });
 });
 
+describe('listEstancados', () => {
+  it('listEstancados detecta un ejercicio con 1RM plano (4 sesiones) y respeta el gym', async () => {
+    await db.exercises.put({
+      id: 'ex-est', userId: null, nombre: 'Press estancado', grupoMuscular: 'pecho',
+      equipamiento: 'maquina', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null,
+    });
+    for (let i = 0; i < 4; i++) {
+      const s = { id: `s${i}`, userId: null, gymId: 'g1', fecha: 1000 + i * 86400000, updatedAt: 1, deletedAt: null };
+      await db.workoutSessions.put(s);
+      const le = { id: `le${i}`, sessionId: s.id, exerciseId: 'ex-est', orden: 0, updatedAt: 1, deletedAt: null };
+      await db.loggedExercises.put(le);
+      await db.loggedSets.put({ id: `set${i}`, loggedExerciseId: le.id, orden: 0, peso: 40, reps: 10, updatedAt: 1, deletedAt: null });
+    }
+    const enG1 = await listEstancados('g1');
+    expect(enG1.map((e) => e.exerciseId)).toContain('ex-est');
+    const enG2 = await listEstancados('g2');
+    expect(enG2.map((e) => e.exerciseId)).not.toContain('ex-est');
+  });
+
+  it('listEstancados NO incluye un ejercicio que sigue mejorando', async () => {
+    await db.exercises.put({
+      id: 'ex-prog', userId: null, nombre: 'Press progresando', grupoMuscular: 'pecho',
+      equipamiento: 'maquina', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null,
+    });
+    const pesos = [40, 42.5, 45, 47.5]; // sube cada sesión → nuevo 1RM máx en la última
+    for (let i = 0; i < 4; i++) {
+      const s = { id: `sp${i}`, userId: null, gymId: 'gP', fecha: 2000 + i * 86400000, updatedAt: 1, deletedAt: null };
+      await db.workoutSessions.put(s);
+      const le = { id: `lep${i}`, sessionId: s.id, exerciseId: 'ex-prog', orden: 0, updatedAt: 1, deletedAt: null };
+      await db.loggedExercises.put(le);
+      await db.loggedSets.put({ id: `setp${i}`, loggedExerciseId: le.id, orden: 0, peso: pesos[i], reps: 10, updatedAt: 1, deletedAt: null });
+    }
+    const res = await listEstancados('gP');
+    expect(res.map((e) => e.exerciseId)).not.toContain('ex-prog');
+  });
+});
+
 describe('filtro por gimnasio', () => {
   it('getExercisePRs y getExerciseProgress filtran por gimnasio', async () => {
     const a = await startSession({ gymId: 'gymA' });
@@ -187,5 +225,26 @@ describe('filtro por gimnasio', () => {
     const volA = await getVolumeByMuscle(0, 'gymA');
     expect(volA.reduce((acc, v) => acc + v.volumen, 0)).toBe(500);
     expect(await getVolumeByMuscle(0, 'gymB')).toHaveLength(0);
+  });
+
+  it('getExerciseProgress excluye la sesión indicada (excludeSessionId)', async () => {
+    await db.exercises.put({
+      id: 'ex-exc', userId: null, nombre: 'X', grupoMuscular: 'pecho',
+      equipamiento: 'maquina', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null,
+    });
+    const sA = { id: 'exc-a', userId: null, gymId: 'g1', fecha: 1000, updatedAt: 1, deletedAt: null };
+    const sB = { id: 'exc-b', userId: null, gymId: 'g1', fecha: 2000, updatedAt: 1, deletedAt: null };
+    await db.workoutSessions.bulkPut([sA, sB]);
+    const leA = { id: 'exc-lea', sessionId: 'exc-a', exerciseId: 'ex-exc', orden: 0, updatedAt: 1, deletedAt: null };
+    const leB = { id: 'exc-leb', sessionId: 'exc-b', exerciseId: 'ex-exc', orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.bulkPut([leA, leB]);
+    await db.loggedSets.put({ id: 'exc-sa', loggedExerciseId: 'exc-lea', orden: 0, peso: 40, reps: 10, updatedAt: 1, deletedAt: null });
+    await db.loggedSets.put({ id: 'exc-sb', loggedExerciseId: 'exc-leb', orden: 0, peso: 50, reps: 10, updatedAt: 1, deletedAt: null });
+
+    const all = await getExerciseProgress('ex-exc', 'g1');
+    expect(all).toHaveLength(2);
+    const sinB = await getExerciseProgress('ex-exc', 'g1', 0, 'exc-b');
+    expect(sinB).toHaveLength(1);
+    expect(sinB[0].fecha).toBe(1000); // solo la sesión A
   });
 });

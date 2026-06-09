@@ -65,6 +65,24 @@ it('autorrellena la primera serie con la sugerencia y muestra el badge ▲ +5 kg
   expect((peso as HTMLInputElement).value).toBe('45');
 });
 
+it('muestra el badge ESTANCADO cuando el 1RM lleva 4 sesiones plano', async () => {
+  await db.exercises.put({
+    id: 'ex-st', userId: null, nombre: 'Curl', grupoMuscular: 'biceps',
+    equipamiento: 'mancuerna', tipo: 'aislamiento', esPersonalizado: false, updatedAt: 1, deletedAt: null,
+  });
+  for (let i = 0; i < 4; i++) {
+    const s = { id: `ps${i}`, userId: null, gymId: 'g1', fecha: 1000 + i * 86400000, updatedAt: 1, deletedAt: null };
+    await db.workoutSessions.put(s);
+    const le = { id: `ple${i}`, sessionId: s.id, exerciseId: 'ex-st', orden: 0, updatedAt: 1, deletedAt: null };
+    await db.loggedExercises.put(le);
+    await db.loggedSets.put({ id: `pset${i}`, loggedExerciseId: le.id, orden: 0, peso: 12, reps: 10, updatedAt: 1, deletedAt: null });
+  }
+  const sesion = await startSession({ gymId: 'g1' });
+  const le = await addLoggedExercise(sesion.id, 'ex-st');
+  render(<LoggedExerciseCard loggedExercise={le} sessionId={sesion.id} gymId="g1" />);
+  expect(await screen.findByText(/ESTANCADO/)).toBeInTheDocument();
+});
+
 it('muestra "Última vez" con el peso y reps del entreno anterior', async () => {
   const vieja = await startSession({});
   const leVieja = await addLoggedExercise(vieja.id, 'seed-press-banca');

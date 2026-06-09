@@ -1,5 +1,6 @@
 import { db } from '@/lib/db/database';
 import type { LoggedSet, MuscleGroup, WorkoutSession } from '@/lib/db/types';
+import { detectarEstancamiento } from '@/lib/insights';
 
 const activo = <T extends { deletedAt: number | null }>(arr: T[]) => arr.filter((x) => x.deletedAt === null);
 
@@ -8,8 +9,13 @@ export function estimar1RM(peso: number, reps: number): number {
   return Math.round(peso * (1 + reps / 30) * 10) / 10;
 }
 
-async function setsDeEjercicio(exerciseId: string, gymId?: string | null): Promise<{ set: LoggedSet; fecha: number }[]> {
-  const les = activo(await db.loggedExercises.where('exerciseId').equals(exerciseId).toArray());
+async function setsDeEjercicio(
+  exerciseId: string,
+  gymId?: string | null,
+  excludeSessionId?: string,
+): Promise<{ set: LoggedSet; fecha: number }[]> {
+  const les = activo(await db.loggedExercises.where('exerciseId').equals(exerciseId).toArray())
+    .filter((le) => le.sessionId !== excludeSessionId);
   if (les.length === 0) return [];
   const sessionIds = [...new Set(les.map((le) => le.sessionId))];
   const sessions = await db.workoutSessions.bulkGet(sessionIds);
@@ -40,8 +46,9 @@ export async function getExerciseProgress(
   exerciseId: string,
   gymId?: string | null,
   sinceTs = 0,
+  excludeSessionId?: string,
 ): Promise<ExerciseProgressPoint[]> {
-  const data = await setsDeEjercicio(exerciseId, gymId);
+  const data = await setsDeEjercicio(exerciseId, gymId, excludeSessionId);
   const byFecha = new Map<number, LoggedSet[]>();
   for (const { set, fecha } of data) {
     const arr = byFecha.get(fecha) ?? [];
@@ -202,4 +209,37 @@ export async function getCurrentStreakDays(): Promise<number> {
     cursor.setDate(cursor.getDate() - 1);
   }
   return streak;
+}
+
+export interface Estancado {
+  exerciseId: string;
+  nombre: string;
+  sesionesSinMejora: number;
+  ultimaMejoraFecha: number | null;
+}
+
+/** Ejercicios entrenados (en ese gym) cuyo mejor 1RM estimado está estancado. */
+export async function listEstancados(gymId?: string | null): Promise<Estancado[]> {
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId);
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  if (sessionIds.size === 0) return [];
+  const les = activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
+  const exerciseIds = [...new Set(les.map((le) => le.exerciseId))];
+  const exercises = await db.exercises.bulkGet(exerciseIds);
+  const nombreBy = new Map<string, string>();
+  for (const e of exercises) if (e) nombreBy.set(e.id, e.nombre);
+  const out: Estancado[] = [];
+  for (const exerciseId of exerciseIds) {
+    const points = await getExerciseProgress(exerciseId, gymId);
+    const e = detectarEstancamiento(points);
+    if (!e.estancado) continue;
+    out.push({
+      exerciseId,
+      nombre: nombreBy.get(exerciseId) ?? '—',
+      sesionesSinMejora: e.sesionesSinMejora,
+      ultimaMejoraFecha: e.ultimaMejoraFecha,
+    });
+  }
+  return out.sort((a, b) => b.sesionesSinMejora - a.sesionesSinMejora);
 }

@@ -8,10 +8,12 @@ import {
   getPeriodSummary,
   getWeeklyVolume,
   getCurrentStreakDays,
+  listEstancados,
 } from '@/lib/repositories/stats';
 import { ExerciseProgress } from '@/components/exercise-progress';
 import { WeeklyVolumeChart } from '@/components/weekly-volume-chart';
 import { MuscleBalance } from '@/components/muscle-balance';
+import { EstancadosList } from '@/components/estancados-list';
 import { PeriodSelector } from '@/components/period-selector';
 import { StatCard } from '@/components/stat-card';
 import { GymFilter } from '@/components/gym-filter';
@@ -33,6 +35,7 @@ export default function ProgresoPage() {
   const resumen = useLiveQuery(() => getPeriodSummary(sinceTs, gymId), [sinceTs, gymId]);
   const semanal = useLiveQuery(() => getWeeklyVolume(sinceTs, gymId), [sinceTs, gymId]);
   const volumen = useLiveQuery(() => getVolumeByMuscle(sinceTs, gymId), [sinceTs, gymId]);
+  const estancados = useLiveQuery(() => listEstancados(gymId), [gymId]);
   const [seleccion, setSeleccion] = useState('');
 
   return (
@@ -52,6 +55,11 @@ export default function ProgresoPage() {
         {(semanal ?? []).length === 0
           ? <p className="text-muted-foreground">Aún no hay sesiones en este periodo.</p>
           : <WeeklyVolumeChart data={semanal ?? []} />}
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="label-mono text-[10px] text-muted-foreground">Ejercicios estancados</h2>
+        <EstancadosList data={estancados ?? []} />
       </section>
 
       <section className="space-y-2">
