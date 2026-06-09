@@ -6,6 +6,9 @@ import {
   resolverMetrica,
   type MetricaPersonalizada,
 } from '@/lib/body-metrics';
+import { getSetting } from '@/lib/repositories/user-settings';
+import { db } from '@/lib/db/database';
+import { CLAVE_PERSONALIZADAS, addMetricaPersonalizada, listMetricasPersonalizadas } from '@/lib/body-metrics';
 
 describe('METRICAS_PREDEF', () => {
   it('peso está en kg y las medidas en cm', () => {
@@ -43,5 +46,26 @@ describe('resolverMetrica', () => {
     expect(resolverMetrica('peso', [{ clave: 'peso', label: 'X', unidad: 'lb' }])).toEqual({
       label: 'Peso', unidad: 'kg',
     });
+  });
+});
+
+describe('personalizadas (C0)', () => {
+  it('añade una personalizada, la persiste y la devuelve', async () => {
+    await db.userSettings.clear();
+    const m = await addMetricaPersonalizada('% Grasa', '%');
+    expect(m).toEqual({ clave: 'grasa', label: '% Grasa', unidad: '%' });
+    expect(await getSetting(CLAVE_PERSONALIZADAS)).toEqual([m]);
+    expect(await listMetricasPersonalizadas()).toEqual([m]);
+  });
+  it('es idempotente por clave (no duplica)', async () => {
+    await db.userSettings.clear();
+    await addMetricaPersonalizada('Glúteo', 'cm');
+    const segunda = await addMetricaPersonalizada('glúteo', 'cm');
+    expect(segunda.clave).toBe('gluteo');
+    expect(await listMetricasPersonalizadas()).toHaveLength(1);
+  });
+  it('rechaza una clave que choca con una predefinida', async () => {
+    await db.userSettings.clear();
+    await expect(addMetricaPersonalizada('Peso', 'lb')).rejects.toThrow();
   });
 });

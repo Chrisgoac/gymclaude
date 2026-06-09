@@ -1,3 +1,5 @@
+import { getSetting, setSetting } from '@/lib/repositories/user-settings';
+
 export interface MetricaDef {
   label: string;
   unidad: string;
@@ -48,4 +50,30 @@ export function resolverMetrica(
   const pers = personalizadas.find((m) => m.clave === tipo);
   if (pers) return { label: pers.label, unidad: pers.unidad };
   return { label: tipo, unidad: '' };
+}
+
+export const CLAVE_PERSONALIZADAS = 'metricasPersonalizadas';
+
+/** Lista (no reactiva) de métricas personalizadas. Para UI reactiva usar useSetting. */
+export async function listMetricasPersonalizadas(): Promise<MetricaPersonalizada[]> {
+  return (await getSetting<MetricaPersonalizada[]>(CLAVE_PERSONALIZADAS)) ?? [];
+}
+
+/**
+ * Añade una métrica personalizada (read-modify-write sobre C0).
+ * Idempotente por clave; lanza si la clave choca con una predefinida.
+ */
+export async function addMetricaPersonalizada(
+  nombre: string,
+  unidad: string,
+): Promise<MetricaPersonalizada> {
+  const clave = slugify(nombre);
+  if (!clave) throw new Error('Nombre de métrica vacío');
+  if (METRICAS_PREDEF[clave]) throw new Error(`"${clave}" ya es una métrica predefinida`);
+  const actuales = await listMetricasPersonalizadas();
+  const existente = actuales.find((m) => m.clave === clave);
+  if (existente) return existente;
+  const nueva: MetricaPersonalizada = { clave, label: nombre.trim(), unidad: unidad.trim() };
+  await setSetting<MetricaPersonalizada[]>(CLAVE_PERSONALIZADAS, [...actuales, nueva]);
+  return nueva;
 }
