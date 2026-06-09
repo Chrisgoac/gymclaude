@@ -1,4 +1,5 @@
 import { db } from '@/lib/db/database';
+import { MUSCLE_GROUPS } from '@/lib/db/types';
 import type { LoggedSet, MuscleGroup, WorkoutSession } from '@/lib/db/types';
 import { detectarEstancamiento } from '@/lib/insights';
 
@@ -294,6 +295,42 @@ export async function getPRsThisWeek(gymId?: string | null, now: number = Date.n
     }
   }
   return out;
+}
+
+/** Timestamp (epoch ms) de la última sesión que entrenó cada grupo muscular; null si nunca (en ese gym). */
+export async function getLastTrainedByMuscle(gymId?: string | null): Promise<Record<MuscleGroup, number | null>> {
+  const result = Object.fromEntries(MUSCLE_GROUPS.map((g) => [g, null])) as Record<MuscleGroup, number | null>;
+  const sessions = activo(await db.workoutSessions.toArray())
+    .filter((s) => gymId == null || (s.gymId ?? null) === gymId);
+  const fechaBy = new Map(sessions.map((s) => [s.id, s.fecha]));
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  if (sessionIds.size === 0) return result;
+  const les = activo(await db.loggedExercises.toArray()).filter((le) => sessionIds.has(le.sessionId));
+  const exerciseIds = [...new Set(les.map((le) => le.exerciseId))];
+  const exercises = await db.exercises.bulkGet(exerciseIds);
+  const grupoBy = new Map<string, MuscleGroup>();
+  for (const e of exercises) if (e) grupoBy.set(e.id, e.grupoMuscular);
+  for (const le of les) {
+    const grupo = grupoBy.get(le.exerciseId);
+    if (!grupo) continue;
+    const fecha = fechaBy.get(le.sessionId) ?? 0;
+    if (result[grupo] == null || fecha > (result[grupo] as number)) result[grupo] = fecha;
+  }
+  return result;
+}
+
+export interface WeeklyVolumeDelta extends WeeklyVolumePoint {
+  deltaPct: number | null;
+}
+
+/** Anota cada punto de volumen semanal con el % de cambio vs la semana anterior (primera = null). */
+export function weeklyVolumeDeltas(points: WeeklyVolumePoint[]): WeeklyVolumeDelta[] {
+  return points.map((p, i) => {
+    if (i === 0) return { ...p, deltaPct: null };
+    const prev = points[i - 1].volumen;
+    const deltaPct = prev > 0 ? Math.round(((p.volumen - prev) / prev) * 100) : null;
+    return { ...p, deltaPct };
+  });
 }
 
 /** Ejercicios entrenados (en ese gym) cuyo mejor 1RM estimado está estancado. */

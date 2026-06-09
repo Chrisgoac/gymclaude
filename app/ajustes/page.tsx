@@ -7,8 +7,9 @@ import { GymManager } from '@/components/gym-manager';
 import { RoutineOrderManager } from '@/components/routine-order-manager';
 import { useSuggestNextRoutine, useModoProgresion, useIncrementos } from '@/lib/settings';
 import { useSetting } from '@/lib/use-setting';
-import { EQUIPMENTS } from '@/lib/db/types';
-import { equipmentLabel } from '@/lib/labels';
+import { EQUIPMENTS, MUSCLE_GROUPS, type MuscleGroup } from '@/lib/db/types';
+import { equipmentLabel, muscleGroupLabel } from '@/lib/labels';
+import { getSetting, setSetting } from '@/lib/repositories/user-settings';
 import type { ModoProgresion } from '@/lib/progresion';
 
 const MODO_LABEL: Record<ModoProgresion, string> = {
@@ -25,6 +26,16 @@ export default function AjustesPage() {
   const [modo, setModo] = useModoProgresion();
   const [incrementos, setIncrementos] = useIncrementos();
   const [objetivoSemanal, setObjetivoSemanal] = useSetting<number>('objetivoSemanal', 3);
+  const [objetivosVolumen] = useSetting<Partial<Record<MuscleGroup, number>>>('objetivosVolumen', {});
+  // Read-modify-write contra Dexie al escribir (no del render) para no perder ediciones en grupos distintos.
+  const aplicarObjetivoVolumen = (g: MuscleGroup, v: number | null) => {
+    void (async () => {
+      const cur = (await getSetting<Partial<Record<MuscleGroup, number>>>('objetivosVolumen')) ?? {};
+      const next = { ...cur };
+      if (v == null) delete next[g]; else next[g] = v;
+      await setSetting('objetivosVolumen', next);
+    })();
+  };
 
   async function exportar() {
     try {
@@ -135,6 +146,34 @@ export default function AjustesPage() {
             }}
           />
         </label>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="label-mono text-[11px] text-muted-foreground">Objetivo de volumen por grupo</h2>
+        <div className="brutal-box divide-y-2 divide-foreground">
+          {MUSCLE_GROUPS.map((g) => (
+            <label key={g} className="flex items-center justify-between gap-3 px-3 py-2">
+              <span className="text-sm">{muscleGroupLabel[g]}</span>
+              <input
+                type="number"
+                min="0"
+                step="100"
+                key={`${g}-${objetivosVolumen[g] ?? ''}`}
+                defaultValue={objetivosVolumen[g] ?? ''}
+                className="w-24 border-2 border-input bg-card p-1 text-right text-sm tabular-nums"
+                onBlur={(e) => {
+                  const raw = e.target.value.trim();
+                  if (raw === '') { aplicarObjetivoVolumen(g, null); return; }
+                  const parsed = Number(raw);
+                  if (Number.isNaN(parsed) || parsed < 0) { e.target.value = String(objetivosVolumen[g] ?? ''); return; }
+                  const n = Math.round(parsed);
+                  aplicarObjetivoVolumen(g, n === 0 ? null : n);
+                }}
+              />
+            </label>
+          ))}
+        </div>
+        <p className="label-mono text-[10px] text-muted-foreground">Volumen objetivo (kg·rep) por grupo y semana. Vacío = sin meta.</p>
       </section>
 
       <section className="space-y-3">

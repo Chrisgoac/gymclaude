@@ -9,6 +9,7 @@ import {
   getWeeklyVolume,
   getCurrentStreakDays,
   listEstancados,
+  getLastTrainedByMuscle,
 } from '@/lib/repositories/stats';
 import { ExerciseProgress } from '@/components/exercise-progress';
 import { WeeklyVolumeChart } from '@/components/weekly-volume-chart';
@@ -20,6 +21,8 @@ import { GymFilter } from '@/components/gym-filter';
 import { WeeklyDigest } from '@/components/weekly-digest';
 import { useGymFilter, filtroAGymId } from '@/lib/gym-filter';
 import { periodoASinceTs, type Periodo } from '@/lib/period';
+import { useSetting } from '@/lib/use-setting';
+import type { MuscleGroup } from '@/lib/db/types';
 
 function formatoVolumen(kg: number): string {
   return kg >= 1000 ? `${(kg / 1000).toFixed(1)}t` : `${Math.round(kg)}`;
@@ -37,6 +40,9 @@ export default function ProgresoPage() {
   const semanal = useLiveQuery(() => getWeeklyVolume(sinceTs, gymId), [sinceTs, gymId]);
   const volumen = useLiveQuery(() => getVolumeByMuscle(sinceTs, gymId), [sinceTs, gymId]);
   const estancados = useLiveQuery(() => listEstancados(gymId), [gymId]);
+  const lastTrained = useLiveQuery(() => getLastTrainedByMuscle(gymId), [gymId]);
+  const [ahora] = useState(() => Date.now());
+  const [objetivosVolumen] = useSetting<Partial<Record<MuscleGroup, number>>>('objetivosVolumen', {});
   const [seleccion, setSeleccion] = useState('');
 
   return (
@@ -91,7 +97,7 @@ export default function ProgresoPage() {
 
       <section className="space-y-2">
         <h2 className="label-mono text-[10px] text-muted-foreground">Balance muscular</h2>
-        <MuscleBalance data={volumen ?? []} />
+        <MuscleBalance data={volumen ?? []} lastTrained={lastTrained} ahora={ahora} objetivos={objetivosVolumen} />
       </section>
     </div>
   );
