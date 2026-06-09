@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { Scale } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { listExercises } from '@/lib/repositories/exercises';
 import {
@@ -50,6 +52,18 @@ export default function ProgresoPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Progreso</h1>
+
+      <Link
+        href="/cuerpo"
+        className="brutal-box flex items-center justify-between gap-3 px-3 py-2.5 transition-transform active:translate-x-[2px] active:translate-y-[2px]"
+      >
+        <span className="flex items-center gap-2">
+          <Scale className="size-4 text-primary" strokeWidth={2} aria-hidden="true" />
+          <span className="font-semibold">Seguimiento corporal</span>
+        </span>
+        <span className="label-mono text-[10px] text-muted-foreground">→</span>
+      </Link>
+
       <GymFilter />
       <PeriodSelector value={periodo} onChange={setPeriodo} />
 
