@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Exercise, Routine, RoutineExercise,
-  WorkoutSession, LoggedExercise, LoggedSet, SyncState, Gym, ExercisePhoto, UserSetting,
+  WorkoutSession, LoggedExercise, LoggedSet, SyncState, Gym, ExercisePhoto, UserSetting, CoachMessage,
 } from './types';
 
 export class GymLogDB extends Dexie {
@@ -15,6 +15,7 @@ export class GymLogDB extends Dexie {
   gyms!: Table<Gym, string>;
   exercisePhotos!: Table<ExercisePhoto, string>;
   userSettings!: Table<UserSetting, string>;
+  coachMessages!: Table<CoachMessage, string>;
 
   constructor() {
     super('gymlog');
@@ -111,6 +112,10 @@ export class GymLogDB extends Dexie {
     // v11: store de ajustes sincronizados (id = clave del ajuste).
     this.version(11).stores({
       userSettings: 'id, deletedAt',
+    });
+    // v12: hilo del coach IA, sincronizado.
+    this.version(12).stores({
+      coachMessages: 'id, createdAt, deletedAt',
     });
   }
 }
