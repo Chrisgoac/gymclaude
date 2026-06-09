@@ -1,4 +1,4 @@
-import { it, expect, vi, beforeEach } from 'vitest';
+import { it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { db } from '@/lib/db/database';
 import { ActiveMesocycleCard } from '@/components/active-mesocycle-card';
