@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Exercise, Routine, RoutineExercise,
-  WorkoutSession, LoggedExercise, LoggedSet, SyncState, Gym, ExercisePhoto, UserSetting, CoachMessage, BodyMetric, ProgressPhoto, Mesocycle,
+  WorkoutSession, LoggedExercise, LoggedSet, SyncState, Gym, ExercisePhoto, UserSetting, CoachMessage, BodyMetric, ProgressPhoto, Mesocycle, Achievement,
 } from './types';
 
 export class GymLogDB extends Dexie {
@@ -19,6 +19,7 @@ export class GymLogDB extends Dexie {
   bodyMetrics!: Table<BodyMetric, string>;
   progressPhotos!: Table<ProgressPhoto, string>;
   mesocycles!: Table<Mesocycle, string>;
+  achievements!: Table<Achievement, string>;
 
   constructor() {
     super('gymlog');
@@ -131,6 +132,10 @@ export class GymLogDB extends Dexie {
     // v15: mesociclos (entidad sincronizada).
     this.version(15).stores({
       mesocycles: 'id, fechaInicio, deletedAt',
+    });
+    // v16: logros desbloqueados (entidad sincronizada).
+    this.version(16).stores({
+      achievements: 'id, clave, deletedAt',
     });
   }
 }

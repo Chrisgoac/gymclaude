@@ -99,3 +99,11 @@ it('mesocycles se aplican por id (LWW)', async () => {
   ] as unknown as import('@/lib/db/types').SyncMeta[] }]);
   expect((await db.mesocycles.get('me1'))?.nombre).toBe('H');
 });
+
+it('achievements se aplican por id (LWW)', async () => {
+  await db.achievements.clear();
+  await applyIncoming([{ table: 'achievements', records: [
+    { id: 'a1', userId: 'u1', clave: 'sesiones-10', fechaDesbloqueo: 5, updatedAt: 100, deletedAt: null },
+  ] as unknown as import('@/lib/db/types').SyncMeta[] }]);
+  expect((await db.achievements.get('a1'))?.clave).toBe('sesiones-10');
+});

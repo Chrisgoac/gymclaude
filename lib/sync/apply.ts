@@ -19,6 +19,7 @@ const TABLE_BY_NAME: Record<string, Table<SyncMeta, string>> = {
   bodyMetrics: asSync(db.bodyMetrics),
   progressPhotos: asSync(db.progressPhotos),
   mesocycles: asSync(db.mesocycles),
+  achievements: asSync(db.achievements),
 };
 
 export function pickWinner<T extends SyncMeta>(local: T | undefined, incoming: T): T {

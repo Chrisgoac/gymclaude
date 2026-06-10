@@ -71,7 +71,7 @@ it('al importar refresca updatedAt para que el sync los suba', async () => {
       gyms: [], exercises: [],
       routines: [{ id: 'r1', userId: null, nombre: 'R', orden: 0, archivada: false, updatedAt: antiguo, deletedAt: null }],
       routineExercises: [{ id: 're1', routineId: 'r1', exerciseId: 'seed-press-banca', orden: 0, updatedAt: antiguo, deletedAt: null }],
-      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [], coachMessages: [], bodyMetrics: [], progressPhotos: [], mesocycles: [],
+      workoutSessions: [], loggedExercises: [], loggedSets: [], exercisePhotos: [], userSettings: [], coachMessages: [], bodyMetrics: [], progressPhotos: [], mesocycles: [], achievements: [],
     },
   };
   const t0 = Date.now();
@@ -135,4 +135,14 @@ it('exporta e importa mesocycles', async () => {
   await db.mesocycles.clear();
   await importData(backup);
   expect((await db.mesocycles.get('mb1'))?.nombre).toBe('H');
+});
+
+it('exporta e importa achievements', async () => {
+  await db.achievements.clear();
+  await db.achievements.put({ id: 'ab1', userId: null, clave: 'mesociclo-1', fechaDesbloqueo: 9, updatedAt: 9, deletedAt: null });
+  const backup = await exportData();
+  expect(backup.data.achievements).toHaveLength(1);
+  await db.achievements.clear();
+  await importData(backup);
+  expect((await db.achievements.get('ab1'))?.clave).toBe('mesociclo-1');
 });
