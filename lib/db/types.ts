@@ -159,3 +159,9 @@ export interface BodyMetric extends SyncMeta {
   /** epoch ms; ordena la serie. */
   fecha: number;
 }
+
+export interface Achievement extends SyncMeta {
+  userId: string | null;
+  clave: string;
+  fechaDesbloqueo: number;
+}
