@@ -1,7 +1,7 @@
 import { db } from '@/lib/db/database';
 import type {
   Exercise, ExercisePhoto, Gym, Routine, RoutineExercise,
-  WorkoutSession, LoggedExercise, LoggedSet, UserSetting, CoachMessage, BodyMetric, ProgressPhoto, Mesocycle,
+  WorkoutSession, LoggedExercise, LoggedSet, UserSetting, CoachMessage, BodyMetric, ProgressPhoto, Mesocycle, Achievement,
 } from '@/lib/db/types';
 
 export interface BackupFile {
@@ -22,13 +22,14 @@ export interface BackupFile {
     bodyMetrics: BodyMetric[];
     progressPhotos: ProgressPhoto[];
     mesocycles: Mesocycle[];
+    achievements: Achievement[];
   };
 }
 
 export async function exportData(): Promise<BackupFile> {
   return {
     app: 'gymlog',
-    version: 11,
+    version: 12,
     exportedAt: Date.now(),
     data: {
       gyms: await db.gyms.toArray(),
@@ -44,6 +45,7 @@ export async function exportData(): Promise<BackupFile> {
       bodyMetrics: await db.bodyMetrics.toArray(),
       progressPhotos: await db.progressPhotos.toArray(),
       mesocycles: await db.mesocycles.toArray(),
+      achievements: await db.achievements.toArray(),
     },
   };
 }
@@ -63,7 +65,7 @@ export async function importData(backup: BackupFile): Promise<void> {
   const tables = [
     db.gyms, db.exercises, db.routines, db.routineExercises,
     db.workoutSessions, db.loggedExercises, db.loggedSets, db.exercisePhotos,
-    db.userSettings, db.coachMessages, db.bodyMetrics, db.progressPhotos, db.mesocycles,
+    db.userSettings, db.coachMessages, db.bodyMetrics, db.progressPhotos, db.mesocycles, db.achievements,
   ] as const;
   await db.transaction('rw', tables, async () => {
     if (d.gyms?.length) await db.gyms.bulkPut(d.gyms);
@@ -79,5 +81,6 @@ export async function importData(backup: BackupFile): Promise<void> {
     if (d.bodyMetrics?.length) await db.bodyMetrics.bulkPut(d.bodyMetrics);
     if (d.progressPhotos?.length) await db.progressPhotos.bulkPut(d.progressPhotos);
     if (d.mesocycles?.length) await db.mesocycles.bulkPut(d.mesocycles);
+    if (d.achievements?.length) await db.achievements.bulkPut(d.achievements);
   });
 }
