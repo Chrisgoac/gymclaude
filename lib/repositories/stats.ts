@@ -2,6 +2,9 @@ import { db } from '@/lib/db/database';
 import { MUSCLE_GROUPS } from '@/lib/db/types';
 import type { LoggedSet, MuscleGroup, WorkoutSession } from '@/lib/db/types';
 import { detectarEstancamiento } from '@/lib/insights';
+import { calcularRacha } from '@/lib/logros';
+
+const DIA_MS = 86400000;
 
 const activo = <T extends { deletedAt: number | null }>(arr: T[]) => arr.filter((x) => x.deletedAt === null);
 
@@ -365,4 +368,80 @@ export async function listEstancados(gymId?: string | null): Promise<Estancado[]
     });
   }
   return out.sort((a, b) => b.sesionesSinMejora - a.sesionesSinMejora);
+}
+
+/** Racha (actual + mejor) de semanas consecutivas cumpliendo el objetivo de sesiones. */
+export async function getRachaSemanal(objetivo: number, now: number = Date.now()): Promise<{ actual: number; mejor: number }> {
+  const sessions = activo(await db.workoutSessions.toArray());
+  const byWeek = new Map<number, number>();
+  for (const s of sessions) {
+    const w = inicioSemana(s.fecha);
+    byWeek.set(w, (byWeek.get(w) ?? 0) + 1);
+  }
+  const semanas = [...byWeek.entries()].map(([inicioTs, sesiones]) => ({ inicioTs, sesiones }));
+  return calcularRacha(semanas, objetivo, inicioSemana(now));
+}
+
+export interface PRItem {
+  exerciseId: string;
+  nombre: string;
+  peso: number;
+  fecha: number;
+}
+
+/** Mejor peso por ejercicio entrenado, con la fecha más antigua en que se alcanzó. */
+export async function listPRs(): Promise<PRItem[]> {
+  const sessions = activo(await db.workoutSessions.toArray());
+  const fechaBySession = new Map(sessions.map((s) => [s.id, s.fecha]));
+  const les = activo(await db.loggedExercises.toArray());
+  const leInfo = new Map(les.map((le) => [le.id, { exerciseId: le.exerciseId, fecha: fechaBySession.get(le.sessionId) ?? 0 }]));
+  const sets = activo(await db.loggedSets.toArray());
+
+  // 1ª pasada: máx peso por ejercicio. 2ª: fecha más antigua que alcanza ese máx.
+  const maxPeso = new Map<string, number>();
+  for (const set of sets) {
+    const info = leInfo.get(set.loggedExerciseId);
+    if (!info) continue;
+    maxPeso.set(info.exerciseId, Math.max(maxPeso.get(info.exerciseId) ?? 0, set.peso));
+  }
+  const fechaPR = new Map<string, number>();
+  for (const set of sets) {
+    const info = leInfo.get(set.loggedExerciseId);
+    if (!info) continue;
+    if (set.peso === maxPeso.get(info.exerciseId)) {
+      const prev = fechaPR.get(info.exerciseId);
+      if (prev === undefined || info.fecha < prev) fechaPR.set(info.exerciseId, info.fecha);
+    }
+  }
+  const ids = [...maxPeso.keys()];
+  const exs = await db.exercises.bulkGet(ids);
+  return ids
+    .map((id, i) => ({ exerciseId: id, nombre: exs[i]?.nombre ?? '—', peso: maxPeso.get(id)!, fecha: fechaPR.get(id) ?? 0 }))
+    .sort((a, b) => b.peso - a.peso);
+}
+
+/** Métricas agregadas para evaluar logros. `objetivo` = objetivo semanal (para la mejor racha). */
+export async function getLogroMetricas(objetivo: number, now: number = Date.now()): Promise<import('@/lib/logros').LogroMetricas> {
+  const sessions = activo(await db.workoutSessions.toArray());
+  const sets = activo(await db.loggedSets.toArray());
+  const les = activo(await db.loggedExercises.toArray());
+  const exById = new Map(les.map((le) => [le.id, le.exerciseId]));
+
+  const volumenTotal = sets.reduce((acc, s) => acc + s.peso * s.reps, 0);
+  const exConSets = new Set<string>();
+  for (const s of sets) {
+    const ex = exById.get(s.loggedExerciseId);
+    if (ex) exConSets.add(ex);
+  }
+  const mesos = activo(await db.mesocycles.toArray());
+  const mesociclosCompletados = mesos.filter((m) => m.fechaInicio + m.semanas * 7 * DIA_MS < now).length;
+  const { mejor } = await getRachaSemanal(objetivo, now);
+
+  return {
+    sesionesTotales: sessions.length,
+    volumenTotal,
+    prsTotales: exConSets.size,
+    mejorRacha: mejor,
+    mesociclosCompletados,
+  };
 }

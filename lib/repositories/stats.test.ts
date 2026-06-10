@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '@/lib/db/database';
+import type { GymLogDB } from '@/lib/db/database';
 import { startSession, addLoggedExercise, addSet } from '@/lib/repositories/workouts';
 import {
   estimar1RM, getExerciseProgress, getExercisePRs, getVolumeByMuscle,
   listSessionSummaries, getCurrentStreakDays, getPeriodSummary, getWeeklyVolume,
   listEstancados, getWeeklySummary, getPRsThisWeek,
   getLastTrainedByMuscle, weeklyVolumeDeltas,
+  getRachaSemanal, getLogroMetricas, listPRs,
 } from '@/lib/repositories/stats';
 import { getVolumenSemanaByMuscle } from '@/lib/repositories/stats';
 
@@ -400,4 +402,50 @@ it('getVolumenSemanaByMuscle suma solo el volumen de la semana actual por grupo'
   const r = await getVolumenSemanaByMuscle('gvsm', NOW);
   expect(r.pecho).toBe(500);
   expect(r.espalda).toBe(0); // grupo sin volumen → 0
+});
+
+// helper local de siembra: una sesión con un ejercicio y una serie
+async function sembrarSesion(localDb: GymLogDB, { id, fecha, exerciseId, peso, reps }: { id: string; fecha: number; exerciseId: string; peso: number; reps: number }) {
+  await localDb.workoutSessions.put({ id, userId: null, fecha, updatedAt: 1, deletedAt: null });
+  await localDb.loggedExercises.put({ id: `le-${id}`, sessionId: id, exerciseId, orden: 0, updatedAt: 1, deletedAt: null });
+  await localDb.loggedSets.put({ id: `set-${id}`, loggedExerciseId: `le-${id}`, orden: 0, peso, reps, updatedAt: 1, deletedAt: null });
+}
+
+it('getLogroMetricas agrega sesiones, volumen, PRs y mesociclos completados', async () => {
+  await Promise.all([db.workoutSessions.clear(), db.loggedExercises.clear(), db.loggedSets.clear(), db.exercises.clear(), db.mesocycles.clear()]);
+  const NOW = 100 * 86400000;
+  await db.exercises.put({ id: 'ex1', userId: null, nombre: 'Press', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await sembrarSesion(db, { id: 's1', fecha: NOW - 2 * 86400000, exerciseId: 'ex1', peso: 100, reps: 5 }); // vol 500
+  await sembrarSesion(db, { id: 's2', fecha: NOW - 1 * 86400000, exerciseId: 'ex1', peso: 110, reps: 5 }); // vol 550
+  // mesociclo completado (terminó antes de NOW)
+  await db.mesocycles.put({ id: 'm1', userId: null, nombre: 'X', objetivo: 'x', semanas: 4, diasPorSemana: 3, notas: null, progresion: [], fechaInicio: NOW - 40 * 86400000, updatedAt: 1, deletedAt: null });
+  const m = await getLogroMetricas(3, NOW);
+  expect(m.sesionesTotales).toBe(2);
+  expect(m.volumenTotal).toBe(1050);
+  expect(m.prsTotales).toBe(1); // un ejercicio entrenado
+  expect(m.mesociclosCompletados).toBe(1);
+});
+
+it('listPRs da el mejor peso por ejercicio con su fecha (empate → más antigua)', async () => {
+  await Promise.all([db.workoutSessions.clear(), db.loggedExercises.clear(), db.loggedSets.clear(), db.exercises.clear()]);
+  await db.exercises.put({ id: 'ex1', userId: null, nombre: 'Press', grupoMuscular: 'pecho', equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: false, updatedAt: 1, deletedAt: null });
+  await sembrarSesion(db, { id: 's1', fecha: 1000, exerciseId: 'ex1', peso: 100, reps: 5 });
+  await sembrarSesion(db, { id: 's2', fecha: 2000, exerciseId: 'ex1', peso: 100, reps: 5 }); // mismo máx, más reciente
+  await sembrarSesion(db, { id: 's3', fecha: 3000, exerciseId: 'ex1', peso: 90, reps: 5 });
+  const prs = await listPRs();
+  expect(prs).toHaveLength(1);
+  expect(prs[0]).toMatchObject({ exerciseId: 'ex1', nombre: 'Press', peso: 100, fecha: 1000 }); // empate → fecha más antigua
+});
+
+it('getRachaSemanal cuenta semanas consecutivas cumpliendo el objetivo', async () => {
+  await db.workoutSessions.clear();
+  const lunes = (n: number) => 4 * 86400000 + n * 7 * 86400000; // un lunes base + n semanas (epoch jueves+ ajustará inicioSemana)
+  // 2 sesiones en una semana, 1 en la siguiente, objetivo 2
+  await db.workoutSessions.bulkPut([
+    { id: 'a', userId: null, fecha: lunes(0), updatedAt: 1, deletedAt: null },
+    { id: 'b', userId: null, fecha: lunes(0) + 86400000, updatedAt: 1, deletedAt: null },
+  ]);
+  const r = await getRachaSemanal(2, lunes(0) + 2 * 86400000);
+  expect(r.mejor).toBeGreaterThanOrEqual(1);
+  expect(r.actual).toBeGreaterThanOrEqual(1);
 });
