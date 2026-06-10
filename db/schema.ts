@@ -124,3 +124,9 @@ export const mesocycles = pgTable('mesocycles', {
   progresion: jsonb('progresion').notNull(),
   fechaInicio: bigint('fecha_inicio', { mode: 'number' }).notNull(),
 });
+
+export const achievements = pgTable('achievements', {
+  ...sync,
+  clave: text('clave').notNull(),
+  fechaDesbloqueo: bigint('fecha_desbloqueo', { mode: 'number' }).notNull(),
+});
