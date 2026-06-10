@@ -81,6 +81,13 @@ describe('collectDirty', () => {
     expect(changes.find((c) => c.table === 'mesocycles')?.records).toHaveLength(1);
   });
 
+  it('sincroniza achievements', async () => {
+    await db.achievements.clear();
+    await db.achievements.put({ id: 'a-c1', userId: null, clave: 'racha-4', fechaDesbloqueo: 1, updatedAt: 1000, deletedAt: null });
+    const changes = await collectDirty(0);
+    expect(changes.find((c) => c.table === 'achievements')?.records).toHaveLength(1);
+  });
+
   it('sólo sincroniza ejercicios personalizados, no los del catálogo (seed)', async () => {
     await db.exercises.put({
       id: 'seed-x', userId: null, nombre: 'Seed', grupoMuscular: 'pecho',
