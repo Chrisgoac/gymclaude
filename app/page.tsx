@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Sparkles } from 'lucide-react';
 import { StartWorkout } from '@/components/start-workout';
 import { WeeklyDigestMini } from '@/components/weekly-digest-mini';
+import { StreakMini } from '@/components/streak-mini';
 
 export default function EntrenarPage() {
   return (
@@ -11,6 +12,7 @@ export default function EntrenarPage() {
         <h1 className="text-5xl">Entrenar</h1>
       </div>
       <WeeklyDigestMini />
+      <StreakMini />
       <Link
         href="/coach"
         aria-label="Pregunta al coach"
