@@ -1,7 +1,7 @@
 # GymLog Android nativo — Diseño
 
 - **Fecha:** 2026-08-31
-- **Estado:** aprobado en conversación; pendiente de revisión final del documento
+- **Estado:** aprobado
 - **Plataforma:** Android nativo
 - **Distribución:** pública en Google Play
 
