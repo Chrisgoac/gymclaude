@@ -24,7 +24,10 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
+        with:
+          # ponytail: default packages include the removed 'tools' package, which fails sdkmanager
+          packages: 'platform-tools'
+      - run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew verifyModuleGraph testDebugUnitTest :core:model:test :core:domain:test :core:testing:test
 
@@ -37,7 +40,10 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
+        with:
+          # ponytail: default packages include the removed 'tools' package, which fails sdkmanager
+          packages: 'platform-tools'
+      - run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew lintDebug
 
@@ -50,6 +56,9 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
+        with:
+          # ponytail: default packages include the removed 'tools' package, which fails sdkmanager
+          packages: 'platform-tools'
+      - run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew assembleDebug
