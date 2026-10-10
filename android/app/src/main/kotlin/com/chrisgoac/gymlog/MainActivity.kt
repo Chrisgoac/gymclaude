@@ -4,16 +4,20 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.chrisgoac.gymlog.designsystem.theme.GymLogTheme
-import com.chrisgoac.gymlog.navigation.GymLogApp
 
-// Root state machine / auth gating arrives in a later task; the shell is shown directly for now.
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val container = (application as GymLogApplication).container
         setContent {
-            GymLogTheme { GymLogApp() }
+            GymLogTheme {
+                val rootState by container.rootStateMachine.state.collectAsState()
+                GymLogRoot(rootState, authGateway = { container.authGateway })
+            }
         }
     }
 }

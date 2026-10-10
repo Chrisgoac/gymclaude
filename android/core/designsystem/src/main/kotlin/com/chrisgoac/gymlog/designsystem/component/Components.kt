@@ -28,6 +28,8 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -51,6 +53,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -122,7 +125,8 @@ fun HierroButton(
     val shadowOffset = if (enabled && !pressed) HierroShape.shadowOffset else 0.dp
     val shift = if (enabled && pressed) HierroShape.shadowOffset else 0.dp
     // Outer padding reserves room for the shadow so layout is stable between states.
-    Box(modifier.padding(end = HierroShape.shadowOffset, bottom = HierroShape.shadowOffset)) {
+    // propagateMinConstraints: a fillMaxWidth()/weight() modifier stretches the visible button, not just the slot.
+    Box(modifier.padding(end = HierroShape.shadowOffset, bottom = HierroShape.shadowOffset), propagateMinConstraints = true) {
         Box(
             Modifier
                 .offset(shift, shift)
@@ -192,6 +196,9 @@ fun HierroTextField(
     enabled: Boolean = true,
     singleLine: Boolean = true,
     errorMessage: String? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     val colors = HierroTheme.colors
     val interaction = remember { MutableInteractionSource() }
@@ -205,6 +212,9 @@ fun HierroTextField(
             onValueChange = onValueChange,
             enabled = enabled,
             singleLine = singleLine,
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
+            visualTransformation = visualTransformation,
             interactionSource = interaction,
             textStyle = HierroTheme.typography.body.copy(color = if (enabled) colors.ink else colors.textMuted),
             cursorBrush = SolidColor(colors.accent),

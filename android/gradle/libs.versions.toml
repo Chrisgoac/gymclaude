@@ -13,6 +13,8 @@ room = "2.8.4"
 ksp = "2.3.12"
 kotlinx-coroutines = "1.11.0"
 ktor = "3.5.2"
+lifecycle = "2.11.0"
+clerk = "1.1.11"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
@@ -36,6 +38,9 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+androidx-lifecycle-viewmodel = { module = "androidx.lifecycle:lifecycle-viewmodel", version.ref = "lifecycle" }
+androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+clerk-android-api = { module = "com.clerk:clerk-android-api", version.ref = "clerk" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

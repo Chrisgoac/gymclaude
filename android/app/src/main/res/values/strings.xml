@@ -14,6 +14,14 @@
     <string name="nav_settings">Ajustes</string>
     <string name="nav_back">Atrás</string>
 
+    <string name="root_loading">Cargando</string>
+    <string name="root_bootstrapping">Preparando tus datos · %1$d %%</string>
+    <string name="root_reauth">Tu sesión ha caducado. Vuelve a entrar para seguir sincronizando: los datos de este dispositivo siguen aquí.</string>
+    <string name="root_fatal_title">Algo falló</string>
+    <string name="root_fatal_message">No se pudieron preparar tus datos. Cierra la app y vuelve a abrirla con conexión.</string>
+    <string name="root_fatal_config_title">Falta configuración</string>
+    <string name="root_fatal_config_message">Esta compilación no tiene la clave pública de Clerk (clerk.publishableKey en android/local.properties).</string>
+
     <!-- Route smoke content only: replaced by the real feature screens in later tasks. -->
     <string name="smoke_row">%1$s · fila %2$d</string>
 </resources>

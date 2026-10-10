@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="es">
+    <string name="auth_title">GymLog</string>
+    <string name="auth_subtitle_sign_in">Entra para entrenar con tus datos en este dispositivo.</string>
+    <string name="auth_subtitle_sign_up">Crea tu cuenta. Es la misma que en la web.</string>
+    <string name="auth_mode_sign_in">Entrar</string>
+    <string name="auth_mode_sign_up">Crear cuenta</string>
+    <string name="auth_email">Email</string>
+    <string name="auth_password">Contraseña</string>
+    <string name="auth_password_optional">Contraseña (si tu cuenta la pide)</string>
+    <string name="auth_code">Código</string>
+    <string name="auth_send_code">Enviar código</string>
+    <string name="auth_sign_in">Entrar</string>
+    <string name="auth_create_account">Crear cuenta</string>
+    <string name="auth_use_password">Usar contraseña</string>
+    <string name="auth_use_code">Usar código por email</string>
+    <string name="auth_or">o</string>
+    <string name="auth_google">Continuar con Google</string>
+    <string name="auth_code_sent">Te hemos enviado un código a %1$s.</string>
+    <string name="auth_verify">Verificar</string>
+    <string name="auth_resend">Reenviar código</string>
+    <string name="auth_change_email">Cambiar email</string>
+    <string name="auth_working">Un momento</string>
+
+    <string name="auth_error_invalid_email">Introduce un email válido.</string>
+    <string name="auth_error_missing_password">Escribe tu contraseña.</string>
+    <string name="auth_error_missing_code">Escribe el código que te hemos enviado.</string>
+    <string name="auth_error_network">Sin conexión. Comprueba tu red e inténtalo de nuevo.</string>
+    <string name="auth_error_invalid_code">El código no es correcto.</string>
+    <string name="auth_error_expired_code">El código ha caducado. Pide uno nuevo.</string>
+    <string name="auth_error_invalid_credentials">Email o contraseña incorrectos.</string>
+    <string name="auth_error_account_not_found">No hay ninguna cuenta con ese email.</string>
+    <string name="auth_error_account_exists">Ya existe una cuenta con ese email. Entra en su lugar.</string>
+    <string name="auth_error_weak_password">La contraseña no es lo bastante segura.</string>
+    <string name="auth_error_rate_limited">Demasiados intentos. Espera un momento antes de volver a probar.</string>
+    <string name="auth_error_unsupported">Tu cuenta necesita un paso que la app aún no admite. Entra desde la web.</string>
+    <string name="auth_error_unknown">No se pudo completar. Inténtalo de nuevo.</string>
+</resources>
