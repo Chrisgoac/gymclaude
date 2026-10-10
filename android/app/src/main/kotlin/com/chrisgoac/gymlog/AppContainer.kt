@@ -47,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -104,11 +105,19 @@ class AppContainer(private val application: Application) {
         currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId },
     )
 
+    private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks)
+
+    /**
+     * Finishes sign-out deletions a crash interrupted. The root state machine waits for it, so a
+     * quick sign-in by the marked user can never open a database this sweep would then delete.
+     */
+    private val startupSweep = appScope.async { runCatching { accountCleaner.sweepPendingDeletions() } }
+
     private val bootstrapRunner = BootstrapRunner { userId, database, onProgress ->
         bootstrapRepository.run(userId, database, onProgress)
     }
 
-    val rootStateMachine = RootStateMachine(authSession, databases, bootstrapRunner, appScope, clerkConfigured)
+    val rootStateMachine = RootStateMachine(authSession, databases, bootstrapRunner, appScope, clerkConfigured, startupGate = { startupSweep.await() })
         .also { it.start() }
 
     /** Worker factory for WorkManager's on-demand initialization (see [GymLogApplication]). */
@@ -117,8 +126,6 @@ class AppContainer(private val application: Application) {
     )
 
     private val syncTriggers = SyncTriggers(appScope, rootStateMachine.state, syncScheduler)
-
-    private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks)
 
     private val signOutUseCase by lazy {
         SignOutUseCase(
@@ -136,8 +143,6 @@ class AppContainer(private val application: Application) {
 
     /** Starts the sync triggers: ready account, foreground, local mutations, connectivity (bootstrap retry). */
     fun startSync() {
-        // Finish a sign-out deletion that a crash interrupted, before anything can reopen that database.
-        appScope.launch { runCatching { accountCleaner.sweepPendingDeletions() } }
         syncTriggers.start()
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) syncTriggers.onForeground() },

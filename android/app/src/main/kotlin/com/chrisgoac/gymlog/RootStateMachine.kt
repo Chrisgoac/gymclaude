@@ -60,6 +60,8 @@ class RootStateMachine(
     private val bootstrap: BootstrapRunner,
     private val scope: CoroutineScope,
     configured: Boolean,
+    /** Awaited before the first auth state is read (e.g. finishing interrupted sign-out deletions). */
+    private val startupGate: suspend () -> Unit = {},
 ) {
     private val mutableState = MutableStateFlow<RootState>(if (configured) RootState.Loading else RootState.Fatal(CONFIG))
     val state: StateFlow<RootState> = mutableState.asStateFlow()
@@ -72,7 +74,10 @@ class RootStateMachine(
     fun start() {
         if (started || mutableState.value is RootState.Fatal) return
         started = true
-        scope.launch { auth.state.collect(::onAuthState) }
+        scope.launch {
+            startupGate()
+            auth.state.collect(::onAuthState)
+        }
     }
 
     private suspend fun onAuthState(authState: AuthState) {

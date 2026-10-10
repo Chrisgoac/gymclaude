@@ -56,6 +56,38 @@ class RootStateMachineTest {
         assertNull(databases.current.value)
     }
 
+    @Test fun noDatabaseIsOpenedUntilTheStartupGateIsDone() = runTest(UnconfinedTestDispatcher()) {
+        val gate = CompletableDeferred<Unit>()
+        val machine = RootStateMachine(auth, databases, bootstrap, backgroundScope, true, startupGate = { gate.await() })
+            .also { it.start() }
+        auth.state.value = AuthState.SignedIn(USER_A)
+
+        assertEquals(RootState.Loading, machine.state.value)
+        assertNull(databases.current.value)
+        assertTrue(bootstrap.runs.isEmpty())
+
+        gate.complete(Unit)
+        assertEquals(RootState.Ready(USER_A), machine.state.value)
+    }
+
+    @Test fun aMarkedUsersDataIsSweptBeforeTheirQuickSignInOpensAFreshDatabase() = runTest(UnconfinedTestDispatcher()) {
+        val cleaner = com.chrisgoac.gymlog.sync.RoomLocalAccountCleaner(context, databases, com.chrisgoac.gymlog.data.sync.SyncLocks())
+        databases.open(USER_A).syncDao().saveCursor(SyncCursorEntity(cursor = "old", updatedAt = 1))
+        cleaner.markPendingDeletion(USER_A)
+        databases.close()
+        auth.state.value = AuthState.SignedIn(USER_A) // signed in again before the machine even starts
+
+        val machine = RootStateMachine(auth, databases, bootstrap, backgroundScope, true, startupGate = { cleaner.sweepPendingDeletions() })
+            .also { it.start() }
+        val ready = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            kotlinx.coroutines.withTimeout(10_000) { machine.state.first { it is RootState.Ready } }
+        }
+
+        assertEquals(RootState.Ready(USER_A), ready)
+        assertNull("the old data is gone and the fresh database was not deleted", databases.current.value!!.database.syncDao().cursor())
+        assertTrue(databases.current.value!!.database.isOpen)
+    }
+
     @Test fun loadingAndSignedOutNeverOpenADatabase() = runTest(UnconfinedTestDispatcher()) {
         val machine = machine()
         assertEquals(RootState.Loading, machine.state.value)
