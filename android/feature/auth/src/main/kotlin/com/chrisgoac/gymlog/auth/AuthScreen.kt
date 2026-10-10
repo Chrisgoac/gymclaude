@@ -110,6 +110,11 @@ fun AuthContent(state: AuthUiState, actions: AuthActions, modifier: Modifier = M
                 stringResource(if (state.mode == AuthMode.SignIn) R.string.auth_subtitle_sign_in else R.string.auth_subtitle_sign_up),
                 color = colors.textMuted,
             )
+            if (state.serviceUnavailable) {
+                HierroCard(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+                    HierroText(stringResource(R.string.auth_service_unavailable), color = colors.error)
+                }
+            }
             if (notice != null) {
                 HierroCard(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) { HierroText(notice) }
             }
@@ -247,7 +252,7 @@ private fun messageText(message: AuthMessage): String = when (message) {
     AuthMessage.InvalidEmail -> stringResource(R.string.auth_error_invalid_email)
     AuthMessage.MissingPassword -> stringResource(R.string.auth_error_missing_password)
     AuthMessage.MissingCode -> stringResource(R.string.auth_error_missing_code)
-    is AuthMessage.Gateway -> when (val failure = message.failure) {
+    is AuthMessage.Gateway -> when (message.failure) {
         AuthFailure.Network -> stringResource(R.string.auth_error_network)
         AuthFailure.InvalidCode -> stringResource(R.string.auth_error_invalid_code)
         AuthFailure.ExpiredCode -> stringResource(R.string.auth_error_expired_code)
@@ -257,6 +262,6 @@ private fun messageText(message: AuthMessage): String = when (message) {
         AuthFailure.WeakPassword -> stringResource(R.string.auth_error_weak_password)
         AuthFailure.RateLimited -> stringResource(R.string.auth_error_rate_limited)
         AuthFailure.Unsupported -> stringResource(R.string.auth_error_unsupported)
-        is AuthFailure.Unknown -> failure.message ?: stringResource(R.string.auth_error_unknown)
+        is AuthFailure.Unknown -> stringResource(R.string.auth_error_unknown)
     }
 }

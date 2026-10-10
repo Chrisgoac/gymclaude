@@ -34,5 +34,6 @@
     <string name="auth_error_weak_password">La contraseña no es lo bastante segura.</string>
     <string name="auth_error_rate_limited">Demasiados intentos. Espera un momento antes de volver a probar.</string>
     <string name="auth_error_unsupported">Tu cuenta necesita un paso que la app aún no admite. Entra desde la web.</string>
+    <string name="auth_service_unavailable">No se puede conectar con el servicio de cuentas. Comprueba tu conexión; si sigue fallando, el acceso desde la app aún no está habilitado.</string>
     <string name="auth_error_unknown">No se pudo completar. Inténtalo de nuevo.</string>
 </resources>

@@ -42,6 +42,15 @@ class ClerkAuthStateReducerTest {
         assertEquals(AuthState.SignedOut, reducer.reduce(snapshot()))
     }
 
+    @Test fun deliberateSignOutThroughAnEndedSessionNeverBecomesExpired() {
+        reducer.reduce(snapshot("user_1", SessionPhase.Active))
+        reducer.signOutRequested()
+        assertEquals(AuthState.SignedOut, reducer.reduce(snapshot("user_1", SessionPhase.Ended)))
+        assertEquals(AuthState.SignedOut, reducer.reduce(snapshot("user_1", SessionPhase.Ended)))
+        assertEquals(AuthState.SignedOut, reducer.reduce(snapshot()))
+        assertEquals(AuthState.SignedOut, reducer.reduce(snapshot()))
+    }
+
     @Test fun failedSignOutKeepsExpiryDetection() {
         reducer.reduce(snapshot("user_1", SessionPhase.Active))
         reducer.signOutRequested()

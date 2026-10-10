@@ -92,19 +92,22 @@ internal class ClerkAuthStateReducer {
                     AuthState.SignedIn(userId)
                 }
             SessionPhase.Pending -> AuthState.SignedOut
-            SessionPhase.Ended -> expiredOrSignedOut(userId ?: lastUserId)
-            SessionPhase.None -> expiredOrSignedOut(lastUserId)
+            // A deliberate sign-out stays a sign-out while the session winds down (ended, then gone).
+            SessionPhase.Ended -> if (signingOut) AuthState.SignedOut else expiredOrSignedOut(userId ?: lastUserId)
+            SessionPhase.None ->
+                if (signingOut) {
+                    // The sign-out has finished: forget the account so later empty states aren't "expired".
+                    signingOut = false
+                    lastUserId = null
+                    AuthState.SignedOut
+                } else {
+                    expiredOrSignedOut(lastUserId)
+                }
         }
     }
 
     private fun expiredOrSignedOut(userId: String?): AuthState =
-        if (signingOut || userId == null) {
-            lastUserId = null
-            signingOut = false
-            AuthState.SignedOut
-        } else {
-            AuthState.SessionExpired(userId)
-        }
+        if (userId == null) AuthState.SignedOut else AuthState.SessionExpired(userId)
 
     @Synchronized fun signOutRequested() { signingOut = true }
 

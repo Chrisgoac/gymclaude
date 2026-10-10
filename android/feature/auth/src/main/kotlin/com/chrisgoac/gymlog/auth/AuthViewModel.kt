@@ -34,7 +34,12 @@ data class AuthUiState(
     val code: String = "",
     val busy: Boolean = false,
     val message: AuthMessage? = null,
-)
+    /** The identity service can't be reached / rejects the app: shown as a banner above the form. */
+    val serviceUnavailable: Boolean = false,
+) {
+    /** A clean form after a flow finishes: only the chosen mode and typed email survive. */
+    fun reset() = AuthUiState(mode = mode, email = email, serviceUnavailable = serviceUnavailable)
+}
 
 /**
  * Drives the native email/code, password and Google flows. It never decides navigation: once the
@@ -47,9 +52,12 @@ class AuthViewModel(private val gateway: AuthGateway) : ViewModel() {
     init {
         viewModelScope.launch {
             gateway.state.collect { session ->
-                // Don't keep secrets in memory once they have done their job.
-                if (session is AuthSessionState.SignedIn) mutableState.update { it.copy(password = "", code = "") }
+                // Drop secrets and the finished flow, so a later sign-out starts from a clean form.
+                if (session is AuthSessionState.SignedIn) mutableState.update { it.reset() }
             }
+        }
+        viewModelScope.launch {
+            gateway.serviceUnavailable.collect { unavailable -> mutableState.update { it.copy(serviceUnavailable = unavailable) } }
         }
     }
 
@@ -58,7 +66,7 @@ class AuthViewModel(private val gateway: AuthGateway) : ViewModel() {
     fun onCodeChange(value: String) = mutableState.update { it.copy(code = value.filter(Char::isDigit).take(CODE_MAX), message = null) }
 
     fun setMode(mode: AuthMode) = mutableState.update {
-        if (it.busy) it else AuthUiState(mode = mode, email = it.email)
+        if (it.busy) it else it.copy(mode = mode).reset()
     }
 
     fun togglePasswordSignIn() = mutableState.update {
@@ -96,14 +104,14 @@ class AuthViewModel(private val gateway: AuthGateway) : ViewModel() {
         }
     }
 
-    /** Sends a fresh code by repeating the start step of the current flow. */
+    /** Sends a fresh code: a new email-code sign-in, or a re-sent code for the pending sign-up. */
     fun resendCode() {
         val current = state.value
         if (current.busy || current.stage != AuthStage.Code) return
         val email = current.email.trim()
         when (current.mode) {
             AuthMode.SignIn -> perform { gateway.startEmailCodeSignIn(email) }
-            AuthMode.SignUp -> perform { gateway.startSignUp(email, current.password.ifBlank { null }) }
+            AuthMode.SignUp -> perform { gateway.resendSignUpCode() }
         }
     }
 
@@ -122,7 +130,7 @@ class AuthViewModel(private val gateway: AuthGateway) : ViewModel() {
                 val idle = previous.copy(busy = false)
                 when (result) {
                     AuthStep.CodeSent -> idle.copy(stage = AuthStage.Code, code = "")
-                    AuthStep.Completed -> idle.copy(password = "", code = "")
+                    AuthStep.Completed -> idle.reset()
                     AuthStep.Cancelled -> idle
                     is AuthStep.Failed -> idle.copy(message = AuthMessage.Gateway(result.reason))
                 }

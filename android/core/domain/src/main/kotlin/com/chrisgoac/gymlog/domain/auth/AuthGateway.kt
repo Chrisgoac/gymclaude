@@ -39,8 +39,8 @@ sealed interface AuthFailure {
     /** The account needs a step this app does not offer (second factor, provider not configured…). */
     data object Unsupported : AuthFailure
 
-    /** [message] is the provider's own, already localized, human-readable text when it has one. */
-    data class Unknown(val message: String?) : AuthFailure
+    /** [code] is the provider's error code, for diagnostics only (never shown: provider text isn't localized). */
+    data class Unknown(val code: String?) : AuthFailure
 }
 
 /**
@@ -53,6 +53,9 @@ sealed interface AuthFailure {
 interface AuthGateway {
     val state: StateFlow<AuthSessionState>
 
+    /** True while the identity service can't be reached or rejects this app (no cached session either). */
+    val serviceUnavailable: StateFlow<Boolean>
+
     suspend fun startEmailCodeSignIn(email: String): AuthStep
     suspend fun verifyEmailCodeSignIn(code: String): AuthStep
     suspend fun signInWithPassword(email: String, password: String): AuthStep
@@ -60,6 +63,9 @@ interface AuthGateway {
     /** Creates the account and emails a verification code. [password] may be null if the instance does not require one. */
     suspend fun startSignUp(email: String, password: String?): AuthStep
     suspend fun verifySignUp(code: String): AuthStep
+
+    /** Emails a new code for the pending sign-up (no new account attempt). */
+    suspend fun resendSignUpCode(): AuthStep
 
     suspend fun signInWithGoogle(): AuthStep
 

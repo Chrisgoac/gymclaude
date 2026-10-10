@@ -123,6 +123,47 @@ class AuthViewModelTest {
         assertEquals("ana@example.com", vm.state.value.email)
     }
 
+    @Test fun completedFlowResetsToAFreshFormKeepingModeAndEmail() = runTest(dispatcher) {
+        val vm = newViewModel()
+        vm.setMode(AuthMode.SignUp)
+        vm.onEmailChange("new@example.com")
+        vm.onPasswordChange("s3cret-pass")
+        vm.submit(); advanceUntilIdle()
+        vm.onCodeChange("654321")
+        vm.submit(); advanceUntilIdle()
+
+        assertEquals(AuthUiState(mode = AuthMode.SignUp, email = "new@example.com"), vm.state.value)
+    }
+
+    @Test fun signedInWhileOnTheCodeStepLeavesNoStaleCodeStage() = runTest(dispatcher) {
+        val vm = newViewModel()
+        vm.onEmailChange("ana@example.com")
+        vm.submit(); advanceUntilIdle()
+        vm.onCodeChange("12")
+        // E.g. Google finished in the browser: the session arrives without this form completing.
+        gateway.state.value = AuthSessionState.SignedIn("user_1"); advanceUntilIdle()
+        gateway.state.value = AuthSessionState.SignedOut; advanceUntilIdle()
+
+        assertEquals(AuthUiState(email = "ana@example.com"), vm.state.value)
+    }
+
+    @Test fun signUpResendReusesThePendingSignUp() = runTest(dispatcher) {
+        val vm = newViewModel()
+        vm.setMode(AuthMode.SignUp)
+        vm.onEmailChange("new@example.com")
+        vm.submit(); advanceUntilIdle()
+        vm.resendCode(); advanceUntilIdle()
+        assertEquals(listOf("startSignUp:new@example.com:false", "resendSignUpCode"), gateway.calls)
+        assertEquals(AuthStage.Code, vm.state.value.stage)
+    }
+
+    @Test fun serviceUnavailableIsExposedToTheScreen() = runTest(dispatcher) {
+        val vm = newViewModel()
+        assertFalse(vm.state.value.serviceUnavailable)
+        gateway.serviceUnavailable.value = true; advanceUntilIdle()
+        assertTrue(vm.state.value.serviceUnavailable)
+    }
+
     @Test fun signedInSessionWipesSecretsFromTheForm() = runTest(dispatcher) {
         val vm = newViewModel()
         vm.togglePasswordSignIn()
@@ -136,6 +177,7 @@ class AuthViewModelTest {
 
 private class FakeAuthGateway : AuthGateway {
     override val state = MutableStateFlow<AuthSessionState>(AuthSessionState.SignedOut)
+    override val serviceUnavailable = MutableStateFlow(false)
     val calls = mutableListOf<String>()
     var next: AuthStep? = null
     var pending: CompletableDeferred<AuthStep>? = null
@@ -151,6 +193,7 @@ private class FakeAuthGateway : AuthGateway {
     override suspend fun signInWithPassword(email: String, password: String) = answer("signInWithPassword:$email", AuthStep.Completed)
     override suspend fun startSignUp(email: String, password: String?) = answer("startSignUp:$email:${password != null}", AuthStep.CodeSent)
     override suspend fun verifySignUp(code: String) = answer("verifySignUp:$code", AuthStep.Completed)
+    override suspend fun resendSignUpCode() = answer("resendSignUpCode", AuthStep.CodeSent)
     override suspend fun signInWithGoogle() = answer("signInWithGoogle", AuthStep.Completed)
     override suspend fun signOut() = answer("signOut", AuthStep.Completed)
 }

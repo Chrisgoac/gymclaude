@@ -4,10 +4,14 @@ import androidx.test.core.app.ApplicationProvider
 import com.chrisgoac.gymlog.database.UserDatabaseManagerImpl
 import com.chrisgoac.gymlog.network.AuthSessionProvider
 import com.chrisgoac.gymlog.network.AuthState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -133,6 +137,51 @@ class RootStateMachineTest {
         val machine = machine()
         auth.state.value = AuthState.SignedIn(USER_A)
         assertEquals(RootState.Fatal("bootstrap"), machine.state.value)
+    }
+
+    @Test fun cancelledBootstrapThatFailsAfterwardsCannotOverwriteSignedOut() = runTest(StandardTestDispatcher()) {
+        val runner = BootstrapRunner { _, database, _ ->
+            database.openHelper.writableDatabase
+            try {
+                awaitCancellation()
+            } catch (_: CancellationException) {
+                // e.g. a write hitting the database that sign-out is closing.
+                throw IllegalStateException("database closed")
+            }
+        }
+        val machine = RootStateMachine(auth, databases, runner, backgroundScope, true).also { it.start() }
+        auth.state.value = AuthState.SignedIn(USER_A)
+        runCurrent()
+        assertEquals(RootState.Bootstrapping(USER_A, 0f), machine.state.value)
+
+        auth.state.value = AuthState.SignedOut
+        runCurrent() // advanceUntilIdle() would skip backgroundScope work.
+
+        assertEquals(RootState.SignedOut, machine.state.value)
+        assertNull(databases.current.value)
+    }
+
+    @Test fun supersededBootstrapThatIgnoresCancellationCannotOverwriteTheNewAccount() = runTest(StandardTestDispatcher()) {
+        val runner = BootstrapRunner { userId, _, onProgress ->
+            if (userId == USER_A) {
+                try {
+                    awaitCancellation()
+                } catch (_: CancellationException) {
+                    onProgress(0.9f) // Misbehaving runner: keeps reporting and then "completes".
+                }
+            } else {
+                awaitCancellation() // B is still downloading.
+            }
+        }
+        val machine = RootStateMachine(auth, databases, runner, backgroundScope, true).also { it.start() }
+        auth.state.value = AuthState.SignedIn(USER_A)
+        runCurrent()
+
+        auth.state.value = AuthState.SignedIn(USER_B)
+        runCurrent() // advanceUntilIdle() would skip backgroundScope work.
+
+        assertEquals(RootState.Bootstrapping(USER_B, 0f), machine.state.value)
+        assertEquals(USER_B, databases.current.value?.userId)
     }
 
     private companion object {

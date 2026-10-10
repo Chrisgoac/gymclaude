@@ -5,8 +5,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ClerkFailureMappingTest {
-    private fun map(code: String? = null, status: Int? = null, network: Boolean = false, message: String? = null) =
-        clerkFailure(code, status, network, message)
+    private fun map(code: String? = null, status: Int? = null, network: Boolean = false) =
+        clerkFailure(code, status, network)
 
     @Test fun networkWinsOverEverything() = assertEquals(AuthFailure.Network, map("form_code_incorrect", network = true))
 
@@ -25,5 +25,5 @@ class ClerkFailureMappingTest {
         assertEquals(AuthFailure.WeakPassword, map("form_password_length_too_short"))
     }
 
-    @Test fun unknownKeepsClerksMessage() = assertEquals(AuthFailure.Unknown("Nope"), map("something_new", 422, message = "Nope"))
+    @Test fun unknownKeepsOnlyTheCodeForDiagnostics() = assertEquals(AuthFailure.Unknown("something_new"), map("something_new", 422))
 }

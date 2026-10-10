@@ -6,10 +6,13 @@ import com.chrisgoac.gymlog.network.AuthSessionProvider
 import com.chrisgoac.gymlog.network.AuthState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 
 /** What the app shows at its root. Product navigation exists only in [Ready]. */
@@ -99,32 +102,48 @@ class RootStateMachine(
         }
     }
 
-    private fun startBootstrap(userId: String) {
+    private suspend fun startBootstrap(userId: String) {
+        cancelBootstrap()
         bootstrappingUserId = userId
         mutableState.value = RootState.Bootstrapping(userId, 0f)
-        bootstrapJob = scope.launch {
+        // LAZY: the job must be registered as current before its body can run (immediate dispatchers).
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            val self = coroutineContext.job
+            // A cancelled or superseded run must never publish state, even if the runner swallows
+            // cancellation or fails because its database was closed underneath it.
+            fun isCurrent() = self.isActive && bootstrapJob === self
             try {
                 val database = databases.open(userId)
                 bootstrap.run(userId, database) { progress ->
-                    mutableState.value = RootState.Bootstrapping(userId, progress.coerceIn(0f, 1f))
+                    if (isCurrent()) mutableState.value = RootState.Bootstrapping(userId, progress.coerceIn(0f, 1f))
                 }
-                bootstrappingUserId = null
-                bootstrappedUserId = userId
-                mutableState.value = RootState.Ready(userId)
+                if (isCurrent()) {
+                    bootstrapJob = null
+                    bootstrappingUserId = null
+                    bootstrappedUserId = userId
+                    mutableState.value = RootState.Ready(userId)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled // cancelBootstrap() already reset the bookkeeping.
             } catch (_: Exception) {
-                // TODO(Task 7): distinguish retryable (offline) failures and resume from the checkpoint.
-                bootstrappingUserId = null
-                mutableState.value = RootState.Fatal(BOOTSTRAP)
+                if (isCurrent()) {
+                    // TODO(Task 7): distinguish retryable (offline) failures and resume from the checkpoint.
+                    bootstrapJob = null
+                    bootstrappingUserId = null
+                    mutableState.value = RootState.Fatal(BOOTSTRAP)
+                }
             }
         }
+        bootstrapJob = job
+        job.start()
     }
 
-    private fun cancelBootstrap() {
-        bootstrapJob?.cancel()
+    /** Cancels any running bootstrap and waits for it, so it is gone before its database is closed. */
+    private suspend fun cancelBootstrap() {
+        val job = bootstrapJob
         bootstrapJob = null
         bootstrappingUserId = null
+        job?.cancelAndJoin()
     }
 
     private companion object {

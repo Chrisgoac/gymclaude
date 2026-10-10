@@ -1,5 +1,7 @@
 package com.chrisgoac.gymlog.auth
 
+import android.util.Log
+import com.chrisgoac.gymlog.BuildConfig
 import com.chrisgoac.gymlog.domain.auth.AuthFailure
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
 import com.chrisgoac.gymlog.domain.auth.AuthSessionState
@@ -21,6 +23,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.io.IOException
@@ -37,6 +40,10 @@ class ClerkAuthGateway(
     override val state: StateFlow<AuthSessionState> = session.state
         .map { it.toSessionState() }
         .stateIn(scope, SharingStarted.Eagerly, session.state.value.toSessionState())
+
+    override val serviceUnavailable: StateFlow<Boolean> =
+        combine(Clerk.isInitialized, Clerk.initializationError) { initialized, error -> !initialized && error != null }
+            .stateIn(scope, SharingStarted.Eagerly, false)
 
     private var pendingSignIn: SignIn? = null
     private var pendingSignUp: SignUp? = null
@@ -105,6 +112,17 @@ class ClerkAuthGateway(
         }
     }
 
+    override suspend fun resendSignUpCode(): AuthStep = guarded {
+        val signUp = pendingSignUp ?: return@guarded AuthStep.Failed(AuthFailure.ExpiredCode)
+        when (val prepared = signUp.prepareVerification(SignUp.PrepareVerificationParams.Strategy.EmailCode())) {
+            is ClerkResult.Success -> {
+                pendingSignUp = prepared.value
+                AuthStep.CodeSent
+            }
+            is ClerkResult.Failure -> prepared.toStep()
+        }
+    }
+
     /**
      * Native Google (Credential Manager) when the instance has a Google One Tap client id; otherwise
      * Clerk's OAuth redirect through a Custom Tab, returning via the SDK's `clerk://<appId>.callback`.
@@ -124,17 +142,25 @@ class ClerkAuthGateway(
     override suspend fun signOut(): AuthStep {
         session.signOutRequested()
         return try {
-            // Clerk clears its local credentials even when the server call fails.
-            when (val result = Clerk.auth.signOut()) {
-                is ClerkResult.Success -> AuthStep.Completed
-                is ClerkResult.Failure -> result.toStep()
+            val result = Clerk.auth.signOut()
+            // Clerk clears its local credentials even when the server call fails: what matters here
+            // is that this device no longer has a session.
+            if (result is ClerkResult.Success || Clerk.session == null) {
+                AuthStep.Completed
+            } else {
+                session.signOutAbandoned()
+                (result as ClerkResult.Failure).toStep()
             }
         } catch (cancelled: CancellationException) {
             session.signOutAbandoned()
             throw cancelled
         } catch (_: Exception) {
-            session.signOutAbandoned()
-            AuthStep.Failed(AuthFailure.Unknown(null))
+            if (Clerk.session == null) {
+                AuthStep.Completed
+            } else {
+                session.signOutAbandoned()
+                AuthStep.Failed(AuthFailure.Unknown(null))
+            }
         }
     }
 
@@ -172,14 +198,9 @@ private fun ClerkResult.Failure<ClerkErrorResponse>.toStep(): AuthStep {
     val throwable = this.throwable
     if (throwable is SSOCancellationException || throwable.isCredentialCancellation()) return AuthStep.Cancelled
     val first = error?.errors?.firstOrNull()
-    return AuthStep.Failed(
-        clerkFailure(
-            code = first?.code,
-            httpStatus = code,
-            isNetwork = throwable is IOException,
-            message = first?.longMessage ?: first?.message,
-        ),
-    )
+    // Clerk's text is English-only, so the UI shows its own copy; keep the provider detail for debugging.
+    if (BuildConfig.DEBUG) Log.d(TAG, "Clerk failure code=${first?.code} http=$code: ${first?.longMessage ?: first?.message ?: throwable}")
+    return AuthStep.Failed(clerkFailure(code = first?.code, httpStatus = code, isNetwork = throwable is IOException))
 }
 
 /** Credential Manager cancellation, which Clerk wraps in an internal `CredentialFlowException.UserCancelled`. */
@@ -187,7 +208,7 @@ private fun Throwable?.isCredentialCancellation(): Boolean =
     this != null && javaClass.name.endsWith("CredentialFlowException\$UserCancelled")
 
 /** Maps Clerk FAPI error codes (https://clerk.com/docs/errors/overview) to what the UI explains. */
-internal fun clerkFailure(code: String?, httpStatus: Int?, isNetwork: Boolean, message: String?): AuthFailure = when {
+internal fun clerkFailure(code: String?, httpStatus: Int?, isNetwork: Boolean): AuthFailure = when {
     isNetwork -> AuthFailure.Network
     httpStatus == 429 || code == "too_many_requests" -> AuthFailure.RateLimited
     code == "form_code_incorrect" -> AuthFailure.InvalidCode
@@ -197,5 +218,7 @@ internal fun clerkFailure(code: String?, httpStatus: Int?, isNetwork: Boolean, m
     code == "form_identifier_exists" -> AuthFailure.AccountExists
     code != null && code.startsWith("form_password_") -> AuthFailure.WeakPassword
     code == "strategy_for_user_invalid" -> AuthFailure.Unsupported
-    else -> AuthFailure.Unknown(message)
+    else -> AuthFailure.Unknown(code)
 }
+
+private const val TAG = "GymLogAuth"
