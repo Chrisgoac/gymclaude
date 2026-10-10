@@ -336,12 +336,21 @@ data class PushMutation(
 @Serializable
 data class PushRequest(val mutations: List<PushMutation>)
 
-enum class ConflictReason {
+enum class ConflictReason(val wire: String) {
     /** The write applied, but baseServerVersion did not match the stored serverVersion. */
-    STALE_BASE,
+    STALE_BASE("STALE_BASE"),
 
     /** The write lost the version-tuple comparison; adopt the server record on the next pull. */
-    SUPERSEDED,
+    SUPERSEDED("SUPERSEDED"),
+
+    /** A reason added by a newer server. */
+    Unknown(""),
+    ;
+
+    companion object {
+        fun fromWire(reason: String): ConflictReason =
+            entries.firstOrNull { it != Unknown && it.wire == reason } ?: Unknown
+    }
 }
 
 @Serializable
@@ -350,8 +359,11 @@ data class SyncConflict(
     val table: SyncTable,
     val recordId: RecordId,
     @Serializable(with = ServerVersionSerializer::class) val serverVersion: Long,
-    val reason: ConflictReason,
-)
+    /** Open string on the wire; use [knownReason] to branch. */
+    val reason: String,
+) {
+    val knownReason: ConflictReason get() = ConflictReason.fromWire(reason)
+}
 
 @Serializable
 data class PushResponse(

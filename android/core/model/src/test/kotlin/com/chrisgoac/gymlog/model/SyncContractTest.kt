@@ -12,7 +12,9 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -80,9 +82,15 @@ class SyncContractTest {
 
     @Test
     fun serverOwnedFieldsInRecordsAreRejectedByStrictJson() {
-        assertFailsWith<SerializationException> {
+        val failure = assertFailsWith<SerializationException> {
             ContractJson.decodeFromString<PushRequest>(fixtureText("push-invalid-server-field.json"))
         }
+        assertTrue(failure.message!!.contains("userId"), failure.message)
+        // The same fixture minus the server-owned keys decodes, so those keys are the only cause.
+        val cleaned = fixtureText("push-invalid-server-field.json")
+            .replace(Regex("\"userId\":\\s*\"[^\"]*\",?"), "")
+            .replace(Regex("\"serverVersion\":\\s*\"[^\"]*\",?"), "")
+        assertEquals(1, ContractJson.decodeFromString<PushRequest>(cleaned).mutations.size)
     }
 
     @Test
@@ -130,7 +138,37 @@ class SyncContractTest {
         val body = """{"acceptedMutationIds":["6f9619ff-8b86-4d11-b42d-00c04fc964ff"],"conflicts":[${conflictJson("\"7\"")}]}"""
         val response = ResponseJson.decodeFromString<PushResponse>(body)
         assertEquals(SyncTable.GYMS, response.conflicts.single().table)
-        assertEquals(ConflictReason.SUPERSEDED, response.conflicts.single().reason)
+        assertEquals(ConflictReason.SUPERSEDED, response.conflicts.single().knownReason)
+    }
+
+    @Test
+    fun unknownConflictReasonDoesNotBreakLenientDecoding() {
+        val body = """{"acceptedMutationIds":["6f9619ff-8b86-4d11-b42d-00c04fc964ff"],"conflicts":[${conflictJson("\"7\"").replace("SUPERSEDED", "NEW_THING")}]}"""
+        val response = ResponseJson.decodeFromString<PushResponse>(body)
+        assertEquals(1, response.acceptedMutationIds.size)
+        assertEquals("NEW_THING", response.conflicts.single().reason)
+        assertEquals(ConflictReason.Unknown, response.conflicts.single().knownReason)
+    }
+
+    // conflict-cases.json (LWW merge vectors) is consumed by Task 7 (core:data), not here.
+    @Test
+    fun paginationFixtureCursorsAreOpaqueAndPageMathMatches() {
+        val cases = fixtureTree("pull-pagination-cases.json").jsonObject
+        val valid = cases.getValue("cursorRoundTrips").jsonArray.map {
+            java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(it.jsonPrimitive.content.toByteArray())
+        }
+        val invalid = cases.getValue("invalidCursors").jsonArray.map { it.jsonObject.getValue("cursor").jsonPrimitive.content }
+        for (cursor in valid + invalid) {
+            val body = """{"changes":[],"cursor":${JsonPrimitive(cursor)},"hasMore":false}"""
+            val page = ResponseJson.decodeFromString<PullResponse>(body)
+            assertEquals(cursor, page.cursor)
+            assertEquals(cursor, ContractJson.encodeToJsonElement(PullResponse.serializer(), page).jsonObject.getValue("cursor").jsonPrimitive.content)
+        }
+        val p = cases.getValue("pagination").jsonObject
+        val total = p.getValue("totalChanges").jsonPrimitive.int
+        val size = p.getValue("pageSize").jsonPrimitive.int
+        val sizes = generateSequence(total) { it - size }.takeWhile { it > 0 }.map { minOf(it, size) }.toList()
+        assertEquals(p.getValue("expectedPageSizes").jsonArray.map { it.jsonPrimitive.int }, sizes)
     }
 
     @Test
