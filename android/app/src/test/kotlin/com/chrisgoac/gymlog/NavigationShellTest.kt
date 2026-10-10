@@ -2,7 +2,7 @@ package com.chrisgoac.gymlog
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.chrisgoac.gymlog.NavigationShellChecks.fiveBottomDestinationsInOrder
-import com.chrisgoac.gymlog.NavigationShellChecks.readableAtTwoHundredPercentFont
+import com.chrisgoac.gymlog.NavigationShellChecks.bodyScalesAndTabsStayLegibleAtTwoHundredPercentFont
 import com.chrisgoac.gymlog.NavigationShellChecks.secondaryRouteOpensAndGoesBack
 import com.chrisgoac.gymlog.NavigationShellChecks.selectedSemanticsFollowNavigation
 import com.chrisgoac.gymlog.NavigationShellChecks.showShell
@@ -25,7 +25,7 @@ class NavigationShellTest {
     @Test fun selectedSemantics() = with(rule) { showShell(); selectedSemanticsFollowNavigation() }
     @Test fun tabStatePreserved() = with(rule) { showShell(); tabStateIsPreserved() }
     @Test fun touchTargets() = with(rule) { showShell(); touchTargetsAtLeast48dp() }
-    @Test fun readableAt200PercentFont() = with(rule) { showShell(fontScale = 2f); readableAtTwoHundredPercentFont() }
+    @Test fun bodyScalesAndTabsLegibleAt200PercentFont() = with(rule) { showShell(fontScale = 2f); bodyScalesAndTabsStayLegibleAtTwoHundredPercentFont() }
     @Test fun darkThemeRenders() = with(rule) { showShell(darkTheme = true); fiveBottomDestinationsInOrder() }
     @Test fun secondaryRoutes() = with(rule) { showShell(); secondaryRouteOpensAndGoesBack() }
 }

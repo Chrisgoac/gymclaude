@@ -18,7 +18,7 @@ fun buildConfigString(key: String, default: String): String {
 
 android {
     namespace = "com.chrisgoac.gymlog"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.chrisgoac.gymlog"

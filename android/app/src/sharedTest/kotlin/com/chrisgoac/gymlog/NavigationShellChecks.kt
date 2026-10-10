@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.text.TextLayoutResult
@@ -82,24 +83,47 @@ internal object NavigationShellChecks {
         }
     }
 
-    fun ComposeContentTestRule.readableAtTwoHundredPercentFont() {
+    /**
+     * At 200% system font scale the screen CONTENT scales fully and stays unclipped. The tab bar
+     * deliberately caps at 1.3x (five labels share the width), so for tabs we only assert they stay
+     * legible: one line, not clipped, inside their tab.
+     */
+    fun ComposeContentTestRule.bodyScalesAndTabsStayLegibleAtTwoHundredPercentFont() {
         onNodeWithText("ENTRENAR").assertIsDisplayed()
-        onNodeWithText("Entrenar · fila 1").performScrollToNodeIfNeeded()
+        // Body: a card's text is displayed, measured at the doubled size, and not clipped.
+        val body = onNodeWithText("Entrenar · fila 1")
+        body.assertIsDisplayed()
+        val bodyLayout = textLayout(body)
+        assertFalse("body text clipped vertically at 200% font", bodyLayout.didOverflowHeight)
+        // Every glyph is laid out inside the card: the node fits within the root horizontally.
+        val bounds = body.fetchSemanticsNode().boundsInRoot
+        val rootWidth = onRoot().fetchSemanticsNode().size.width
+        assertTrue("body text extends past the screen at 200% font", bounds.left >= 0f && bounds.right <= rootWidth)
+        // Body is 16sp: at 2x its laid-out line must be at least 16sp * 2 tall in px (it really scaled).
+        val density = bodyLayout.layoutInput.density
+        assertTrue("body text did not scale to 200%", density.fontScale == 2f)
+        val minLinePx = 16 * density.fontScale * density.density
+        assertTrue("body line too short for 2x scale", bodyLayout.size.height >= minLinePx)
+        // Tabs (capped at 1.3x by design): legible and contained.
         onAllNodes(isSelectable()).assertCountEquals(5)
         tabLabels.forEach { label ->
             val node = tab(label)
             node.assertIsDisplayed()
             node.assertHeightIsAtLeast(48.dp)
-            val results = mutableListOf<TextLayoutResult>()
-            val textNode = onNode(hasText(label) and isSelectable()).fetchSemanticsNode()
-            val child = textNode.children.firstOrNull() ?: textNode
-            child.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
-            assertTrue("tab label '$label' should be measured", results.isNotEmpty())
-            val layout = results.first()
-            assertFalse("tab label '$label' is clipped vertically at 200% font", layout.didOverflowHeight)
+            val layout = textLayout(onNode(hasText(label) and isSelectable()))
+            assertFalse("tab label '$label' is clipped", layout.didOverflowHeight)
             assertTrue("tab label '$label' is wider than its tab", layout.size.width <= node.fetchSemanticsNode().size.width)
-            assertEquals("tab label '$label' must stay on one line", 1, results.first().lineCount)
+            assertEquals("tab label '$label' must stay on one line", 1, layout.lineCount)
         }
+    }
+
+    private fun textLayout(node: SemanticsNodeInteraction): TextLayoutResult {
+        val results = mutableListOf<TextLayoutResult>()
+        val semantics = node.fetchSemanticsNode()
+        val target = if (SemanticsActions.GetTextLayoutResult in semantics.config) semantics else semantics.children.first()
+        target.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+        assertTrue("text should be measured", results.isNotEmpty())
+        return results.first()
     }
 
     fun ComposeContentTestRule.secondaryRouteOpensAndGoesBack() {
@@ -110,6 +134,4 @@ internal object NavigationShellChecks {
         onNodeWithText("Coach Pro").performClick()
         onNodeWithText("COACH PRO").assertIsDisplayed()
     }
-
-    private fun SemanticsNodeInteraction.performScrollToNodeIfNeeded() = assertIsDisplayed()
 }

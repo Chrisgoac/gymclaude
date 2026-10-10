@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
@@ -129,7 +130,11 @@ fun HierroButton(
                 .widthIn(min = HierroShape.minTouchTarget)
                 .hardBox(fill, colors.border, colors.shadow, shadowOffset, if (focused) 4.dp else HierroShape.border)
                 .clickable(interactionSource = interaction, indication = null, enabled = active, role = Role.Button, onClick = onClick)
-                .semantics { if (loading) stateDescription = loadingLabel; if (!enabled) disabled() }
+                .semantics {
+                    contentDescription = text
+                    if (loading) stateDescription = loadingLabel
+                    if (!enabled) disabled()
+                }
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -192,7 +197,8 @@ fun HierroTextField(
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val borderColor = if (errorMessage != null) colors.error else colors.border
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    // Merged: one focus stop that announces the visible label together with the typed value.
+    Column(modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         HierroText(label.uppercase(), style = HierroTheme.typography.label, color = if (enabled) colors.ink else colors.textMuted)
         BasicTextField(
             value = value,
@@ -208,10 +214,7 @@ fun HierroTextField(
                 .background(if (enabled) colors.surface else colors.surfaceMuted)
                 .border(if (focused) 4.dp else HierroShape.border, borderColor)
                 .padding(horizontal = 12.dp, vertical = 12.dp)
-                .semantics {
-                    contentDescription = label
-                    if (errorMessage != null) error(errorMessage)
-                },
+                .semantics { if (errorMessage != null) error(errorMessage) },
         )
         if (errorMessage != null) {
             HierroText(
@@ -316,12 +319,14 @@ fun HierroScreenHeader(
 @Composable
 fun HierroHeaderAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = HierroTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Box(
         modifier
             .heightIn(min = HierroShape.minTouchTarget)
             .widthIn(min = HierroShape.minTouchTarget)
-            .border(HierroShape.border, colors.border)
-            .clickable(role = Role.Button, onClick = onClick)
+            .border(if (focused) 4.dp else HierroShape.border, colors.border)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -340,6 +345,7 @@ fun HierroTabBar(modifier: Modifier = Modifier, content: @Composable RowScope.()
         Row(
             modifier
                 .fillMaxWidth()
+                .selectableGroup()
                 .background(colors.surface)
                 .drawBehind { drawRect(colors.border, size = size.copy(height = HierroShape.border.toPx())) },
             content = content,
@@ -357,12 +363,15 @@ fun RowScope.HierroTab(
     modifier: Modifier = Modifier,
 ) {
     val colors = HierroTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Box(
         modifier
             .weight(1f)
             .heightIn(min = 56.dp)
             .background(if (selected) colors.accent else colors.surface)
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .selectable(selected = selected, interactionSource = interaction, indication = null, role = Role.Tab, onClick = onClick)
+            .then(if (focused) Modifier.border(4.dp, colors.border) else Modifier)
             .padding(horizontal = 2.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {

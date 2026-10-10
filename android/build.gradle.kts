@@ -67,7 +67,7 @@ subprojects {
     plugins.withId("com.android.library") {
         extensions.configure<com.android.build.api.dsl.LibraryExtension> {
             namespace = "com.chrisgoac.gymlog" + path.replace("-", "").replace(":", ".")
-            compileSdk = 36
+            compileSdk = 37
             defaultConfig.minSdk = 26
             compileOptions {
                 sourceCompatibility = javaVersion
