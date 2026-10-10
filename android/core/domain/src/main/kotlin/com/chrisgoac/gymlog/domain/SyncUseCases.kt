@@ -40,16 +40,21 @@ interface SyncRepository {
 
     /** Push the outbox, then pull until up to date. At most one run per user at a time. */
     suspend fun syncOnce(): SyncResult
+
+    /** Unsynced local mutations of the open account (quarantined first), without payload values. */
+    fun observeDiagnostics(): Flow<List<OutboxDiagnostic>>
 }
 
 /** What features may do with sync. */
 interface SyncUseCases {
     fun observeStatus(): Flow<SyncStatus>
+    fun observeDiagnostics(): Flow<List<OutboxDiagnostic>>
     suspend fun syncNow(): SyncResult
 }
 
 class DefaultSyncUseCases(private val repository: SyncRepository) : SyncUseCases {
     override fun observeStatus(): Flow<SyncStatus> = repository.observeStatus()
+    override fun observeDiagnostics(): Flow<List<OutboxDiagnostic>> = repository.observeDiagnostics()
     override suspend fun syncNow(): SyncResult = repository.syncOnce()
 }
 

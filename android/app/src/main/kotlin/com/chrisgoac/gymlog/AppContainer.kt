@@ -26,16 +26,32 @@ import com.chrisgoac.gymlog.network.AuthState
 import com.chrisgoac.gymlog.network.ServerClock
 import com.chrisgoac.gymlog.network.SyncApi
 import com.chrisgoac.gymlog.network.createSyncApi
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.work.WorkManager
+import com.chrisgoac.gymlog.domain.SignOutUseCase
+import com.chrisgoac.gymlog.navigation.SettingsServices
+import com.chrisgoac.gymlog.sync.AppSyncEnvironment
+import com.chrisgoac.gymlog.sync.BootstrapAutoRetry
+import com.chrisgoac.gymlog.sync.ConnectivityMonitor
+import com.chrisgoac.gymlog.sync.NotifyingLocalMutationRunner
+import com.chrisgoac.gymlog.sync.RetryAfterGate
+import com.chrisgoac.gymlog.sync.RoomLocalAccountCleaner
+import com.chrisgoac.gymlog.sync.SyncTriggers
+import com.chrisgoac.gymlog.sync.SyncWorkerFactory
+import com.chrisgoac.gymlog.sync.WorkManagerSyncScheduler
 import com.clerk.api.Clerk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 /** Manual DI root, one per process. */
-class AppContainer(application: Application) {
+class AppContainer(private val application: Application) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val databases: UserDatabaseManager = UserDatabaseManagerImpl(application)
@@ -66,7 +82,10 @@ class AppContainer(application: Application) {
      * stamped through [LocalMutationScope.nextTimestamp] with [syncClock].
      */
     fun localMutationRunner(database: GymLogDatabase): LocalMutationRunner =
-        RoomLocalMutationRunner(database, deviceId, clock = syncClock::nowMillis)
+        NotifyingLocalMutationRunner(
+            RoomLocalMutationRunner(database, deviceId, clock = syncClock::nowMillis),
+            onCommitted = syncTriggers::onLocalMutation,
+        )
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val syncLocks = SyncLocks()
@@ -75,12 +94,46 @@ class AppContainer(application: Application) {
     val syncRepository: SyncRepository = SyncRepositoryImpl(databases, syncApi, bootstrapRepository, syncLocks)
     val syncUseCases: SyncUseCases = DefaultSyncUseCases(syncRepository)
 
+    private val retryGate = RetryAfterGate()
+    private val syncScheduler = WorkManagerSyncScheduler({ WorkManager.getInstance(application) }, retryGate)
+
     private val bootstrapRunner = BootstrapRunner { userId, database, onProgress ->
         bootstrapRepository.run(userId, database, onProgress)
     }
 
     val rootStateMachine = RootStateMachine(authSession, databases, bootstrapRunner, appScope, clerkConfigured)
         .also { it.start() }
+
+    /** Worker factory for WorkManager's on-demand initialization (see [GymLogApplication]). */
+    val syncWorkerFactory = SyncWorkerFactory(
+        AppSyncEnvironment(rootStateMachine.state, syncUseCases, syncScheduler, retryGate),
+    )
+
+    private val syncTriggers = SyncTriggers(appScope, rootStateMachine.state, syncScheduler)
+
+    private val signOutUseCase by lazy {
+        SignOutUseCase(
+            currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId },
+            scheduler = syncScheduler,
+            cleaner = RoomLocalAccountCleaner(application, databases),
+            auth = authGateway,
+        )
+    }
+
+    /** Null when Clerk is not configured: the signed-in shell is unreachable then. */
+    val settingsServices: SettingsServices? by lazy {
+        if (clerkConfigured) SettingsServices(syncUseCases, signOutUseCase) else null
+    }
+
+    /** Starts the sync triggers: ready account, foreground, local mutations, connectivity (bootstrap retry). */
+    fun startSync() {
+        syncTriggers.start()
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) syncTriggers.onForeground() },
+        )
+        val connectivity = ConnectivityMonitor(application)
+        appScope.launch { BootstrapAutoRetry(rootStateMachine.state, connectivity.online, rootStateMachine::retryBootstrap).run() }
+    }
 
     private companion object {
         fun installationDeviceId(application: Application): DeviceId {

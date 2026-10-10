@@ -23,11 +23,17 @@ import com.chrisgoac.gymlog.designsystem.component.HierroLoadingState
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
 import com.chrisgoac.gymlog.navigation.GymLogApp
+import com.chrisgoac.gymlog.navigation.SettingsServices
 import kotlin.math.roundToInt
 
 /** Renders [RootState]: product navigation ([GymLogApp]) exists only once the user is [RootState.Ready]. */
 @Composable
-fun GymLogRoot(state: RootState, authGateway: () -> AuthGateway, onRetryBootstrap: () -> Unit = {}) {
+fun GymLogRoot(
+    state: RootState,
+    authGateway: () -> AuthGateway,
+    onRetryBootstrap: () -> Unit = {},
+    settings: SettingsServices? = null,
+) {
     when (state) {
         RootState.Loading -> CenteredStatus { HierroLoadingState(stringResource(R.string.root_loading)) }
         RootState.SignedOut -> AuthRoute(authGateway, notice = null)
@@ -35,7 +41,7 @@ fun GymLogRoot(state: RootState, authGateway: () -> AuthGateway, onRetryBootstra
         is RootState.Bootstrapping -> CenteredStatus {
             HierroLoadingState(stringResource(R.string.root_bootstrapping, (state.progress * 100).roundToInt()))
         }
-        is RootState.Ready -> GymLogApp()
+        is RootState.Ready -> GymLogApp(settings = settings)
         is RootState.Fatal -> CenteredStatus {
             val config = state.message == "config"
             HierroEmptyState(

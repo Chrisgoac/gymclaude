@@ -65,10 +65,12 @@ class UserDatabaseManagerImpl(
         private val FILE_SUFFIXES = listOf("-wal", "-shm", "-journal")
 
         /** `gymlog-<first 32 hex chars of SHA-256(userId)>.db` (128 bits: collisions are not a concern). */
-        fun databaseFileName(userId: String): String {
+        fun databaseFileName(userId: String): String = "gymlog-${userHash(userId)}.db"
+
+        /** First 32 hex chars of SHA-256(userId): the only form of a user id allowed on disk or in work names. */
+        fun userHash(userId: String): String {
             val digest = MessageDigest.getInstance("SHA-256").digest(userId.toByteArray(Charsets.UTF_8))
-            val hex = digest.joinToString("") { "%02x".format(it) }
-            return "gymlog-${hex.take(32)}.db"
+            return digest.joinToString("") { "%02x".format(it) }.take(32)
         }
     }
 }

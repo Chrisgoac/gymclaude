@@ -19,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +34,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.chrisgoac.gymlog.domain.SignOutUseCase
+import com.chrisgoac.gymlog.domain.SyncUseCases
+import com.chrisgoac.gymlog.settings.SettingsScreen
+import com.chrisgoac.gymlog.settings.SettingsUiState
+import com.chrisgoac.gymlog.settings.SettingsViewModel
+import com.chrisgoac.gymlog.settings.SyncDiagnosticsScreen
 import com.chrisgoac.gymlog.designsystem.component.HierroCard
 import com.chrisgoac.gymlog.designsystem.component.HierroHeaderAction
 import com.chrisgoac.gymlog.designsystem.component.HierroScreenHeader
@@ -42,9 +50,12 @@ import com.chrisgoac.gymlog.designsystem.component.HierroText
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.R
 
-/** Five-tab shell. Route content is smoke-only; real feature screens replace it in later tasks. */
+/** What the Settings routes need; null keeps them as smoke screens (shell tests). */
+class SettingsServices(val sync: SyncUseCases, val signOut: SignOutUseCase)
+
+/** Five-tab shell. Route content is smoke-only except Settings; real feature screens replace it in later tasks. */
 @Composable
-fun GymLogApp(navController: NavHostController = rememberNavController()) {
+fun GymLogApp(navController: NavHostController = rememberNavController(), settings: SettingsServices? = null) {
     val colors = HierroTheme.colors
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -56,7 +67,7 @@ fun GymLogApp(navController: NavHostController = rememberNavController()) {
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize())
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -79,7 +90,9 @@ fun GymLogApp(navController: NavHostController = rememberNavController()) {
 }
 
 @Composable
-private fun GymLogNavHost(navController: NavHostController, modifier: Modifier) {
+private fun GymLogNavHost(navController: NavHostController, modifier: Modifier, settings: SettingsServices?) {
+    // Activity-scoped so Settings and its diagnostics share one state and it survives navigation.
+    val settingsViewModel = settings?.let { services -> viewModel { SettingsViewModel(services.sync, services.signOut) } }
     NavHost(navController, startDestination = GymLogGraph.Train, modifier = modifier) {
         navigation<GymLogGraph.Train>(startDestination = GymLogDestination.Train) {
             composable<GymLogDestination.Train> {
@@ -101,7 +114,21 @@ private fun GymLogNavHost(navController: NavHostController, modifier: Modifier) 
         composable<GymLogDestination.Coach> { SmokeScreen(GymLogDestination.Coach, navController, secondary = true) }
         composable<GymLogDestination.Body> { SmokeScreen(GymLogDestination.Body, navController, secondary = true) }
         composable<GymLogDestination.Achievements> { SmokeScreen(GymLogDestination.Achievements, navController, secondary = true) }
-        composable<GymLogDestination.Settings> { SmokeScreen(GymLogDestination.Settings, navController, secondary = true) }
+        composable<GymLogDestination.Settings> {
+            if (settingsViewModel == null) {
+                SmokeScreen(GymLogDestination.Settings, navController, secondary = true)
+            } else {
+                SettingsScreen(
+                    settingsViewModel,
+                    onBack = { navController.popBackStack() },
+                    onSyncDetails = { navController.navigate(GymLogDestination.SyncDiagnostics) },
+                )
+            }
+        }
+        composable<GymLogDestination.SyncDiagnostics> {
+            val diagnostics by (settingsViewModel?.state ?: EmptySettingsState).collectAsState()
+            SyncDiagnosticsScreen(diagnostics.diagnostics, onBack = { navController.popBackStack() })
+        }
     }
 }
 
@@ -143,3 +170,5 @@ private fun SmokeScreen(
 }
 
 const val SMOKE_ROWS = 40
+
+private val EmptySettingsState = kotlinx.coroutines.flow.MutableStateFlow(SettingsUiState())

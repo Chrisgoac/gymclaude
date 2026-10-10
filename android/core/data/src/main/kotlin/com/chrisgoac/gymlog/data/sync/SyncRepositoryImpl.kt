@@ -7,6 +7,7 @@ import com.chrisgoac.gymlog.database.UserDatabaseManager
 import com.chrisgoac.gymlog.database.entity.OutboxMutationEntity
 import com.chrisgoac.gymlog.database.entity.OutboxStatus
 import com.chrisgoac.gymlog.database.entity.SyncCursorEntity
+import com.chrisgoac.gymlog.domain.OutboxDiagnostic
 import com.chrisgoac.gymlog.domain.SyncRepository
 import com.chrisgoac.gymlog.domain.SyncResult
 import com.chrisgoac.gymlog.domain.SyncStatus
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.withLock
 
@@ -78,6 +80,21 @@ class SyncRepositoryImpl(
             }
         }
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeDiagnostics(): Flow<List<OutboxDiagnostic>> = databases.current.flatMapLatest { open ->
+        if (open == null) flowOf(emptyList())
+        else open.database.syncDao().observeOutbox(DIAGNOSTIC_LIMIT).map { rows -> rows.map(::diagnosticOf) }
+    }
+
+    /** Ids, wire table names, counters and error codes only: never payload values. */
+    private fun diagnosticOf(row: OutboxMutationEntity): OutboxDiagnostic = OutboxDiagnostic(
+        mutationIdPrefix = row.mutationId.take(ID_PREFIX_LENGTH),
+        tables = decodeOrNull(row)?.operations?.map { it.table.wire }?.distinct().orEmpty(),
+        attemptCount = row.attemptCount,
+        lastErrorCode = row.lastErrorCode,
+        rejected = row.status == OutboxStatus.QUARANTINED,
+    )
 
     override suspend fun syncOnce(): SyncResult {
         val open = databases.current.value ?: return SyncResult.SessionRequired(quarantined = 0)
@@ -235,6 +252,9 @@ class SyncRepositoryImpl(
     companion object {
         /** contracts/v1/README.md recommends at most 20 mutations per request. */
         const val MAX_BATCH_MUTATIONS = 20
+
+        private const val DIAGNOSTIC_LIMIT = 200
+        private const val ID_PREFIX_LENGTH = 8
 
         /** Half of MAX_PUSH_BODY_BYTES (2 MiB): keeps every request well under the server limit. */
         const val PUSH_BODY_BUDGET_BYTES = 1024 * 1024

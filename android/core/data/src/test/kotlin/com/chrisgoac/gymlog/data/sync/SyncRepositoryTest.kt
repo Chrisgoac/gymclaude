@@ -93,6 +93,25 @@ class SyncRepositoryTest {
 
     private suspend fun outboxStatus(mutationId: String) = db.syncDao().allOutbox().single { it.mutationId == mutationId }
 
+    // ---- Diagnostics ----
+
+    @Test
+    fun diagnosticsListRejectedFirstAndNeverExposePayloadValues() = runTest {
+        markBootstrapped("c1")
+        val a = enqueue("ex-a", nombre = "SECRET-NAME")
+        val b = enqueue("ex-b")
+        db.syncDao().quarantineOutbox(b, "INVALID_REQUEST")
+
+        val rows = repository().observeDiagnostics().first()
+
+        assertEquals(listOf(b.take(8), a.take(8)), rows.map { it.mutationIdPrefix })
+        assertEquals(listOf(true, false), rows.map { it.rejected })
+        assertEquals(listOf("exercises"), rows[0].tables)
+        assertEquals("INVALID_REQUEST", rows[0].lastErrorCode)
+        assertEquals(1, rows[0].attemptCount)
+        assertTrue(rows.none { it.toString().contains("SECRET-NAME") })
+    }
+
     // ---- Push ----
 
     @Test

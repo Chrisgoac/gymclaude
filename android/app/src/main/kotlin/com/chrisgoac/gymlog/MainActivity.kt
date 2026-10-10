@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
                     rootState,
                     authGateway = { container.authGateway },
                     onRetryBootstrap = container.rootStateMachine::retryBootstrap,
+                    settings = container.settingsServices,
                 )
             }
         }

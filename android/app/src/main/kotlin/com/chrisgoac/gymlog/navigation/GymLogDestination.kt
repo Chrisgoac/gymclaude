@@ -19,6 +19,7 @@ sealed interface GymLogDestination {
     @Serializable data object Body : GymLogDestination { override val title = R.string.nav_body }
     @Serializable data object Achievements : GymLogDestination { override val title = R.string.nav_achievements }
     @Serializable data object Settings : GymLogDestination { override val title = R.string.nav_settings }
+    @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 
 /** Per-tab nested graph routes (spec 6.2: each main destination has its own graph). */

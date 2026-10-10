@@ -36,6 +36,10 @@ interface SyncDao {
     @Query("SELECT * FROM outbox_mutations ORDER BY sequence")
     suspend fun allOutbox(): List<OutboxMutationEntity>
 
+    /** Rejected rows first, then oldest first; for diagnostics only. */
+    @Query("SELECT * FROM outbox_mutations ORDER BY CASE status WHEN 'QUARANTINED' THEN 0 ELSE 1 END, sequence LIMIT :limit")
+    fun observeOutbox(limit: Int): Flow<List<OutboxMutationEntity>>
+
     @Query("SELECT COUNT(*) FROM outbox_mutations WHERE status = :status")
     fun observeOutboxCount(status: OutboxStatus): Flow<Int>
 
