@@ -34,7 +34,7 @@ class UserDatabaseManagerImpl(
         closeLocked()
         val database = configure(
             Room.databaseBuilder(appContext, GymLogDatabase::class.java, databaseFileName(userId)),
-        ).build()
+        ).addMigrations(*GYMLOG_MIGRATIONS).build()
         state.value = OpenUserDatabase(userId, database)
         database
     }

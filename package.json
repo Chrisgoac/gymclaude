@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
+    "export:android-catalog": "tsx scripts/export-android-catalog.mjs",
     "db:migrate:sync": "node scripts/migrate-sync-foundation.mjs"
   },
   "dependencies": {

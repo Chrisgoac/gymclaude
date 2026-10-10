@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 dependencies {
@@ -8,6 +9,7 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:network"))
     implementation(libs.androidx.room.ktx)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
@@ -22,4 +24,8 @@ tasks.withType<Test>().configureEach {
     jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
     systemProperty("gymlog.fixturesDir", fixturesDir.canonicalPath)
     inputs.dir(fixturesDir)
+    // The shipped catalog asset is read in place from :app, never copied.
+    val catalogAsset = rootProject.projectDir.resolve("app/src/main/assets/exercises-v1.json")
+    systemProperty("gymlog.catalogAsset", catalogAsset.canonicalPath)
+    inputs.file(catalogAsset)
 }

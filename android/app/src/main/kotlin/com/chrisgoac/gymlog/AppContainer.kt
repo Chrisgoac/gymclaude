@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.core.content.edit
 import com.chrisgoac.gymlog.auth.ClerkAuthGateway
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
+import com.chrisgoac.gymlog.data.catalog.CatalogAsset
 import com.chrisgoac.gymlog.data.sync.BootstrapRepository
 import com.chrisgoac.gymlog.data.sync.ServerOffsetClock
 import com.chrisgoac.gymlog.data.sync.SyncLocks
@@ -35,6 +36,7 @@ import com.chrisgoac.gymlog.domain.SignOutUseCase
 import com.chrisgoac.gymlog.navigation.SettingsServices
 import com.chrisgoac.gymlog.sync.AppSyncEnvironment
 import com.chrisgoac.gymlog.sync.BootstrapAutoRetry
+import com.chrisgoac.gymlog.sync.CatalogSeedingUserDatabaseManager
 import com.chrisgoac.gymlog.sync.ConnectivityMonitor
 import com.chrisgoac.gymlog.sync.NotifyingLocalMutationRunner
 import com.chrisgoac.gymlog.sync.ReconcilingUserDatabaseManager
@@ -64,7 +66,10 @@ class AppContainer(private val application: Application) {
     private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks)
 
     /** Every open first finishes a pending sign-out deletion of that account (see [RoomLocalAccountCleaner.reconcile]). */
-    val databases: UserDatabaseManager = ReconcilingUserDatabaseManager(databaseManager, accountCleaner::reconcile)
+    val databases: UserDatabaseManager = CatalogSeedingUserDatabaseManager(
+        ReconcilingUserDatabaseManager(databaseManager, accountCleaner::reconcile),
+        loadAsset = { application.assets.open(CATALOG_ASSET).use(CatalogAsset::read) },
+    )
 
     /** False when `clerk.publishableKey` is missing from local.properties or Clerk rejects it. */
     private val clerkConfigured: Boolean = initializeClerk(application, BuildConfig.CLERK_PUBLISHABLE_KEY)
@@ -170,6 +175,8 @@ class AppContainer(private val application: Application) {
     }
 
     private companion object {
+        const val CATALOG_ASSET = "exercises-v1.json"
+
         fun installationDeviceId(application: Application): DeviceId {
             val prefs = application.getSharedPreferences("gymlog.installation", Context.MODE_PRIVATE)
             val existing = prefs.getString("deviceId", null)

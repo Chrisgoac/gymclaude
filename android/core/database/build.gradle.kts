@@ -11,6 +11,8 @@ android {
     // Same isolation assertions run on the JVM (Robolectric) and on a device (androidTest).
     sourceSets {
         getByName("test").kotlin.directories.add("src/sharedTest/kotlin")
+        // MigrationTestHelper reads the exported schema JSON files as assets.
+        getByName("test").assets.directories.add("$projectDir/schemas")
         getByName("androidTest").kotlin.directories.add("src/sharedTest/kotlin")
     }
 }
@@ -31,6 +33,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.androidx.room.testing)
 
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
