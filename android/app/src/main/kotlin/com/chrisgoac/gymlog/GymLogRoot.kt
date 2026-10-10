@@ -31,6 +31,7 @@ import com.chrisgoac.gymlog.designsystem.component.HierroEmptyState
 import com.chrisgoac.gymlog.designsystem.component.HierroLoadingState
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
+import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.navigation.GymLogApp
 import com.chrisgoac.gymlog.navigation.SettingsServices
 import kotlin.math.roundToInt
@@ -42,6 +43,7 @@ fun GymLogRoot(
     authGateway: () -> AuthGateway,
     onRetryBootstrap: () -> Unit = {},
     settings: SettingsServices? = null,
+    exercises: ExerciseRepository? = null,
 ) {
     when (state) {
         RootState.Loading -> CenteredStatus { HierroLoadingState(stringResource(R.string.root_loading)) }
@@ -50,7 +52,7 @@ fun GymLogRoot(
         is RootState.Bootstrapping -> CenteredStatus {
             HierroLoadingState(stringResource(R.string.root_bootstrapping, (state.progress * 100).roundToInt()))
         }
-        is RootState.Ready -> AccountScope(state.userId) { GymLogApp(settings = settings) }
+        is RootState.Ready -> AccountScope(state.userId) { GymLogApp(settings = settings, exercises = exercises) }
         is RootState.Fatal -> CenteredStatus {
             val config = state.message == "config"
             HierroEmptyState(

@@ -13,6 +13,8 @@
     <string name="nav_achievements">Logros</string>
     <string name="nav_settings">Ajustes</string>
     <string name="nav_sync_diagnostics">Detalle de sincronización</string>
+    <string name="nav_exercise_detail">Ejercicio</string>
+    <string name="nav_exercise_editor">Editar ejercicio</string>
     <string name="nav_back">Atrás</string>
 
     <string name="root_loading">Cargando</string>

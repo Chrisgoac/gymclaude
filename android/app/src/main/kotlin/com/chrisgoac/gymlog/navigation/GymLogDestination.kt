@@ -19,6 +19,14 @@ sealed interface GymLogDestination {
     @Serializable data object Body : GymLogDestination { override val title = R.string.nav_body }
     @Serializable data object Achievements : GymLogDestination { override val title = R.string.nav_achievements }
     @Serializable data object Settings : GymLogDestination { override val title = R.string.nav_settings }
+    // Exercises graph: list (the tab) -> detail -> editor.
+    @Serializable data class ExerciseDetail(val id: String) : GymLogDestination {
+        override val title: Int get() = R.string.nav_exercise_detail
+    }
+    /** [id] == null creates a custom exercise. */
+    @Serializable data class ExerciseEditor(val id: String? = null) : GymLogDestination {
+        override val title: Int get() = R.string.nav_exercise_editor
+    }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 

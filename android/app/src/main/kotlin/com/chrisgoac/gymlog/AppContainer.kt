@@ -7,6 +7,8 @@ import androidx.core.content.edit
 import com.chrisgoac.gymlog.auth.ClerkAuthGateway
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
 import com.chrisgoac.gymlog.data.catalog.CatalogAsset
+import com.chrisgoac.gymlog.data.exercise.OfflineExerciseRepository
+import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.data.sync.BootstrapRepository
 import com.chrisgoac.gymlog.data.sync.ServerOffsetClock
 import com.chrisgoac.gymlog.data.sync.SyncLocks
@@ -106,6 +108,9 @@ class AppContainer(private val application: Application) {
             RoomLocalMutationRunner(database, deviceId, clock = syncClock::nowMillis),
             onCommitted = syncTriggers::onLocalMutation,
         )
+
+    /** Catalog + custom exercises of the open account; writes are local (outbox) and never wait for HTTP. */
+    val exerciseRepository: ExerciseRepository = OfflineExerciseRepository(databases, ::localMutationRunner)
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)

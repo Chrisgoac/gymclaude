@@ -35,6 +35,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
+import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
+import com.chrisgoac.gymlog.exercises.ExerciseDetailScreen
+import com.chrisgoac.gymlog.exercises.ExerciseDetailViewModel
+import com.chrisgoac.gymlog.exercises.ExerciseEditorScreen
+import com.chrisgoac.gymlog.exercises.ExerciseEditorViewModel
+import com.chrisgoac.gymlog.exercises.ExerciseListScreen
+import com.chrisgoac.gymlog.exercises.ExerciseListViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chrisgoac.gymlog.domain.SignOutUseCase
 import com.chrisgoac.gymlog.domain.SyncUseCases
@@ -56,7 +64,11 @@ class SettingsServices(val sync: SyncUseCases, val signOut: SignOutUseCase)
 
 /** Five-tab shell. Route content is smoke-only except Settings; real feature screens replace it in later tasks. */
 @Composable
-fun GymLogApp(navController: NavHostController = rememberNavController(), settings: SettingsServices? = null) {
+fun GymLogApp(
+    navController: NavHostController = rememberNavController(),
+    settings: SettingsServices? = null,
+    exercises: ExerciseRepository? = null,
+) {
     val colors = HierroTheme.colors
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -68,7 +80,7 @@ fun GymLogApp(navController: NavHostController = rememberNavController(), settin
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -91,7 +103,7 @@ fun GymLogApp(navController: NavHostController = rememberNavController(), settin
 }
 
 @Composable
-private fun GymLogNavHost(navController: NavHostController, modifier: Modifier, settings: SettingsServices?) {
+private fun GymLogNavHost(navController: NavHostController, modifier: Modifier, settings: SettingsServices?, exercises: ExerciseRepository?) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
     // and it survives navigation and rotation, but never another account.
     val settingsViewModel = settings?.let { services -> viewModel { SettingsViewModel(services.sync, services.signOut) } }
@@ -115,7 +127,54 @@ private fun GymLogNavHost(navController: NavHostController, modifier: Modifier, 
             composable<GymLogDestination.Routines> { SmokeScreen(GymLogDestination.Routines, navController) }
         }
         navigation<GymLogGraph.Exercises>(startDestination = GymLogDestination.Exercises) {
-            composable<GymLogDestination.Exercises> { SmokeScreen(GymLogDestination.Exercises, navController) }
+            composable<GymLogDestination.Exercises> {
+                if (exercises == null) {
+                    SmokeScreen(GymLogDestination.Exercises, navController)
+                } else {
+                    val viewModel = viewModel { ExerciseListViewModel(exercises) }
+                    ExerciseListScreen(
+                        viewModel,
+                        onOpen = { navController.navigate(GymLogDestination.ExerciseDetail(it)) },
+                        onCreate = { navController.navigate(GymLogDestination.ExerciseEditor()) },
+                        onSettings = { navController.navigate(GymLogDestination.Settings) },
+                    )
+                }
+            }
+            composable<GymLogDestination.ExerciseDetail> { entry ->
+                val id = entry.toRoute<GymLogDestination.ExerciseDetail>().id
+                if (exercises == null) {
+                    SmokeScreen(GymLogDestination.Exercises, navController, secondary = true)
+                } else {
+                    val viewModel = viewModel { ExerciseDetailViewModel(exercises, id) }
+                    ExerciseDetailScreen(
+                        viewModel,
+                        onBack = { navController.popBackStack() },
+                        onEdit = { navController.navigate(GymLogDestination.ExerciseEditor(it)) },
+                    )
+                }
+            }
+            composable<GymLogDestination.ExerciseEditor> { entry ->
+                val id = entry.toRoute<GymLogDestination.ExerciseEditor>().id
+                if (exercises == null) {
+                    SmokeScreen(GymLogDestination.Exercises, navController, secondary = true)
+                } else {
+                    val viewModel = viewModel { ExerciseEditorViewModel(exercises, id) }
+                    ExerciseEditorScreen(
+                        viewModel,
+                        onBack = { navController.popBackStack() },
+                        onSaved = { savedId ->
+                            if (id == null) {
+                                // A new exercise replaces the editor with its detail page.
+                                navController.navigate(GymLogDestination.ExerciseDetail(savedId)) {
+                                    popUpTo<GymLogDestination.ExerciseEditor> { inclusive = true }
+                                }
+                            } else {
+                                navController.popBackStack()
+                            }
+                        },
+                    )
+                }
+            }
         }
         navigation<GymLogGraph.Progress>(startDestination = GymLogDestination.Progress) {
             composable<GymLogDestination.Progress> { SmokeScreen(GymLogDestination.Progress, navController) }
