@@ -87,6 +87,7 @@ dependencies {
     implementation(libs.clerk.android.api)
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.datastore.preferences)
     testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Local end-of-rest notification only (asked in context on API 33+). Exact-alarm permissions are deliberately not requested. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".GymLogApplication"
@@ -26,6 +28,10 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+        <receiver
+            android:name=".timer.RestTimerReceiver"
+            android:exported="false" />
 
         <activity
             android:name=".MainActivity"

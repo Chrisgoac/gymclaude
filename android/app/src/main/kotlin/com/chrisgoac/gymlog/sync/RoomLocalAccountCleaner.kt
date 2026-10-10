@@ -12,8 +12,8 @@ import java.io.File
 
 /**
  * Counts and deletes one account's local data. Besides the Room files it removes
- * `files/users/<hash>` and `cache/users/<hash>` (the places future per-user private files and
- * thumbnails must use). There is no per-user DataStore yet; when one exists its file goes here too.
+ * `files/users/<hash>` and `cache/users/<hash>` (the places per-user private files and thumbnails
+ * must use; the rest-timer DataStore lives there, released through [onLocalDataDeleted]).
  *
  * Deletion is recorded (by hash, never the raw id) in [PendingDeletionMarks] before the session
  * ends and cleared once the files are gone; [sweepPendingDeletions] and [reconcile] finish any that
@@ -23,6 +23,8 @@ class RoomLocalAccountCleaner(
     context: Context,
     private val databases: UserDatabaseManagerImpl,
     private val locks: SyncLocks,
+    /** Runs after an account's files are deleted (by hash): releases per-user caches and background wake-ups. */
+    private val onLocalDataDeleted: (userHash: String) -> Unit = {},
 ) : LocalAccountCleaner {
     private val appContext = context.applicationContext
     private val marks = PendingDeletionMarks(appContext)
@@ -81,5 +83,6 @@ class RoomLocalAccountCleaner(
                 if (dir.exists() && !dir.deleteRecursively()) error("Could not delete ${dir.name}")
             }
         }
+        onLocalDataDeleted(hash)
     }
 }

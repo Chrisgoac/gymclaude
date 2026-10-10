@@ -109,4 +109,16 @@
     <string name="workout_field_too_large_weight">Máximo 1000 kg</string>
     <string name="workout_field_too_large_reps">Máximo 1000</string>
     <string name="workout_field_zero_reps">Al menos 1 repetición</string>
+
+    <string name="rest_title">Descanso</string>
+    <string name="rest_finished">Descanso terminado</string>
+    <string name="rest_paused">%1$s · en pausa</string>
+    <string name="rest_description">Descanso, quedan %1$s</string>
+    <string name="rest_description_paused">Descanso en pausa, quedan %1$s</string>
+    <string name="rest_plus_15">+15 s</string>
+    <string name="rest_plus_30">+30 s</string>
+    <string name="rest_pause">Pausa</string>
+    <string name="rest_resume">Seguir</string>
+    <string name="rest_skip">Saltar</string>
+    <string name="rest_dismiss">Cerrar</string>
 </resources>

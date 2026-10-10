@@ -1,5 +1,12 @@
 package com.chrisgoac.gymlog.navigation
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalContext
+import com.chrisgoac.gymlog.domain.timer.RestTimerController
+import com.chrisgoac.gymlog.timer.NotificationPermissionPrompt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -85,10 +92,20 @@ fun GymLogApp(
     routines: RoutineRepository? = null,
     workouts: WorkoutRepository? = null,
     workoutLog: WorkoutLogRepository? = null,
+    restTimer: RestTimerController? = null,
+    openWorkoutRequest: String? = null,
+    onOpenWorkoutHandled: () -> Unit = {},
 ) {
     val colors = HierroTheme.colors
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
+    // The rest notification asks for its workout; Missing/other-account sessions end in the screen's own "not found" state.
+    LaunchedEffect(openWorkoutRequest) {
+        openWorkoutRequest?.let {
+            navController.navigate(GymLogDestination.ActiveWorkout(it)) { launchSingleTop = true }
+            onOpenWorkoutHandled()
+        }
+    }
 
     Column(
         Modifier
@@ -97,7 +114,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -128,6 +145,7 @@ private fun GymLogNavHost(
     routines: RoutineRepository?,
     workouts: WorkoutRepository?,
     workoutLog: WorkoutLogRepository?,
+    restTimer: RestTimerController?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
     // and it survives navigation and rotation, but never another account.
@@ -185,9 +203,20 @@ private fun GymLogNavHost(
                     SmokeScreen(GymLogDestination.Train, navController, secondary = true)
                 } else {
                     // Typed drafts live in the entry's SavedStateHandle (process death); the session itself is in Room.
-                    // Rest timer (Task 6) hooks into onSetCompleted.
+                    // The first rest timer asks for the notification permission (API 33+), in context.
+                    val context = LocalContext.current
+                    val requestNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+                    val onRestStarted by rememberUpdatedState<(Int?) -> Unit> { rest ->
+                        if (rest != null && rest > 0 && NotificationPermissionPrompt.consumePrompt(context)) {
+                            requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
                     val viewModel = viewModel(key = sessionId) {
-                        WorkoutViewModel(sessionId, workouts, workoutLog, exercises, routines, createSavedStateHandle())
+                        WorkoutViewModel(
+                            sessionId, workouts, workoutLog, exercises, routines, createSavedStateHandle(),
+                            onSetCompleted = { onRestStarted(it) },
+                            restTimer = restTimer,
+                        )
                     }
                     ActiveWorkoutScreen(viewModel, onBack = { navController.popBackStack() })
                 }

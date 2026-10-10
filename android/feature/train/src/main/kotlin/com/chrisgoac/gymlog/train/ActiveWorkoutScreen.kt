@@ -62,6 +62,7 @@ fun ActiveWorkoutScreen(viewModel: WorkoutViewModel, onBack: () -> Unit, modifie
         onPick = viewModel::addExercise,
         onDismissError = viewModel::dismissWriteError,
         onRetry = viewModel::retry,
+        restTimer = { RestTimerHost(viewModel) },
         modifier = modifier,
     )
 }
@@ -93,11 +94,13 @@ internal fun ActiveWorkoutContent(
     onDismissError: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    restTimer: @Composable () -> Unit = {},
 ) {
     Column(modifier.fillMaxSize().imePadding()) {
         HierroScreenHeader(stringResource(R.string.workout_title)) {
             HierroHeaderAction(stringResource(R.string.workout_back), onBack)
         }
+        restTimer()
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when (state.status) {
                 WorkoutLogStatus.Loading -> item(key = "loading") { HierroLoadingState(stringResource(R.string.workout_loading)) }

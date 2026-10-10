@@ -2,6 +2,10 @@ package com.chrisgoac.gymlog.train
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
+import com.chrisgoac.gymlog.domain.timer.RestTimerAlarm
+import com.chrisgoac.gymlog.domain.timer.RestTimerController
+import com.chrisgoac.gymlog.domain.timer.RestTimerState
+import com.chrisgoac.gymlog.domain.timer.RestTimerStore
 import com.chrisgoac.gymlog.domain.exercise.Equipment
 import com.chrisgoac.gymlog.domain.exercise.Exercise
 import com.chrisgoac.gymlog.domain.exercise.ExerciseFilter
@@ -249,6 +253,32 @@ class WorkoutViewModelTest {
         advanceUntilIdle()
         assertEquals(1, repo.writes.size)
         assertEquals(listOf<Int?>(90), rests)
+    }
+
+    @Test fun `completing a set starts the rest timer with the routine rest once`() = runTest(dispatcher) {
+        val started = mutableListOf<Pair<String, Int?>>()
+        val timer = RestTimerController(
+            object : RestTimerStore {
+                override suspend fun read(): RestTimerState? = null
+                override suspend fun write(state: RestTimerState?) {}
+            },
+            object : RestTimerAlarm {
+                override fun schedule(runId: String, sessionId: String, endsAtEpochMillis: Long) { started += sessionId to ((endsAtEpochMillis - 1_000L) / 1000L).toInt() }
+                override fun cancel() {}
+            },
+            clock = { 1_000L },
+        )
+        val vm = WorkoutViewModel("s1", repo, repo, FakeExercises(), TargetRoutines(), SavedStateHandle(), onSetCompleted = { rests += it }, restTimer = timer)
+        backgroundScope.launch(dispatcher) { vm.state.collect {} }
+        runCurrent()
+        vm.completeSet("set1")
+        vm.completeSet("set1")
+        advanceUntilIdle()
+        assertEquals(listOf("s1" to 90), started)
+        assertEquals(90_000L, vm.timer.value?.totalMillis)
+        vm.resetRest()
+        advanceUntilIdle()
+        assertNull(vm.timer.value)
     }
 
     @Test fun `a set needs reps and valid fields to complete`() = runTest(dispatcher) {

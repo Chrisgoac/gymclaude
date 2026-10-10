@@ -32,7 +32,11 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import com.chrisgoac.gymlog.domain.timer.RestTimerCompletion
+import com.chrisgoac.gymlog.domain.timer.RestTimerController
+import com.chrisgoac.gymlog.domain.timer.RestTimerState
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -112,7 +116,8 @@ data class WorkoutLogUiState(
  *
  * Writes run in a scope that outlives the ViewModel and are serialized, so [flushPending] (on
  * leave) and [onCleared] still persist what was typed. [onSetCompleted] receives the routine's rest
- * seconds for the completed set (the rest timer hook).
+ * seconds for the completed set (null = no target: no timer starts, as in the PWA); the [restTimer]
+ * is started with it.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class WorkoutViewModel(
@@ -124,13 +129,35 @@ class WorkoutViewModel(
     private val savedState: SavedStateHandle,
     private val onSetCompleted: (restSeconds: Int?) -> Unit = {},
     private val debounceMillis: Long = DEBOUNCE_MILLIS,
+    private val restTimer: RestTimerController? = null,
 ) : ViewModel() {
     private val local = MutableStateFlow(restore())
+
+    /** The account's rest timer when it belongs to this workout (restored from storage at creation). */
+    val timer: StateFlow<RestTimerState?> = restTimer?.state ?: MutableStateFlow(null)
+
+    /** Exactly-once end-of-rest events, for the haptic and the spoken announcement. */
+    val timerCompletions: Flow<RestTimerCompletion> = restTimer?.completions ?: emptyFlow()
+
+    fun nowMillis(): Long = restTimer?.now() ?: System.currentTimeMillis()
+
+    /** Evaluates the end of the run (UI tick or app resume); a no-op until it is due. */
+    fun onTimerTick() { restTimer?.let { writeScope.launch { it.tick() } } }
+    fun pauseRest() { restTimer?.let { writeScope.launch { it.pause() } } }
+    fun resumeRest() { restTimer?.let { writeScope.launch { it.resume() } } }
+    fun extendRest(seconds: Int) { restTimer?.let { writeScope.launch { it.extend(seconds) } } }
+
+    /** Skip / dismiss. */
+    fun resetRest() { restTimer?.let { writeScope.launch { it.reset() } } }
 
     /** Not tied to viewModelScope: a commit started on leave must finish after the ViewModel is cleared. */
     private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val writeLock = Mutex()
     private val timers = mutableMapOf<String, Job>()
+
+    init {
+        restTimer?.let { writeScope.launch { it.restore(sessionId) } }
+    }
 
     private val attempt = MutableStateFlow(0)
 
@@ -234,7 +261,9 @@ class WorkoutViewModel(
             }
             // The committed draft is the stored value now; a newer one typed meanwhile is kept.
             update { l -> if (l.drafts[setId] == draft) l.copy(drafts = l.drafts - setId) else l }
-            onSetCompleted(restSecondsFor(setId))
+            val rest = restSecondsFor(setId)
+            restTimer?.start(sessionId, rest)
+            onSetCompleted(rest)
         }
     }
 

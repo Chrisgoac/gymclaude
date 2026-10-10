@@ -42,7 +42,10 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.WorkManager
 import com.chrisgoac.gymlog.domain.SignOutUseCase
 import com.chrisgoac.gymlog.navigation.SettingsServices
+import com.chrisgoac.gymlog.domain.timer.RestTimerController
 import com.chrisgoac.gymlog.sync.AppSyncEnvironment
+import com.chrisgoac.gymlog.timer.RestTimerNotifier
+import com.chrisgoac.gymlog.timer.UserScopedRestTimerStore
 import com.chrisgoac.gymlog.sync.BootstrapAutoRetry
 import com.chrisgoac.gymlog.sync.CatalogSeedingUserDatabaseManager
 import com.chrisgoac.gymlog.sync.ConnectivityMonitor
@@ -71,7 +74,21 @@ class AppContainer(private val application: Application) {
 
     private val databaseManager = UserDatabaseManagerImpl(application)
     private val syncLocks = SyncLocks()
-    private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks)
+    private val restTimerNotifier = RestTimerNotifier(application)
+    private val restTimerStore: UserScopedRestTimerStore = UserScopedRestTimerStore(application.filesDir, currentUserHash = {
+        (rootStateMachine.state.value as? RootState.Ready)?.userId?.let(UserDatabaseManagerImpl::userHash)
+    })
+    private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks, onLocalDataDeleted = { hash ->
+        // A signed-out account's rest timer must neither fire nor survive in memory.
+        restTimerStore.forget(hash)
+        restTimerNotifier.cancel()
+    })
+
+    /** The account's durable rest timer (state per user, wake-up by [RestTimerNotifier]). */
+    val restTimer = RestTimerController(restTimerStore, restTimerNotifier)
+
+    /** Workout the user asked to open from the rest notification; consumed by the navigation shell. */
+    val openWorkoutRequest = MutableStateFlow<String?>(null)
 
     /** Every open first finishes a pending sign-out deletion of that account (see [RoomLocalAccountCleaner.reconcile]). */
     val databases: UserDatabaseManager = CatalogSeedingUserDatabaseManager(
@@ -161,7 +178,7 @@ class AppContainer(private val application: Application) {
         bootstrapRepository.run(userId, database, onProgress)
     }
 
-    val rootStateMachine = RootStateMachine(authSession, databases, bootstrapRunner, appScope, clerkConfigured, startupGate = { startupSweep.await() })
+    val rootStateMachine: RootStateMachine = RootStateMachine(authSession, databases, bootstrapRunner, appScope, clerkConfigured, startupGate = { startupSweep.await() })
         .also { it.start() }
 
     /** Worker factory for WorkManager's on-demand initialization (see [GymLogApplication]). */
