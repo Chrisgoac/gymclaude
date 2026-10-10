@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GymLog</string>
+
+    <string name="nav_train">Entrenar</string>
+    <string name="nav_routines">Rutinas</string>
+    <string name="nav_exercises">Ejercicios</string>
+    <string name="nav_progress">Progreso</string>
+    <string name="nav_history">Historial</string>
+
+    <string name="nav_coach">Coach Pro</string>
+    <string name="nav_body">Cuerpo</string>
+    <string name="nav_achievements">Logros</string>
+    <string name="nav_settings">Ajustes</string>
+    <string name="nav_back">Atrás</string>
+
+    <!-- Route smoke content only: replaced by the real feature screens in later tasks. -->
+    <string name="smoke_row">%1$s · fila %2$d</string>
+</resources>
