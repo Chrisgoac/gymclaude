@@ -21,6 +21,7 @@ import com.chrisgoac.gymlog.model.LoggedExerciseOperation
 import com.chrisgoac.gymlog.model.LoggedExerciseRecord
 import com.chrisgoac.gymlog.model.LoggedSetOperation
 import com.chrisgoac.gymlog.model.LoggedSetRecord
+import com.chrisgoac.gymlog.model.MAX_OPERATIONS_PER_MUTATION
 import com.chrisgoac.gymlog.model.MesocycleOperation
 import com.chrisgoac.gymlog.model.MesocycleRecord
 import com.chrisgoac.gymlog.model.MutationId
@@ -108,28 +109,49 @@ class RoomLocalMutationRunner(
             )
         }
         val staged = stored.map { (record, existing) -> record to existing?.serverVersion }
-        val pushMutation = PushMutation(
-            mutationId = newMutationId(),
-            deviceId = deviceId,
-            operations = staged.map { (record, known) -> record.toOperation(baseServerVersion = known) },
-        )
-        MutationValidator.requireValid(pushMutation)
+        // Every chunk is validated before anything is written, so a bad row rolls back the lot.
+        val chunks = chunk(staged).map { rows ->
+            PushMutation(
+                mutationId = newMutationId(),
+                deviceId = deviceId,
+                operations = rows.map { (record, known) -> record.toOperation(baseServerVersion = known) },
+            ).also(MutationValidator::requireValid)
+        }
 
         staged.forEach { (record, known) -> store.put(record, serverVersion = known) }
         val syncDao = database.syncDao()
-        syncDao.insertOutbox(
-            OutboxMutationEntity(
-                mutationId = pushMutation.mutationId.value,
-                deviceId = deviceId.value,
-                payloadJson = ContractJson.encodeToString(PushMutation.serializer(), pushMutation),
-                createdAt = clock(),
-                attemptCount = 0,
-                lastErrorCode = null,
-                sequence = syncDao.nextOutboxSequence(),
-                status = OutboxStatus.PENDING,
-            ),
-        )
+        chunks.forEach { pushMutation ->
+            syncDao.insertOutbox(
+                OutboxMutationEntity(
+                    mutationId = pushMutation.mutationId.value,
+                    deviceId = deviceId.value,
+                    payloadJson = ContractJson.encodeToString(PushMutation.serializer(), pushMutation),
+                    createdAt = clock(),
+                    attemptCount = 0,
+                    lastErrorCode = null,
+                    sequence = syncDao.nextOutboxSequence(),
+                    status = OutboxStatus.PENDING,
+                ),
+            )
+        }
         result
+    }
+
+    /**
+     * A mutation over [MAX_OPERATIONS_PER_MUTATION] operations is split into ordered chunks that
+     * the server applies in FIFO order: non-session rows first (sets, then logged exercises, then
+     * the rest, each keeping its put order), the workout session row(s) in the last chunk. A
+     * mutation that fits stays one row in its put order.
+     */
+    private fun <R> chunk(staged: List<Pair<SyncRecord, R>>): List<List<Pair<SyncRecord, R>>> {
+        if (staged.size <= MAX_OPERATIONS_PER_MUTATION) return listOf(staged)
+        fun rank(table: SyncTable) = when (table) {
+            SyncTable.LOGGED_SETS -> 0
+            SyncTable.LOGGED_EXERCISES -> 1
+            SyncTable.WORKOUT_SESSIONS -> 3
+            else -> 2
+        }
+        return staged.sortedBy { rank(it.first.table) }.chunked(MAX_OPERATIONS_PER_MUTATION)
     }
 
     private class StagingScope(private val store: RecordStore, private val clock: () -> Long) : LocalMutationScope {

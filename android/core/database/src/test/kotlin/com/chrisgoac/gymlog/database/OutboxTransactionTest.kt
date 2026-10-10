@@ -225,7 +225,6 @@ class OutboxTransactionTest {
             "negative timestamp" to listOf(SampleRecords.session().copy(fecha = -1)),
             "negative deletedAt" to listOf(SampleRecords.gym().copy(deletedAt = -5)),
             "timestamp over 2^53-1" to listOf(SampleRecords.gym().copy(updatedAt = MutationValidator.MAX_SAFE_INTEGER + 1)),
-            "51 operations" to (1..51).map { SampleRecords.gym("gy-$it") },
             "catalog exercise" to listOf(SampleRecords.exercise("seed-press-banca")),
             "non-finite weight" to listOf(SampleRecords.loggedSet(peso = Double.NaN)),
         )
@@ -260,6 +259,62 @@ class OutboxTransactionTest {
     fun exactlyFiftyOperationsIsAccepted() = runTest {
         runner().run(LocalMutation { (1..50).forEach { put(SampleRecords.gym("gy-$it")) } })
         assertEquals(50, outboxMutations().single().operations.size)
+    }
+
+    private fun LocalMutationScope.putLargeWorkout() {
+        put(SampleRecords.session()) // staged first on purpose: it must still travel last
+        (1..10).forEach { put(SampleRecords.loggedExercise("le-$it")) }
+        (1..90).forEach { put(SampleRecords.loggedSet("ls-$it", loggedExerciseId = "le-${(it - 1) % 10 + 1}")) }
+        (1..19).forEach { put(SampleRecords.gym("gy-$it")) }
+    }
+
+    @Test
+    fun aMutationOverFiftyOperationsIsChunkedIntoConsecutiveOutboxRowsWithTheSessionLast() = runTest {
+        runner().run(LocalMutation { putLargeWorkout() }) // 1 + 10 + 90 + 19 = 120 operations
+
+        val rows = db.syncDao().allOutbox()
+        assertEquals(3, rows.size)
+        assertEquals(listOf(rows[0].sequence, rows[0].sequence + 1, rows[0].sequence + 2), rows.map { it.sequence })
+        assertEquals(rows.size, rows.map { it.mutationId }.toSet().size)
+        val chunks = outboxMutations()
+        assertEquals(listOf(50, 50, 20), chunks.map { it.operations.size })
+        chunks.forEach { assertTrue(it.operations.map { op -> op.table to op.record.id }.toSet().size == it.operations.size) }
+        val tables = chunks.flatMap { chunk -> chunk.operations.map { it.table } }
+        assertEquals(120, tables.size)
+        assertEquals(SyncTable.WORKOUT_SESSIONS, tables.last())
+        assertEquals(SyncTable.WORKOUT_SESSIONS, chunks.last().operations.last().table)
+        assertEquals(1, tables.count { it == SyncTable.WORKOUT_SESSIONS })
+        // sets, then logged exercises, then the rest, then the session
+        assertEquals(
+            listOf(SyncTable.LOGGED_SETS, SyncTable.LOGGED_EXERCISES, SyncTable.GYMS, SyncTable.WORKOUT_SESSIONS),
+            tables.distinct(),
+        )
+        assertEquals(120, listOf(SampleRecords.session()).size + 10 + 90 + 19)
+        assertTrue(store.find(SyncTable.WORKOUT_SESSIONS, RecordId("ws-1")) != null)
+    }
+
+    @Test
+    fun aFailureInsideAChunkedMutationRollsBackEveryRowAndChunk() = runTest {
+        try {
+            runner().run(LocalMutation<Unit> {
+                putLargeWorkout()
+                error("boom")
+            })
+            fail("must throw")
+        } catch (expected: IllegalStateException) {
+        }
+        assertNothingWritten(SampleRecords.session(), SampleRecords.loggedSet("ls-1"), SampleRecords.gym("gy-1"))
+    }
+
+    @Test
+    fun aMutationAtTheLimitStaysOneRowInPutOrder() = runTest {
+        runner().run(LocalMutation {
+            put(SampleRecords.session())
+            (1..49).forEach { put(SampleRecords.loggedSet("ls-$it")) }
+        })
+        val only = outboxMutations().single()
+        assertEquals(50, only.operations.size)
+        assertEquals(SyncTable.WORKOUT_SESSIONS, only.operations.first().table)
     }
 
     @Test

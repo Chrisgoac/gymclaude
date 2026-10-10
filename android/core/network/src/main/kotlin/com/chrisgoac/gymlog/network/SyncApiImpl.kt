@@ -111,6 +111,18 @@ class SyncApiImpl internal constructor(
         }
     }
 
+    /**
+     * No token could be obtained. While the identity provider still holds an active session for the
+     * account this is a transient failure (refresh hiccup, offline), retried later like any
+     * transport error; only an ended session or another account's session needs a new sign-in.
+     */
+    private fun tokenUnavailable(expectedUserId: String, message: String, cause: Throwable?): SyncApiException =
+        if (auth.state.value == AuthState.SignedIn(expectedUserId)) {
+            SyncApiException.Transport(cause ?: IllegalStateException(message))
+        } else {
+            SyncApiException.SessionRequired(message)
+        }
+
     private class Sent(val response: HttpResponse, val requestId: String)
 
     private suspend fun send(expectedUserId: String, forceRefresh: Boolean, configure: HttpRequestBuilder.() -> Unit): Sent {
@@ -119,8 +131,8 @@ class SyncApiImpl internal constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            throw SyncApiException.SessionRequired("Access token unavailable: ${e.message}")
-        } ?: throw SyncApiException.SessionRequired("No access token")
+            throw tokenUnavailable(expectedUserId, "Access token unavailable: ${e.message}", e)
+        } ?: throw tokenUnavailable(expectedUserId, "No access token", null)
         val requestId = requestIdFactory()
         val response = try {
             client.request {
