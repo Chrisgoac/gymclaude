@@ -2,13 +2,11 @@ import { getPoolDb } from '@/db/pool';
 import { ApiError } from '@/lib/api/v1/errors';
 import { enforceRateLimit } from '@/lib/api/v1/rate-limit';
 import { withApiRoute } from '@/lib/api/v1/route';
+import { MAX_PULL_LIMIT } from '@/lib/api/v1/sync/limits';
 import { pullChanges } from '@/lib/api/v1/sync/pull';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-
-/** Tamaño de página por defecto y máximo: un `limit` mayor se recorta, no se rechaza. */
-export const MAX_PULL_LIMIT = 500;
 
 function parseLimit(raw: string | null): number {
   if (raw === null) return MAX_PULL_LIMIT;

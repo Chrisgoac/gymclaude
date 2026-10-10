@@ -30,3 +30,7 @@ npm run lint
 ## Datos
 
 Todo vive en IndexedDB (base `gymlog`) mediante Dexie. El catálogo de ejercicios se siembra en el primer arranque. Cada registro lleva `id` (UUID), `updatedAt` y `deletedAt` (borrado lógico), preparados para la sincronización de la Fase 4.
+
+## Contrato de sincronización v1 (Android)
+
+La API `/api/v1/sync/{push,pull}` para el cliente Android nativo está documentada en [`contracts/v1/README.md`](contracts/v1/README.md); los vectores de prueba compartidos están en `contracts/v1/fixtures/` y los valida `lib/api/v1/contracts/fixtures.test.ts`.

@@ -21,7 +21,8 @@ vi.mock('@/lib/api/v1/sync/pull', () => ({
   })),
 }));
 
-import { GET, MAX_PULL_LIMIT } from './route';
+import { MAX_PULL_LIMIT } from '@/lib/api/v1/sync/limits';
+import { GET } from './route';
 import { enforceRateLimit } from '@/lib/api/v1/rate-limit';
 import { pullChanges } from '@/lib/api/v1/sync/pull';
 

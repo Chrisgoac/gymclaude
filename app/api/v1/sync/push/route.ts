@@ -3,14 +3,12 @@ import { PushRequestSchema } from '@/lib/api/v1/contracts/sync';
 import { ApiError } from '@/lib/api/v1/errors';
 import { enforceRateLimit } from '@/lib/api/v1/rate-limit';
 import { withApiRoute } from '@/lib/api/v1/route';
+import { MAX_PUSH_BODY_BYTES } from '@/lib/api/v1/sync/limits';
 import { lockUserSync } from '@/lib/api/v1/sync/lock';
 import { pushMutations } from '@/lib/api/v1/sync/push';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-
-/** Tope del cuerpo de un push (50 mutaciones × 200 operaciones caben de sobra en registros reales). */
-export const MAX_PUSH_BODY_BYTES = 2 * 1024 * 1024;
 
 const tooLarge = () => new ApiError(413, 'PAYLOAD_TOO_LARGE', 'Request body is too large', false);
 

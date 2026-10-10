@@ -24,11 +24,18 @@
         "semanas": 6,
         "diasPorSemana": 4,
         "notas": null,
-        "progresion": {"tipo": "lineal", "pasos": [1, 2, 3]},
+        "progresion": {
+          "tipo": "lineal",
+          "pasos": [
+            1,
+            2,
+            3
+          ]
+        },
         "fechaInicio": 1767225600000
       }
     }
   ],
-  "cursor": "eyJ2IjoxMDJ9",
+  "cursor": "MTAy",
   "hasMore": true
 }

@@ -1,0 +1,400 @@
+{
+  "changes": [
+    {
+      "table": "exercises",
+      "serverVersion": "1001",
+      "record": {
+        "id": "bootstrap-exercises-live",
+        "updatedAt": 1767225601001,
+        "deletedAt": null,
+        "nombre": "Ejercicio live",
+        "grupoMuscular": "pecho",
+        "equipamiento": "barra",
+        "tipo": "compuesto",
+        "videoUrl": null,
+        "notas": null,
+        "descripcion": null,
+        "execution": null,
+        "incrementoKg": 2.5,
+        "esPersonalizado": true
+      }
+    },
+    {
+      "table": "exercises",
+      "serverVersion": "1002",
+      "record": {
+        "id": "bootstrap-exercises-tombstone",
+        "updatedAt": 1767225601002,
+        "deletedAt": 1767225602002,
+        "nombre": "Ejercicio tombstone",
+        "grupoMuscular": "pecho",
+        "equipamiento": "barra",
+        "tipo": "compuesto",
+        "videoUrl": null,
+        "notas": null,
+        "descripcion": null,
+        "execution": null,
+        "incrementoKg": 2.5,
+        "esPersonalizado": true
+      }
+    },
+    {
+      "table": "routines",
+      "serverVersion": "1003",
+      "record": {
+        "id": "bootstrap-routines-live",
+        "updatedAt": 1767225601003,
+        "deletedAt": null,
+        "nombre": "Rutina live",
+        "descripcion": null,
+        "orden": 0,
+        "archivada": false,
+        "mesocycleId": null
+      }
+    },
+    {
+      "table": "routines",
+      "serverVersion": "1004",
+      "record": {
+        "id": "bootstrap-routines-tombstone",
+        "updatedAt": 1767225601004,
+        "deletedAt": 1767225602004,
+        "nombre": "Rutina tombstone",
+        "descripcion": null,
+        "orden": 0,
+        "archivada": false,
+        "mesocycleId": null
+      }
+    },
+    {
+      "table": "routineExercises",
+      "serverVersion": "1005",
+      "record": {
+        "id": "bootstrap-routineExercises-live",
+        "updatedAt": 1767225601005,
+        "deletedAt": null,
+        "routineId": "bootstrap-routines-live",
+        "exerciseId": "bootstrap-exercises-live",
+        "orden": 0,
+        "seriesObjetivo": 3,
+        "repsObjetivo": 10,
+        "repsObjetivoMin": 8,
+        "descansoSegundos": 90,
+        "notas": null
+      }
+    },
+    {
+      "table": "routineExercises",
+      "serverVersion": "1006",
+      "record": {
+        "id": "bootstrap-routineExercises-tombstone",
+        "updatedAt": 1767225601006,
+        "deletedAt": 1767225602006,
+        "routineId": "bootstrap-routines-live",
+        "exerciseId": "bootstrap-exercises-live",
+        "orden": 0,
+        "seriesObjetivo": 3,
+        "repsObjetivo": 10,
+        "repsObjetivoMin": 8,
+        "descansoSegundos": 90,
+        "notas": null
+      }
+    },
+    {
+      "table": "workoutSessions",
+      "serverVersion": "1007",
+      "record": {
+        "id": "bootstrap-workoutSessions-live",
+        "updatedAt": 1767225601007,
+        "deletedAt": null,
+        "routineDayId": null,
+        "routineId": "bootstrap-routines-live",
+        "gymId": "bootstrap-gyms-live",
+        "fecha": 1767225600000,
+        "duracionSegundos": 3600,
+        "notas": null
+      }
+    },
+    {
+      "table": "workoutSessions",
+      "serverVersion": "1008",
+      "record": {
+        "id": "bootstrap-workoutSessions-tombstone",
+        "updatedAt": 1767225601008,
+        "deletedAt": 1767225602008,
+        "routineDayId": null,
+        "routineId": "bootstrap-routines-live",
+        "gymId": "bootstrap-gyms-live",
+        "fecha": 1767225600000,
+        "duracionSegundos": 3600,
+        "notas": null
+      }
+    },
+    {
+      "table": "loggedExercises",
+      "serverVersion": "1009",
+      "record": {
+        "id": "bootstrap-loggedExercises-live",
+        "updatedAt": 1767225601009,
+        "deletedAt": null,
+        "sessionId": "bootstrap-workoutSessions-live",
+        "exerciseId": "bootstrap-exercises-live",
+        "orden": 0
+      }
+    },
+    {
+      "table": "loggedExercises",
+      "serverVersion": "1010",
+      "record": {
+        "id": "bootstrap-loggedExercises-tombstone",
+        "updatedAt": 1767225601010,
+        "deletedAt": 1767225602010,
+        "sessionId": "bootstrap-workoutSessions-live",
+        "exerciseId": "bootstrap-exercises-live",
+        "orden": 0
+      }
+    },
+    {
+      "table": "loggedSets",
+      "serverVersion": "1011",
+      "record": {
+        "id": "bootstrap-loggedSets-live",
+        "updatedAt": 1767225601011,
+        "deletedAt": null,
+        "loggedExerciseId": "bootstrap-loggedExercises-live",
+        "orden": 0,
+        "peso": 60.5,
+        "reps": 8,
+        "esCalentamiento": false
+      }
+    },
+    {
+      "table": "loggedSets",
+      "serverVersion": "1012",
+      "record": {
+        "id": "bootstrap-loggedSets-tombstone",
+        "updatedAt": 1767225601012,
+        "deletedAt": 1767225602012,
+        "loggedExerciseId": "bootstrap-loggedExercises-live",
+        "orden": 0,
+        "peso": 60.5,
+        "reps": 8,
+        "esCalentamiento": false
+      }
+    },
+    {
+      "table": "gyms",
+      "serverVersion": "1013",
+      "record": {
+        "id": "bootstrap-gyms-live",
+        "updatedAt": 1767225601013,
+        "deletedAt": null,
+        "nombre": "Gimnasio live",
+        "orden": 0,
+        "archivada": false
+      }
+    },
+    {
+      "table": "gyms",
+      "serverVersion": "1014",
+      "record": {
+        "id": "bootstrap-gyms-tombstone",
+        "updatedAt": 1767225601014,
+        "deletedAt": 1767225602014,
+        "nombre": "Gimnasio tombstone",
+        "orden": 0,
+        "archivada": false
+      }
+    },
+    {
+      "table": "exercisePhotos",
+      "serverVersion": "1015",
+      "record": {
+        "id": "bootstrap-exercisePhotos-live",
+        "updatedAt": 1767225601015,
+        "deletedAt": null,
+        "exerciseId": "bootstrap-exercises-live",
+        "url": "https://example.invalid/photo.jpg",
+        "key": "photos/live.jpg"
+      }
+    },
+    {
+      "table": "exercisePhotos",
+      "serverVersion": "1016",
+      "record": {
+        "id": "bootstrap-exercisePhotos-tombstone",
+        "updatedAt": 1767225601016,
+        "deletedAt": 1767225602016,
+        "exerciseId": "bootstrap-exercises-live",
+        "url": "https://example.invalid/photo.jpg",
+        "key": "photos/tombstone.jpg"
+      }
+    },
+    {
+      "table": "userSettings",
+      "serverVersion": "1017",
+      "record": {
+        "id": "restSeconds",
+        "updatedAt": 1767225601017,
+        "deletedAt": null,
+        "valor": "90"
+      }
+    },
+    {
+      "table": "userSettings",
+      "serverVersion": "1018",
+      "record": {
+        "id": "bootstrapSetting",
+        "updatedAt": 1767225601018,
+        "deletedAt": 1767225602018,
+        "valor": "90"
+      }
+    },
+    {
+      "table": "coachMessages",
+      "serverVersion": "1019",
+      "record": {
+        "id": "bootstrap-coachMessages-live",
+        "updatedAt": 1767225601019,
+        "deletedAt": null,
+        "rol": "user",
+        "contenido": "Mensaje live",
+        "createdAt": 1767225600000
+      }
+    },
+    {
+      "table": "coachMessages",
+      "serverVersion": "1020",
+      "record": {
+        "id": "bootstrap-coachMessages-tombstone",
+        "updatedAt": 1767225601020,
+        "deletedAt": 1767225602020,
+        "rol": "user",
+        "contenido": "Mensaje tombstone",
+        "createdAt": 1767225600000
+      }
+    },
+    {
+      "table": "bodyMetrics",
+      "serverVersion": "1021",
+      "record": {
+        "id": "bootstrap-bodyMetrics-live",
+        "updatedAt": 1767225601021,
+        "deletedAt": null,
+        "tipo": "peso",
+        "valor": 72.4,
+        "fecha": 1767225600000
+      }
+    },
+    {
+      "table": "bodyMetrics",
+      "serverVersion": "1022",
+      "record": {
+        "id": "bootstrap-bodyMetrics-tombstone",
+        "updatedAt": 1767225601022,
+        "deletedAt": 1767225602022,
+        "tipo": "peso",
+        "valor": 72.4,
+        "fecha": 1767225600000
+      }
+    },
+    {
+      "table": "progressPhotos",
+      "serverVersion": "1023",
+      "record": {
+        "id": "bootstrap-progressPhotos-live",
+        "updatedAt": 1767225601023,
+        "deletedAt": null,
+        "url": "https://example.invalid/progress.jpg",
+        "key": "progress/live.jpg",
+        "fecha": 1767225600000,
+        "angulo": "frente",
+        "nota": null
+      }
+    },
+    {
+      "table": "progressPhotos",
+      "serverVersion": "1024",
+      "record": {
+        "id": "bootstrap-progressPhotos-tombstone",
+        "updatedAt": 1767225601024,
+        "deletedAt": 1767225602024,
+        "url": "https://example.invalid/progress.jpg",
+        "key": "progress/tombstone.jpg",
+        "fecha": 1767225600000,
+        "angulo": "frente",
+        "nota": null
+      }
+    },
+    {
+      "table": "mesocycles",
+      "serverVersion": "1025",
+      "record": {
+        "id": "bootstrap-mesocycles-live",
+        "updatedAt": 1767225601025,
+        "deletedAt": null,
+        "nombre": "Bloque live",
+        "objetivo": "hipertrofia",
+        "semanas": 6,
+        "diasPorSemana": 4,
+        "notas": null,
+        "progresion": {
+          "tipo": "lineal",
+          "pasos": [
+            1,
+            2,
+            3
+          ]
+        },
+        "fechaInicio": 1767225600000
+      }
+    },
+    {
+      "table": "mesocycles",
+      "serverVersion": "1026",
+      "record": {
+        "id": "bootstrap-mesocycles-tombstone",
+        "updatedAt": 1767225601026,
+        "deletedAt": 1767225602026,
+        "nombre": "Bloque tombstone",
+        "objetivo": "hipertrofia",
+        "semanas": 6,
+        "diasPorSemana": 4,
+        "notas": null,
+        "progresion": {
+          "tipo": "lineal",
+          "pasos": [
+            1,
+            2,
+            3
+          ]
+        },
+        "fechaInicio": 1767225600000
+      }
+    },
+    {
+      "table": "achievements",
+      "serverVersion": "1027",
+      "record": {
+        "id": "bootstrap-achievements-live",
+        "updatedAt": 1767225601027,
+        "deletedAt": null,
+        "clave": "logro-live",
+        "fechaDesbloqueo": 1767225600000
+      }
+    },
+    {
+      "table": "achievements",
+      "serverVersion": "1028",
+      "record": {
+        "id": "bootstrap-achievements-tombstone",
+        "updatedAt": 1767225601028,
+        "deletedAt": 1767225602028,
+        "clave": "logro-tombstone",
+        "fechaDesbloqueo": 1767225600000
+      }
+    }
+  ],
+  "cursor": "MTAyOA",
+  "hasMore": false
+}

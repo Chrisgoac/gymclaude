@@ -19,7 +19,8 @@ vi.mock('@/lib/api/v1/sync/push', () => ({
   }),
 }));
 
-import { MAX_PUSH_BODY_BYTES, POST } from './route';
+import { MAX_PUSH_BODY_BYTES } from '@/lib/api/v1/sync/limits';
+import { POST } from './route';
 import { enforceRateLimit } from '@/lib/api/v1/rate-limit';
 import { lockUserSync } from '@/lib/api/v1/sync/lock';
 import { pushMutations } from '@/lib/api/v1/sync/push';
