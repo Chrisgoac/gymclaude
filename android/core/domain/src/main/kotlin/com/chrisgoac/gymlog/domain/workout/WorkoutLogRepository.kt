@@ -39,7 +39,10 @@ interface WorkoutLogRepository {
 
     fun observeProgressionSettings(): Flow<ProgressionSettings>
 
-    /** Appends [exerciseId] to the session; returns the new logged-exercise id. @throws WorkoutRowMissingException */
+    /**
+     * Appends [exerciseId] to the session; returns the new logged-exercise id.
+     * @throws com.chrisgoac.gymlog.domain.exercise.ExerciseNotFoundException for an unknown/deleted exercise; [WorkoutRowMissingException]
+     */
     suspend fun addExercise(sessionId: String, exerciseId: String): String
 
     /** Tombstones the logged exercise and its sets; the remaining exercises are re-compacted. */

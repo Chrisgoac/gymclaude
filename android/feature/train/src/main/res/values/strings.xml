@@ -54,6 +54,7 @@
     <string name="workout_empty_title">Sin ejercicios todavía</string>
     <string name="workout_empty_message">Añade ejercicios para empezar.</string>
     <string name="workout_unknown_exercise">Ejercicio eliminado</string>
+    <string name="workout_retry">Reintentar</string>
     <string name="workout_error_title">No se pudo cargar el entrenamiento</string>
     <string name="workout_started">Empezado %1$s</string>
     <string name="workout_write_failed">No se pudo guardar el último cambio. Lo escrito sigue en pantalla.</string>

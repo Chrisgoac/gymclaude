@@ -3,6 +3,7 @@ package com.chrisgoac.gymlog.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.chrisgoac.gymlog.database.dao.AchievementDao
+import com.chrisgoac.gymlog.database.dao.WorkoutHistoryDao
 import com.chrisgoac.gymlog.database.dao.BodyMetricDao
 import com.chrisgoac.gymlog.database.dao.CatalogDao
 import com.chrisgoac.gymlog.database.dao.CoachMessageDao
@@ -86,6 +87,7 @@ import com.chrisgoac.gymlog.database.entity.WorkoutSessionEntity
 )
 abstract class GymLogDatabase : RoomDatabase() {
     abstract fun exerciseDao(): ExerciseDao
+    abstract fun workoutHistoryDao(): WorkoutHistoryDao
     abstract fun routineDao(): RoutineDao
     abstract fun routineExerciseDao(): RoutineExerciseDao
     abstract fun workoutSessionDao(): WorkoutSessionDao

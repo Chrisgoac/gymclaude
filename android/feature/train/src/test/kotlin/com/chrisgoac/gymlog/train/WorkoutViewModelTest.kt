@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -62,10 +63,18 @@ private class FakeLog : WorkoutRepository, WorkoutLogRepository {
     val history = MutableStateFlow<Map<String, ExerciseHistory>>(emptyMap())
     val writes = mutableListOf<String>()
     var addGate: CompletableDeferred<Unit>? = null
+    var failRemove = false
+    var failObserve = 0
     private var ids = 0
 
     override fun observeActiveWorkout(): Flow<WorkoutAggregate?> = workout
-    override fun observeWorkout(sessionId: String): Flow<WorkoutAggregate?> = workout.map { it.takeIf { w -> w.session.id == sessionId } }
+    override fun observeWorkout(sessionId: String): Flow<WorkoutAggregate?> =
+        if (failObserve > 0) {
+            failObserve--
+            flow { throw IllegalStateException("disk") }
+        } else {
+            workout.map { it.takeIf { w -> w.session.id == sessionId } }
+        }
     override fun observeGyms(): Flow<List<Gym>> = flowOf(emptyList())
     override fun observeTrainingSummary(): Flow<TrainingSummary> = flowOf(TrainingSummary(0, 3, 0))
     override suspend fun startFreeWorkout(gymId: String?) = StartedWorkout("s1", true)
@@ -118,6 +127,7 @@ private class FakeLog : WorkoutRepository, WorkoutLogRepository {
         edit { list -> list.map { e -> e.copy(sets = e.sets.map { if (it.id == setId) next else it }) } }
     }
     override suspend fun removeSet(setId: String) {
+        if (failRemove) throw IllegalStateException("disk full")
         if (findSet(setId) == null) return
         writes += "removeSet:$setId"
         edit { list -> list.map { e -> e.copy(sets = e.sets.filterNot { it.id == setId }) } }
@@ -400,5 +410,78 @@ class WorkoutViewModelTest {
         runCurrent()
         assertEquals(WorkoutLogStatus.Missing, vm.state.value.status)
         assertNull(vm.state.value.startedAt)
+    }
+
+    /** Simulates a sync pull changing the stored set behind the screen's back. */
+    private fun remoteEdit(setId: String, weight: Double) {
+        repo.workout.value = repo.workout.value.copy(
+            exercises = repo.workout.value.exercises.map { e -> e.copy(sets = e.sets.map { if (it.id == setId) it.copy(weight = weight) else it }) },
+        )
+    }
+
+    @Test fun `a committed edit never overwrites a newer synced value on leave or restore`() = runTest(dispatcher) {
+        val handle = SavedStateHandle()
+        val vm = viewModel(handle)
+        vm.onWeight("set1", "62,5")
+        advanceUntilIdle()
+        assertEquals(listOf("updateSet:set1:62.5:8:false"), repo.writes)
+        assertEquals("62,5", vm.row("set1").weightText)
+
+        remoteEdit("set1", 70.0)
+        runCurrent()
+        // The synced value replaces the settled draft on screen ...
+        assertEquals("70", vm.row("set1").weightText)
+        // ... and leaving, clearing or recreating the screen writes nothing over it.
+        vm.flushPending()
+        advanceUntilIdle()
+        val restored = viewModel(recreate(handle))
+        advanceUntilIdle()
+        val store = ViewModelStore()
+        store.put("vm", vm)
+        store.clear()
+        advanceUntilIdle()
+        assertEquals(1, repo.writes.size)
+        assertEquals("70", restored.row("set1").weightText)
+        assertEquals(70.0, repo.workout.value.exercises.single().sets.single().weight, 0.0)
+    }
+
+    @Test fun `notes typed once are not rewritten over a synced change`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onNotes("Pecho")
+        advanceUntilIdle()
+        repo.workout.value = repo.workout.value.copy(session = repo.workout.value.session.copy(notes = "Pecho y hombro"))
+        vm.flushPending()
+        advanceUntilIdle()
+        assertEquals(listOf("notes:Pecho"), repo.writes)
+        assertEquals("Pecho y hombro", vm.state.value.notes)
+    }
+
+    @Test fun `a failed removal keeps the pending edit and still stores it`() = runTest(dispatcher) {
+        val vm = viewModel()
+        repo.failRemove = true
+        vm.onWeight("set1", "70")
+        vm.removeSet("set1")
+        advanceUntilIdle()
+        assertTrue(vm.state.value.writeFailed)
+        assertEquals("70", vm.row("set1").weightText)
+        assertEquals(listOf("updateSet:set1:70.0:8:false"), repo.writes)
+    }
+
+    @Test fun `a failed load can be retried`() = runTest(dispatcher) {
+        repo.failObserve = 1
+        val vm = viewModel()
+        assertEquals(WorkoutLogStatus.Failed, vm.state.value.status)
+        vm.retry()
+        runCurrent()
+        assertEquals(WorkoutLogStatus.Ready, vm.state.value.status)
+    }
+
+    @Test fun `the first set uses the suggestion even when nothing observes the screen state`() = runTest(dispatcher) {
+        repo.workout.value = repo.workout.value.copy(exercises = listOf(WorkoutExercise("le1", "seed-press", "Press de banca", 0, emptyList())))
+        repo.history.value = mapOf("seed-press" to ExerciseHistory(500L, listOf(HistorySet(60.0, 8, false))))
+        val vm = WorkoutViewModel("s1", repo, repo, FakeExercises(), TargetRoutines(), SavedStateHandle())
+        vm.addSet("le1")
+        advanceUntilIdle()
+        assertEquals(listOf("addSet:le1:62.5:8"), repo.writes)
     }
 }

@@ -61,6 +61,7 @@ fun ActiveWorkoutScreen(viewModel: WorkoutViewModel, onBack: () -> Unit, modifie
         onPickerQuery = viewModel::onPickerQuery,
         onPick = viewModel::addExercise,
         onDismissError = viewModel::dismissWriteError,
+        onRetry = viewModel::retry,
         modifier = modifier,
     )
 }
@@ -90,6 +91,7 @@ internal fun ActiveWorkoutContent(
     onPickerQuery: (String) -> Unit,
     onPick: (Exercise) -> Unit,
     onDismissError: () -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().imePadding()) {
@@ -105,8 +107,8 @@ internal fun ActiveWorkoutContent(
                 WorkoutLogStatus.Failed -> item(key = "failed") {
                     HierroErrorState(
                         message = stringResource(R.string.train_error_message),
-                        retryLabel = stringResource(R.string.workout_back),
-                        onRetry = onBack,
+                        retryLabel = stringResource(R.string.workout_retry),
+                        onRetry = onRetry,
                         title = stringResource(R.string.workout_error_title),
                     )
                 }

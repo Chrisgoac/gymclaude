@@ -9,6 +9,12 @@ import com.chrisgoac.gymlog.database.LocalMutation
 import com.chrisgoac.gymlog.database.OpenUserDatabase
 import com.chrisgoac.gymlog.database.RoomLocalMutationRunner
 import com.chrisgoac.gymlog.database.UserDatabaseManager
+import com.chrisgoac.gymlog.database.dao.LATEST_HISTORY_SQL
+import com.chrisgoac.gymlog.database.entity.CatalogExerciseEntity
+import com.chrisgoac.gymlog.database.entity.LoggedExerciseEntity
+import com.chrisgoac.gymlog.database.entity.LoggedSetEntity
+import com.chrisgoac.gymlog.database.entity.WorkoutSessionEntity
+import com.chrisgoac.gymlog.domain.exercise.ExerciseNotFoundException
 import com.chrisgoac.gymlog.domain.exercise.Equipment
 import com.chrisgoac.gymlog.domain.workout.HistorySet
 import com.chrisgoac.gymlog.domain.workout.ProgressionMode
@@ -27,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -54,8 +61,18 @@ class OfflineWorkoutLogRepositoryTest {
     private val manager = FakeManager(db)
     private val runner = RoomLocalMutationRunner(db, DeviceId("test-device"), clock = { now })
     private val nextId = { "00000000-0000-4000-8000-%012d".format(++ids) }
-    private val workouts = OfflineWorkoutRepository(manager, { runner }, OfflineExerciseRepository(manager, { runner }), now = { now }, newId = nextId)
-    private val log = OfflineWorkoutLogRepository(manager, { runner }, newId = nextId)
+    private val exercises = OfflineExerciseRepository(manager, { runner })
+    private val workouts = OfflineWorkoutRepository(manager, { runner }, exercises, now = { now }, newId = nextId)
+    private val log = OfflineWorkoutLogRepository(manager, { runner }, exercises, newId = nextId)
+
+    @Before fun seedCatalog() = runTest {
+        db.catalogDao().upsertAll(
+            listOf(
+                CatalogExerciseEntity("seed-press", "Press de banca", "pecho", "barra", "compuesto", null, null, null),
+                CatalogExerciseEntity("seed-curl", "Curl con barra Z", "biceps", "barra", "aislamiento", null, null, null),
+            ),
+        )
+    }
 
     @After fun tearDown() = db.close()
 
@@ -234,5 +251,52 @@ class OfflineWorkoutLogRepositoryTest {
         val settings = log.observeProgressionSettings().first()
         assertEquals(ProgressionMode.DOBLE, settings.mode)
         assertEquals(1.0, settings.increments.getValue(Equipment.BARRA), 0.0)
+    }
+
+    @Test fun `adding an unknown exercise is rejected before anything is written`() = runTest {
+        val sessionId = workouts.startFreeWorkout(null).sessionId
+        val before = outboxCount()
+        try {
+            log.addExercise(sessionId, "no-such-exercise")
+            fail("expected ExerciseNotFoundException")
+        } catch (_: ExerciseNotFoundException) {
+        }
+        assertEquals(before, outboxCount())
+    }
+
+    @Test fun `history over a large log reads only the latest earlier session per exercise`() = runTest {
+        // 300 finished sessions of press (4 sets each) + 300 of curl, alternating gyms.
+        repeat(300) { i ->
+            val session = "hist-$i"
+            db.workoutSessionDao().upsert(WorkoutSessionEntity(session, 1, null, null, null, if (i % 2 == 0) "g1" else "g2", 10_000L + i, 60, null, 1))
+            listOf("seed-press", "seed-curl").forEach { exercise ->
+                val le = "$session-$exercise"
+                db.loggedExerciseDao().upsert(LoggedExerciseEntity(le, 1, null, session, exercise, 0, 1))
+                repeat(4) { k -> db.loggedSetDao().upsert(LoggedSetEntity("$le-$k", 1, null, le, k, 20.0 + i, 5 + k, k == 0, 1)) }
+            }
+        }
+        // The newest press session lost all its sets (tombstoned): skipped. The newest session overall is deleted.
+        repeat(4) { k -> db.loggedSetDao().upsert(LoggedSetEntity("hist-298-seed-press-$k", 2, 2, "hist-298-seed-press", k, 0.0, 0, false, 1)) }
+        db.workoutSessionDao().upsert(WorkoutSessionEntity("hist-299", 2, 2, null, null, "g2", 10_299L, 60, null, 1))
+        db.workoutSessionDao().upsert(WorkoutSessionEntity("current", 1, null, null, null, "g1", 99_999L, null, null, 1))
+        db.loggedExerciseDao().upsert(LoggedExerciseEntity("current-press", 1, null, "current", "seed-press", 0, 1))
+        db.loggedSetDao().upsert(LoggedSetEntity("current-set", 1, null, "current-press", 0, 500.0, 1, false, 1))
+
+        val anyGym = log.observeExerciseHistory(setOf("seed-press", "seed-curl"), "current", null).first()
+        assertEquals(10_297L, anyGym.getValue("seed-press").date)
+        assertEquals(10_298L, anyGym.getValue("seed-curl").date)
+        assertEquals(listOf(HistorySet(317.0, 5, true), HistorySet(317.0, 6, false), HistorySet(317.0, 7, false), HistorySet(317.0, 8, false)), anyGym.getValue("seed-press").sets)
+        val gym1 = log.observeExerciseHistory(setOf("seed-press"), "current", "g1").first()
+        assertEquals(10_296L, gym1.getValue("seed-press").date)
+
+        // Query scope: exactly the chosen sessions' sets come back, never the whole history.
+        val rows = db.workoutHistoryDao().latestHistory(listOf("seed-press", "seed-curl"), "current", null)
+        assertEquals(8, rows.size)
+        // And the plan walks the indexes instead of scanning the history tables.
+        val sql = LATEST_HISTORY_SQL.replace(":exerciseIds", "'seed-press','seed-curl'").replace(":excludeSessionId", "'current'").replace(":gymId", "NULL")
+        val plan = db.query("EXPLAIN QUERY PLAN $sql", null).use { c -> buildList { while (c.moveToNext()) add(c.getString(3)) } }
+        assertTrue(plan.toString(), plan.any { "index_logged_exercises_exerciseId" in it })
+        assertTrue(plan.toString(), plan.any { "index_logged_sets_loggedExerciseId" in it })
+        assertTrue(plan.toString(), plan.none { Regex("""^SCAN (logged_sets|logged_exercises|workout_sessions)\b""").containsMatchIn(it) && "INDEX" !in it })
     }
 }
