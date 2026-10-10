@@ -2,6 +2,7 @@ package com.chrisgoac.gymlog
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.core.content.edit
 import com.chrisgoac.gymlog.auth.ClerkAuthGateway
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
@@ -36,12 +37,14 @@ import com.chrisgoac.gymlog.sync.AppSyncEnvironment
 import com.chrisgoac.gymlog.sync.BootstrapAutoRetry
 import com.chrisgoac.gymlog.sync.ConnectivityMonitor
 import com.chrisgoac.gymlog.sync.NotifyingLocalMutationRunner
+import com.chrisgoac.gymlog.sync.ReconcilingUserDatabaseManager
 import com.chrisgoac.gymlog.sync.RetryAfterGate
 import com.chrisgoac.gymlog.sync.RoomLocalAccountCleaner
 import com.chrisgoac.gymlog.sync.SyncTriggers
 import com.chrisgoac.gymlog.sync.SyncWorkerFactory
 import com.chrisgoac.gymlog.sync.WorkManagerSyncScheduler
 import com.clerk.api.Clerk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,7 +59,11 @@ class AppContainer(private val application: Application) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val databaseManager = UserDatabaseManagerImpl(application)
-    val databases: UserDatabaseManager = databaseManager
+    private val syncLocks = SyncLocks()
+    private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks)
+
+    /** Every open first finishes a pending sign-out deletion of that account (see [RoomLocalAccountCleaner.reconcile]). */
+    val databases: UserDatabaseManager = ReconcilingUserDatabaseManager(databaseManager, accountCleaner::reconcile)
 
     /** False when `clerk.publishableKey` is missing from local.properties or Clerk rejects it. */
     private val clerkConfigured: Boolean = initializeClerk(application, BuildConfig.CLERK_PUBLISHABLE_KEY)
@@ -90,7 +97,6 @@ class AppContainer(private val application: Application) {
         )
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
-    private val syncLocks = SyncLocks()
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)
 
     val syncRepository: SyncRepository = SyncRepositoryImpl(databases, syncApi, bootstrapRepository, syncLocks)
@@ -105,13 +111,19 @@ class AppContainer(private val application: Application) {
         currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId },
     )
 
-    private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks)
-
     /**
      * Finishes sign-out deletions a crash interrupted. The root state machine waits for it, so a
      * quick sign-in by the marked user can never open a database this sweep would then delete.
      */
-    private val startupSweep = appScope.async { runCatching { accountCleaner.sweepPendingDeletions() } }
+    private val startupSweep = appScope.async {
+        try {
+            accountCleaner.sweepPendingDeletions()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (e: Exception) {
+            Log.w("GymLogSignOut", "Could not finish a pending local-data deletion", e) // retried at the next open of that account
+        }
+    }
 
     private val bootstrapRunner = BootstrapRunner { userId, database, onProgress ->
         bootstrapRepository.run(userId, database, onProgress)

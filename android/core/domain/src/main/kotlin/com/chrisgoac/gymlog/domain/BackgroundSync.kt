@@ -3,6 +3,8 @@ package com.chrisgoac.gymlog.domain
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
 import com.chrisgoac.gymlog.domain.auth.AuthStep
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /** Requests background sync for an account; implemented in `:app` on top of the platform scheduler. */
 interface BackgroundSyncScheduler {
@@ -35,10 +37,17 @@ interface LocalAccountCleaner {
      */
     suspend fun unsyncedChangeCount(userId: String): Int
 
-    /** Durably records, before the session ends, that [userId]'s local data must be deleted. */
+    /**
+     * Durably records, before the session ends, the INTENT to delete [userId]'s local data. An
+     * intent alone never deletes anything: if the app dies before the sign-out is known to have
+     * completed, the session may still be alive, so the data is kept (and the mark dropped).
+     */
     suspend fun markPendingDeletion(userId: String)
 
-    /** Forgets [markPendingDeletion] (the sign-out did not happen). */
+    /** The session has ended: the mark now obliges deletion, at the latest the next time that account's database would open. */
+    suspend fun confirmPendingDeletion(userId: String)
+
+    /** Forgets the mark (the sign-out did not happen). */
     suspend fun clearPendingDeletion(userId: String)
 
     /**
@@ -119,23 +128,28 @@ class SignOutUseCase(
         scheduler.resume(userId)
     }
 
-    private suspend fun finish(userId: String): SignOutOutcome {
+    /**
+     * Runs to completion even if the caller (a screen's scope) is cancelled midway: a half-done
+     * sign-out would strand a deletion mark on an account whose session is still alive.
+     */
+    private suspend fun finish(userId: String): SignOutOutcome = withContext(NonCancellable) {
         try {
             scheduler.cancel(userId)
             cleaner.markPendingDeletion(userId)
             if (auth.signOut() != AuthStep.Completed) {
-                cleaner.clearPendingDeletion(userId)
+                // Best effort: a mark that survives is dropped at the next open of this account
+                // (intent marks never delete), so a failure here cannot lose data.
+                runCatching { cleaner.clearPendingDeletion(userId) }
                 scheduler.resume(userId)
                 scheduler.ensurePeriodic(userId)
                 scheduler.requestSync(userId)
-                return SignOutOutcome.Failed
+                return@withContext SignOutOutcome.Failed
             }
+            cleaner.confirmPendingDeletion(userId)
             cleaner.deleteLocalData(userId)
-            return SignOutOutcome.SignedOut
-        } catch (cancelled: CancellationException) {
-            throw cancelled
+            SignOutOutcome.SignedOut
         } catch (_: Exception) {
-            return SignOutOutcome.Failed
+            SignOutOutcome.Failed
         } finally {
             scheduler.resume(userId)
         }

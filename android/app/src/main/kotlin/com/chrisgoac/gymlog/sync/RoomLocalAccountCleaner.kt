@@ -15,9 +15,9 @@ import java.io.File
  * `files/users/<hash>` and `cache/users/<hash>` (the places future per-user private files and
  * thumbnails must use). There is no per-user DataStore yet; when one exists its file goes here too.
  *
- * Deletion is recorded (by hash, never the raw id) in a small preferences file before the session
- * ends and cleared once the files are gone; [sweepPendingDeletions] finishes any that a crash or
- * cancellation left behind.
+ * Deletion is recorded (by hash, never the raw id) in [PendingDeletionMarks] before the session
+ * ends and cleared once the files are gone; [sweepPendingDeletions] and [reconcile] finish any that
+ * a crash or a failed delete left behind.
  */
 class RoomLocalAccountCleaner(
     context: Context,
@@ -25,7 +25,7 @@ class RoomLocalAccountCleaner(
     private val locks: SyncLocks,
 ) : LocalAccountCleaner {
     private val appContext = context.applicationContext
-    private val marks by lazy { appContext.getSharedPreferences(MARKS_FILE, Context.MODE_PRIVATE) }
+    private val marks = PendingDeletionMarks(appContext)
 
     override suspend fun unsyncedChangeCount(userId: String): Int {
         val open = databases.current.value?.takeIf { it.userId == userId }
@@ -34,26 +34,44 @@ class RoomLocalAccountCleaner(
         return dao.outboxCount(OutboxStatus.PENDING) + dao.outboxCount(OutboxStatus.QUARANTINED)
     }
 
-    override suspend fun markPendingDeletion(userId: String) = edit { it + UserDatabaseManagerImpl.userHash(userId) }
+    override suspend fun markPendingDeletion(userId: String) = marks.markIntent(UserDatabaseManagerImpl.userHash(userId))
 
-    override suspend fun clearPendingDeletion(userId: String) = edit { it - UserDatabaseManagerImpl.userHash(userId) }
+    override suspend fun confirmPendingDeletion(userId: String) = marks.confirm(UserDatabaseManagerImpl.userHash(userId))
+
+    override suspend fun clearPendingDeletion(userId: String) = marks.clear(UserDatabaseManagerImpl.userHash(userId))
 
     override suspend fun deleteLocalData(userId: String) {
         // An in-flight sync run holds this lock: wait for it before the files disappear under it.
         locks.forUser(userId).withLock {
             val hash = UserDatabaseManagerImpl.userHash(userId)
             deleteByHash(hash)
-            edit { it - hash }
+            marks.clear(hash)
         }
     }
 
-    /** Finishes deletions interrupted by a crash or cancellation. Call once at app start, before any sign-in. */
-    suspend fun sweepPendingDeletions() {
-        val pending = withContext(Dispatchers.IO) { marks.getStringSet(KEY, emptySet()).orEmpty().toSet() }
-        pending.forEach { hash ->
+    /**
+     * Called before [userId]'s database is opened (every open, not only at start). A confirmed
+     * deletion is finished first, so the account restarts from a clean database and never resyncs
+     * what the user discarded. An intent mark means the sign-out never completed (the session is
+     * alive, since the user is opening the account), so the data stays and the mark is dropped.
+     */
+    suspend fun reconcile(userId: String) {
+        val hash = UserDatabaseManagerImpl.userHash(userId)
+        if (hash in marks.confirmed()) {
             deleteByHash(hash)
-            edit { it - hash }
+            marks.clear(hash)
+        } else if (hash in marks.intents()) {
+            marks.clearIntent(hash)
         }
+    }
+
+    /** Finishes confirmed deletions and drops stale intents. Runs once at app start, before the root state machine. */
+    suspend fun sweepPendingDeletions() {
+        marks.confirmed().forEach { hash ->
+            deleteByHash(hash)
+            marks.clear(hash)
+        }
+        marks.intents().forEach { marks.clearIntent(it) }
     }
 
     private suspend fun deleteByHash(hash: String) {
@@ -63,18 +81,5 @@ class RoomLocalAccountCleaner(
                 if (dir.exists() && !dir.deleteRecursively()) error("Could not delete ${dir.name}")
             }
         }
-    }
-
-    /** Synchronous (`commit`) so the mark is on disk before the caller proceeds. */
-    private suspend fun edit(change: (Set<String>) -> Set<String>) = withContext(Dispatchers.IO) {
-        synchronized(marks) {
-            val updated = change(marks.getStringSet(KEY, emptySet()).orEmpty().toSet())
-            check(marks.edit().putStringSet(KEY, updated).commit()) { "Could not persist the pending deletion" }
-        }
-    }
-
-    private companion object {
-        const val MARKS_FILE = "gymlog.pending-deletion"
-        const val KEY = "hashes"
     }
 }

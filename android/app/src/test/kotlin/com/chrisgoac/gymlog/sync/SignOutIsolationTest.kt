@@ -97,23 +97,71 @@ class SignOutIsolationTest {
         val before = RoomLocalAccountCleaner(context, databases, locks)
         databases.open("user_1").syncDao().cursor() // forces the file to exist
         before.markPendingDeletion("user_1")
-        databases.close() // "crash" after the mark, before the files were deleted
-        val stored = context.getSharedPreferences("gymlog.pending-deletion", Context.MODE_PRIVATE).getStringSet("hashes", null)
+        before.confirmPendingDeletion("user_1")
+        databases.close() // "crash" after the sign-out, before the files were deleted
+        val stored = context.getSharedPreferences("gymlog.pending-deletion", Context.MODE_PRIVATE).getStringSet("confirmed", null)
         assertEquals(setOf(UserDatabaseManagerImpl.userHash("user_1")), stored)
         assertTrue(databases.databaseFiles("user_1").first().exists())
 
         RoomLocalAccountCleaner(context, databases, locks).sweepPendingDeletions()
 
         assertTrue(databases.databaseFiles("user_1").none { it.exists() })
-        assertTrue(context.getSharedPreferences("gymlog.pending-deletion", Context.MODE_PRIVATE).getStringSet("hashes", null).orEmpty().isEmpty())
+        assertTrue(marks("confirmed").isEmpty())
     }
 
     @Test fun aSuccessfulDeletionClearsItsMark() = runBlocking {
         val cleaner = RoomLocalAccountCleaner(context, databases, locks)
         databases.open("user_1")
         cleaner.markPendingDeletion("user_1")
+        cleaner.confirmPendingDeletion("user_1")
         cleaner.deleteLocalData("user_1")
-        assertTrue(context.getSharedPreferences("gymlog.pending-deletion", Context.MODE_PRIVATE).getStringSet("hashes", null).orEmpty().isEmpty())
+        assertTrue(marks("confirmed").isEmpty() && marks("intent").isEmpty())
+    }
+
+    private fun marks(key: String) = context.getSharedPreferences("gymlog.pending-deletion", Context.MODE_PRIVATE).getStringSet(key, null).orEmpty()
+
+    private fun outboxRow(id: String) = com.chrisgoac.gymlog.database.entity.OutboxMutationEntity(
+        id, "dev", "{}", 1L, 0, null, 1L, com.chrisgoac.gymlog.database.entity.OutboxStatus.PENDING,
+    )
+
+    @Test fun afterAFailedDeleteTheSameUserSigningInAgainStartsFromACleanDatabase() = runBlocking {
+        val cleaner = RoomLocalAccountCleaner(context, databases, locks)
+        val reconciling = ReconcilingUserDatabaseManager(databases, cleaner::reconcile)
+        reconciling.open("user_1").syncDao().insertOutbox(outboxRow("discarded"))
+        // Sign-out completed and the user discarded their changes, but the delete failed (mark confirmed, files remain).
+        cleaner.markPendingDeletion("user_1")
+        cleaner.confirmPendingDeletion("user_1")
+        databases.close()
+
+        val again = reconciling.open("user_1") // same process, no restart
+
+        assertTrue(again.syncDao().allOutbox().isEmpty())
+        assertTrue(marks("confirmed").isEmpty())
+    }
+
+    @Test fun anIntentWithoutAConfirmedSignOutNeverDeletesTheDataOfAnAliveSession() = runBlocking {
+        val cleaner = RoomLocalAccountCleaner(context, databases, locks)
+        val reconciling = ReconcilingUserDatabaseManager(databases, cleaner::reconcile)
+        reconciling.open("user_1").syncDao().insertOutbox(outboxRow("kept"))
+        cleaner.markPendingDeletion("user_1") // sign-out failed and even the clear failed
+        databases.close()
+
+        val again = reconciling.open("user_1")
+
+        assertEquals(listOf("kept"), again.syncDao().allOutbox().map { it.mutationId })
+        assertTrue(marks("intent").isEmpty())
+    }
+
+    @Test fun startupDropsStaleIntentsWithoutTouchingData() = runBlocking {
+        val cleaner = RoomLocalAccountCleaner(context, databases, locks)
+        databases.open("user_1").syncDao().insertOutbox(outboxRow("kept"))
+        cleaner.markPendingDeletion("user_1")
+        databases.close()
+
+        cleaner.sweepPendingDeletions()
+
+        assertTrue(marks("intent").isEmpty())
+        assertEquals(1, databases.open("user_1").syncDao().allOutbox().size)
     }
 
     @Test fun nothingSyncsWhileSignOutIsInProgress() = runBlocking {

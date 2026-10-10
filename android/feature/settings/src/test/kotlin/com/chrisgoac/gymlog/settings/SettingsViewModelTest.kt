@@ -49,6 +49,7 @@ class SettingsViewModelTest {
         cleaner = object : LocalAccountCleaner {
             override suspend fun unsyncedChangeCount(userId: String) = unsynced
             override suspend fun markPendingDeletion(userId: String) { events += "mark" }
+            override suspend fun confirmPendingDeletion(userId: String) { events += "confirm" }
             override suspend fun clearPendingDeletion(userId: String) { events += "clear" }
             override suspend fun deleteLocalData(userId: String) { events += "delete" }
         },
@@ -86,7 +87,7 @@ class SettingsViewModelTest {
         val vm = newViewModel(backgroundScope)
         vm.signOut()
         assertEquals(SignOutPhase.Idle, vm.state.value.signOut)
-        assertEquals(listOf("suspend", "cancel", "mark", "signOut", "delete", "resume"), events)
+        assertEquals(listOf("suspend", "cancel", "mark", "signOut", "confirm", "delete", "resume"), events)
     }
 
     @Test fun signOutWithUnsyncedChangesAsksFirstAndDeletesOnlyAfterConfirmation() = runTest(dispatcher) {
@@ -98,7 +99,7 @@ class SettingsViewModelTest {
 
         vm.confirmDiscard()
         assertEquals(SignOutPhase.Idle, vm.state.value.signOut)
-        assertEquals(listOf("suspend", "cancel", "mark", "signOut", "delete", "resume"), events)
+        assertEquals(listOf("suspend", "cancel", "mark", "signOut", "confirm", "delete", "resume"), events)
     }
 
     @Test fun decliningTheConfirmationKeepsDataAndResumesSync() = runTest(dispatcher) {

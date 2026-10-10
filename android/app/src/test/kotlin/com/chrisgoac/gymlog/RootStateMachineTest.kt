@@ -74,6 +74,7 @@ class RootStateMachineTest {
         val cleaner = com.chrisgoac.gymlog.sync.RoomLocalAccountCleaner(context, databases, com.chrisgoac.gymlog.data.sync.SyncLocks())
         databases.open(USER_A).syncDao().saveCursor(SyncCursorEntity(cursor = "old", updatedAt = 1))
         cleaner.markPendingDeletion(USER_A)
+        cleaner.confirmPendingDeletion(USER_A)
         databases.close()
         auth.state.value = AuthState.SignedIn(USER_A) // signed in again before the machine even starts
 

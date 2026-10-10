@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -27,7 +26,6 @@ import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit, onSyncDetails: () -> Unit, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsState()
-    DisposableEffect(viewModel) { onDispose(viewModel::onSettingsLeft) }
     Column(modifier.fillMaxSize()) {
         HierroScreenHeader(stringResource(R.string.settings_title)) {
             HierroHeaderAction(stringResource(R.string.settings_back), onBack)
