@@ -19,13 +19,15 @@ sealed interface SyncUiState {
 }
 
 /**
- * Priority: expired session > rejected changes > offline > pending > synced. Rejected changes
+ * Priority: expired session > rejected changes > offline (with pending changes) > pending > synced. Rejected changes
  * outrank connectivity because waiting never resolves them.
  */
 fun SyncStatus.toUiState(): SyncUiState = when {
     lastResult is SyncResult.SessionRequired -> SyncUiState.SessionRequired
     quarantinedMutations > 0 -> SyncUiState.NeedsAction(quarantinedMutations)
-    lastResult is SyncResult.Retryable -> SyncUiState.Offline(pendingMutations)
+    // Offline only when local changes are actually waiting: with nothing to send, a failed pull
+    // puts none of the user's data at risk, so "0 changes saved here" would only alarm.
+    lastResult is SyncResult.Retryable && pendingMutations > 0 -> SyncUiState.Offline(pendingMutations)
     pendingMutations > 0 -> SyncUiState.Pending(pendingMutations)
     else -> SyncUiState.Synced
 }

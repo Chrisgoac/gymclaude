@@ -21,7 +21,7 @@ import java.io.File
 class RoomLocalAccountCleanerTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val databases = UserDatabaseManagerImpl(context) { it.allowMainThreadQueries() }
-    private val cleaner = RoomLocalAccountCleaner(context, databases)
+    private val cleaner = RoomLocalAccountCleaner(context, databases, com.chrisgoac.gymlog.data.sync.SyncLocks())
 
     @After fun tearDown() = runBlocking { databases.close() }
 
@@ -41,6 +41,14 @@ class RoomLocalAccountCleanerTest {
         assertTrue(databases.databaseFiles("user_1").none { it.exists() })
         assertFalse(privateDir.exists())
         assertEquals(null, databases.current.value)
+    }
+
+    @Test fun countingNeverOpensAnotherUsersDatabase() = runBlocking {
+        databases.open("user_1")
+        val failure = runCatching { cleaner.unsyncedChangeCount("user_2") }.exceptionOrNull()
+        assertTrue(failure is IllegalStateException)
+        assertEquals("user_1", databases.current.value?.userId)
+        assertTrue(databases.databaseFiles("user_2").none { it.exists() })
     }
 
     @Test fun anEmptyOutboxCountsZero() = runBlocking {

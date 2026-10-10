@@ -47,12 +47,24 @@ class SettingsViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), SettingsUiState())
 
     fun syncNow() {
-        viewModelScope.launch { sync.syncNow() }
+        viewModelScope.launch { sync.requestSync() }
     }
 
     fun signOut() = runSignOut { signOutUseCase.begin() }
 
     fun confirmDiscard() = runSignOut { signOutUseCase.confirmDiscard() }
+
+    /** The Settings screen went away: an unanswered confirmation is dropped and sync resumes. */
+    fun onSettingsLeft() {
+        if (signOutPhase.value is SignOutPhase.Confirm) {
+            signOutUseCase.abandon()
+            signOutPhase.value = SignOutPhase.Idle
+        }
+    }
+
+    override fun onCleared() {
+        signOutUseCase.abandon()
+    }
 
     fun cancelSignOut() {
         viewModelScope.launch {

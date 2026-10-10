@@ -31,6 +31,9 @@ interface SyncEnvironment {
     suspend fun readiness(userHash: String): SyncReadiness
     suspend fun syncOnce(): SyncResult
 
+    /** Queues one run that starts when the server-requested wait of [userHash] is over. */
+    suspend fun requeueAfterRetryWindow(userHash: String)
+
     /** The session is gone: the periodic work must not keep waking the device until sign-in. */
     suspend fun onSessionRequired(userHash: String)
 }
@@ -65,7 +68,7 @@ class RetryAfterGate(
 
 /**
  * One sync run for one account. WorkManager semantics: `retry` only for transient failures (offline,
- * server busy, app not ready); a missing session or a permanent error is `failure`; rows the server
+ * server busy, app not ready); inside a server-requested wait the run ends with `success` after queueing one for later; a missing session or a permanent error is `failure`; rows the server
  * rejected for good (quarantined) never fail the run.
  *
  * The input is the account's hash, never the raw user id (WorkManager persists inputs in plain text).
@@ -77,7 +80,12 @@ class SyncWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val userHash = inputData.getString(KEY_USER_HASH) ?: return Result.failure()
-        if (environment.retryGate.remainingMillis(userHash) > 0) return Result.retry()
+        if (environment.retryGate.remainingMillis(userHash) > 0) {
+            // Finish cleanly and queue one run for when the window ends, instead of burning
+            // WorkManager backoff attempts against a wait the server already told us about.
+            environment.requeueAfterRetryWindow(userHash)
+            return Result.success()
+        }
 
         when (environment.readiness(userHash)) {
             SyncReadiness.Ready -> Unit

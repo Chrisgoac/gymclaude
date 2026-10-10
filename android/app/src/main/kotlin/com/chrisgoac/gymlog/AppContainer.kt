@@ -54,7 +54,8 @@ import java.util.UUID
 class AppContainer(private val application: Application) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    val databases: UserDatabaseManager = UserDatabaseManagerImpl(application)
+    private val databaseManager = UserDatabaseManagerImpl(application)
+    val databases: UserDatabaseManager = databaseManager
 
     /** False when `clerk.publishableKey` is missing from local.properties or Clerk rejects it. */
     private val clerkConfigured: Boolean = initializeClerk(application, BuildConfig.CLERK_PUBLISHABLE_KEY)
@@ -92,10 +93,16 @@ class AppContainer(private val application: Application) {
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)
 
     val syncRepository: SyncRepository = SyncRepositoryImpl(databases, syncApi, bootstrapRepository, syncLocks)
-    val syncUseCases: SyncUseCases = DefaultSyncUseCases(syncRepository)
 
     private val retryGate = RetryAfterGate()
     private val syncScheduler = WorkManagerSyncScheduler({ WorkManager.getInstance(application) }, retryGate)
+
+    // Manual syncs go through the scheduler too, so the Retry-After window and the one-run rule hold.
+    val syncUseCases: SyncUseCases = DefaultSyncUseCases(
+        syncRepository,
+        syncScheduler,
+        currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId },
+    )
 
     private val bootstrapRunner = BootstrapRunner { userId, database, onProgress ->
         bootstrapRepository.run(userId, database, onProgress)
@@ -106,16 +113,18 @@ class AppContainer(private val application: Application) {
 
     /** Worker factory for WorkManager's on-demand initialization (see [GymLogApplication]). */
     val syncWorkerFactory = SyncWorkerFactory(
-        AppSyncEnvironment(rootStateMachine.state, syncUseCases, syncScheduler, retryGate),
+        AppSyncEnvironment(rootStateMachine.state, syncRepository, syncScheduler, retryGate),
     )
 
     private val syncTriggers = SyncTriggers(appScope, rootStateMachine.state, syncScheduler)
+
+    private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks)
 
     private val signOutUseCase by lazy {
         SignOutUseCase(
             currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId },
             scheduler = syncScheduler,
-            cleaner = RoomLocalAccountCleaner(application, databases),
+            cleaner = accountCleaner,
             auth = authGateway,
         )
     }
@@ -127,6 +136,8 @@ class AppContainer(private val application: Application) {
 
     /** Starts the sync triggers: ready account, foreground, local mutations, connectivity (bootstrap retry). */
     fun startSync() {
+        // Finish a sign-out deletion that a crash interrupted, before anything can reopen that database.
+        appScope.launch { runCatching { accountCleaner.sweepPendingDeletions() } }
         syncTriggers.start()
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) syncTriggers.onForeground() },

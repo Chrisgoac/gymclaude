@@ -41,18 +41,23 @@ class UserDatabaseManagerImpl(
 
     override suspend fun close() = mutex.withLock { closeLocked() }
 
-    override suspend fun closeAndDelete(userId: String) = mutex.withLock {
-        if (state.value?.userId == userId) closeLocked()
+    override suspend fun closeAndDelete(userId: String) = closeAndDeleteHash(userHash(userId))
+
+    /** [closeAndDelete] by [userHash], for deletions finished without knowing the raw user id (startup sweep). */
+    suspend fun closeAndDeleteHash(userHash: String) = mutex.withLock {
+        if (state.value?.userId?.let(::userHash) == userHash) closeLocked()
         withContext(Dispatchers.IO) {
-            databaseFiles(userId).forEach { file ->
+            databaseFilesForHash(userHash).forEach { file ->
                 if (file.exists() && !file.delete()) error("Could not delete ${file.name}")
             }
         }
     }
 
     /** The exact files SQLite may create for [userId]'s database (main file, WAL, shared memory, journal). */
-    fun databaseFiles(userId: String): List<File> {
-        val main = appContext.getDatabasePath(databaseFileName(userId))
+    fun databaseFiles(userId: String): List<File> = databaseFilesForHash(userHash(userId))
+
+    private fun databaseFilesForHash(userHash: String): List<File> {
+        val main = appContext.getDatabasePath("gymlog-$userHash.db")
         return listOf(main) + FILE_SUFFIXES.map { File(main.path + it) }
     }
 

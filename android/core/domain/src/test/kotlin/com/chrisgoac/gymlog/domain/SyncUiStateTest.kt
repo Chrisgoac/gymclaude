@@ -20,6 +20,10 @@ class SyncUiStateTest {
         assertEquals(SyncUiState.Offline(2), status(pending = 2, last = SyncResult.Retryable(null, 0)).toUiState())
     }
 
+    @Test fun failedAttemptWithNothingWaitingIsNotOffline() {
+        assertEquals(SyncUiState.Synced, status(last = SyncResult.Retryable(null, 0)).toUiState())
+    }
+
     @Test fun rejectedChangesNeedActionEvenWhenOffline() {
         assertEquals(SyncUiState.NeedsAction(1), status(pending = 2, quarantined = 1, last = SyncResult.Retryable(null, 0)).toUiState())
     }

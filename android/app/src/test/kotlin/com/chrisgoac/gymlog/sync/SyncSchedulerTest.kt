@@ -75,7 +75,7 @@ class SyncSchedulerTest {
         assertEquals(1, infos("sync-${hash("user_1")}").size)
     }
 
-    @Test fun aRequestDuringARunQueuesExactlyOneFollowUpBehindIt() = runBlocking {
+    @Test fun aNewRequestAfterTheRunFinishedQueuesExactlyOneRun() = runBlocking {
         scheduler.requestSync("user_1")
         WorkManagerTestInitHelper.getTestDriver(context)!!.setAllConstraintsMet(infos("sync-${hash("user_1")}").single().id)
         // The first run finished; a later trigger starts a new one.
@@ -83,6 +83,39 @@ class SyncSchedulerTest {
         scheduler.requestSync("user_1")
         val states = infos("sync-${hash("user_1")}").map { it.state }
         assertEquals(1, states.count { it == WorkInfo.State.ENQUEUED || it == WorkInfo.State.BLOCKED || it == WorkInfo.State.RUNNING })
+    }
+
+    @Test fun softRequestsAreSatisfiedByARunningSyncButMutationsQueueBehindIt() {
+        fun run(state: WorkInfo.State) = listOf(WorkManagerSyncScheduler.QueuedRun(state, 0))
+        assertTrue(WorkManagerSyncScheduler.shouldSkip(run(WorkInfo.State.RUNNING), queueBehindRunning = false))
+        assertTrue(!WorkManagerSyncScheduler.shouldSkip(run(WorkInfo.State.RUNNING), queueBehindRunning = true))
+        assertTrue(WorkManagerSyncScheduler.shouldSkip(run(WorkInfo.State.BLOCKED), queueBehindRunning = true))
+        assertTrue(!WorkManagerSyncScheduler.shouldSkip(listOf(WorkManagerSyncScheduler.QueuedRun(WorkInfo.State.ENQUEUED, 2)), true))
+    }
+
+    @Test fun aSuspendedAccountIgnoresEveryTriggerButKeepsExistingWork() = runBlocking {
+        scheduler.ensurePeriodic("user_1")
+        scheduler.suspend("user_1")
+        scheduler.requestSync("user_1")
+        scheduler.ensurePeriodic("user_1")
+
+        assertTrue(infos("sync-${hash("user_1")}").isEmpty())
+        assertEquals(WorkInfo.State.ENQUEUED, infos("sync-${hash("user_1")}-periodic").single().state)
+
+        scheduler.resume("user_1")
+        scheduler.requestSync("user_1")
+        assertEquals(1, infos("sync-${hash("user_1")}").size)
+    }
+
+    @Test fun aManualSyncInsideTheRetryWindowIsDelayedAndNeverReachesTheApi() = runBlocking {
+        env.retryGate.defer(hash("user_1"), 90_000)
+
+        scheduler.requestSync("user_1") // what the "Sincronizar ahora" button ends up calling
+
+        val info = infos("sync-${hash("user_1")}").single()
+        assertEquals(WorkInfo.State.ENQUEUED, info.state)
+        assertTrue(info.initialDelayMillis in 89_000..90_000)
+        assertEquals(0, env.syncCalls)
     }
 
     @Test fun accountsHaveIndependentWork() = runBlocking {

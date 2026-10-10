@@ -19,8 +19,11 @@ class SyncTriggersTest {
         val periodic = mutableListOf<String>()
         val requests = mutableListOf<String>()
         override suspend fun ensurePeriodic(userId: String) { periodic += userId }
-        override suspend fun requestSync(userId: String) { requests += userId }
+        val soft = mutableListOf<Boolean>()
+        override suspend fun requestSync(userId: String, queueBehindRunning: Boolean) { requests += userId; soft += !queueBehindRunning }
         override suspend fun cancel(userId: String) = Unit
+        override fun suspend(userId: String) = Unit
+        override fun resume(userId: String) = Unit
     }
 
     private val root = MutableStateFlow<RootState>(RootState.Loading)
@@ -83,6 +86,19 @@ class SyncTriggersTest {
         triggers.onForeground()
         runCurrent()
         assertEquals(listOf("u1"), scheduler.requests)
+    }
+
+    @Test fun startupAndForegroundAreSoftButMutationsQueueBehindARunningSync() = runTest {
+        root.value = RootState.Ready("u1")
+        val triggers = SyncTriggers(backgroundScope, root, scheduler)
+        triggers.start()
+        runCurrent()
+        triggers.onForeground()
+        runCurrent()
+        triggers.onLocalMutation()
+        advanceTimeBy(2_001)
+        runCurrent()
+        assertEquals(listOf(true, true, false), scheduler.soft)
     }
 
     @Test fun notifyingRunnerSignalsOnlyCommittedMutations() = runTest {

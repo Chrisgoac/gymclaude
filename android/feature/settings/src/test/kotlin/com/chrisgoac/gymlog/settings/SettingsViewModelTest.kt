@@ -35,17 +35,21 @@ class SettingsViewModelTest {
     private val sync = object : SyncUseCases {
         override fun observeStatus() = status
         override fun observeDiagnostics() = diagnostics
-        override suspend fun syncNow(): SyncResult { events += "syncNow"; return SyncResult.Success(0, 0, 0) }
+        override suspend fun requestSync() { events += "requestSync" }
     }
     private val signOut = SignOutUseCase(
         currentUserId = { "u" },
         scheduler = object : BackgroundSyncScheduler {
             override suspend fun ensurePeriodic(userId: String) { events += "periodic" }
-            override suspend fun requestSync(userId: String) { events += "request" }
+            override suspend fun requestSync(userId: String, queueBehindRunning: Boolean) { events += "request" }
             override suspend fun cancel(userId: String) { events += "cancel" }
+            override fun suspend(userId: String) { events += "suspend" }
+            override fun resume(userId: String) { events += "resume" }
         },
         cleaner = object : LocalAccountCleaner {
             override suspend fun unsyncedChangeCount(userId: String) = unsynced
+            override suspend fun markPendingDeletion(userId: String) { events += "mark" }
+            override suspend fun clearPendingDeletion(userId: String) { events += "clear" }
             override suspend fun deleteLocalData(userId: String) { events += "delete" }
         },
         auth = object : AuthGateway {
@@ -82,7 +86,7 @@ class SettingsViewModelTest {
         val vm = newViewModel(backgroundScope)
         vm.signOut()
         assertEquals(SignOutPhase.Idle, vm.state.value.signOut)
-        assertEquals(listOf("cancel", "signOut", "delete"), events)
+        assertEquals(listOf("suspend", "cancel", "mark", "signOut", "delete", "resume"), events)
     }
 
     @Test fun signOutWithUnsyncedChangesAsksFirstAndDeletesOnlyAfterConfirmation() = runTest(dispatcher) {
@@ -90,11 +94,11 @@ class SettingsViewModelTest {
         val vm = newViewModel(backgroundScope)
         vm.signOut()
         assertEquals(SignOutPhase.Confirm(3), vm.state.value.signOut)
-        assertEquals(listOf("cancel"), events)
+        assertEquals(listOf("suspend"), events)
 
         vm.confirmDiscard()
         assertEquals(SignOutPhase.Idle, vm.state.value.signOut)
-        assertEquals(listOf("cancel", "signOut", "delete"), events)
+        assertEquals(listOf("suspend", "cancel", "mark", "signOut", "delete", "resume"), events)
     }
 
     @Test fun decliningTheConfirmationKeepsDataAndResumesSync() = runTest(dispatcher) {
@@ -103,6 +107,20 @@ class SettingsViewModelTest {
         vm.signOut()
         vm.cancelSignOut()
         assertEquals(SignOutPhase.Idle, vm.state.value.signOut)
-        assertEquals(listOf("cancel", "periodic", "request"), events)
+        assertEquals(listOf("suspend", "resume", "request"), events)
+    }
+
+    @Test fun leavingSettingsWhileAskingResumesTriggersAndKeepsEverything() = runTest(dispatcher) {
+        unsynced = 3
+        val vm = newViewModel(backgroundScope)
+        vm.signOut()
+        vm.onSettingsLeft()
+        assertEquals(SignOutPhase.Idle, vm.state.value.signOut)
+        assertEquals(listOf("suspend", "resume"), events)
+    }
+
+    @Test fun manualSyncIsARequestNotADirectRun() = runTest(dispatcher) {
+        newViewModel(backgroundScope).syncNow()
+        assertEquals(listOf("requestSync"), events)
     }
 }

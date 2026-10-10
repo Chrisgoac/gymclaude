@@ -44,14 +44,16 @@ class SyncWorkerTest {
         assertEquals(Result.retry(), run())
     }
 
-    @Test fun retryAfterIsRememberedSoNothingHitsTheServerEarlier() {
+    @Test fun retryAfterIsRememberedAndLaterRunsInsideTheWindowQueueOneRunInsteadOfCallingTheServer() {
         env.result = SyncResult.Retryable(retryAfterMillis = 60_000, quarantined = 0)
         assertEquals(Result.retry(), run())
         assertTrue(env.retryGate.remainingMillis(hash) in 1..60_000)
 
-        // The WorkManager retry (or any other trigger) inside the window does not call the server.
-        assertEquals(Result.retry(), run())
+        // The WorkManager retry (or any other trigger) inside the window ends cleanly after
+        // queueing one run for when the window closes; the server is not called.
+        assertEquals(Result.success(), run())
         assertEquals(1, env.syncCalls)
+        assertEquals(listOf(hash), env.requeued)
     }
 
     @Test fun permanentFailureStopsWithoutRetry() {

@@ -49,13 +49,24 @@ interface SyncRepository {
 interface SyncUseCases {
     fun observeStatus(): Flow<SyncStatus>
     fun observeDiagnostics(): Flow<List<OutboxDiagnostic>>
-    suspend fun syncNow(): SyncResult
+
+    /**
+     * Asks for a sync soon. It goes through the background scheduler, so a server-requested wait
+     * (429 `Retry-After`) and the one-run-per-user rule apply exactly as for automatic syncs.
+     */
+    suspend fun requestSync()
 }
 
-class DefaultSyncUseCases(private val repository: SyncRepository) : SyncUseCases {
+class DefaultSyncUseCases(
+    private val repository: SyncRepository,
+    private val scheduler: BackgroundSyncScheduler,
+    private val currentUserId: () -> String?,
+) : SyncUseCases {
     override fun observeStatus(): Flow<SyncStatus> = repository.observeStatus()
     override fun observeDiagnostics(): Flow<List<OutboxDiagnostic>> = repository.observeDiagnostics()
-    override suspend fun syncNow(): SyncResult = repository.syncOnce()
+    override suspend fun requestSync() {
+        currentUserId()?.let { scheduler.requestSync(it) }
+    }
 }
 
 /**

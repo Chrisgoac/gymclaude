@@ -3,7 +3,7 @@ package com.chrisgoac.gymlog.sync
 import com.chrisgoac.gymlog.RootState
 import com.chrisgoac.gymlog.database.UserDatabaseManagerImpl
 import com.chrisgoac.gymlog.domain.SyncResult
-import com.chrisgoac.gymlog.domain.SyncUseCases
+import com.chrisgoac.gymlog.domain.SyncRepository
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -15,12 +15,13 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class AppSyncEnvironment(
     private val rootState: StateFlow<RootState>,
-    private val sync: SyncUseCases,
+    private val repository: SyncRepository,
     private val scheduler: WorkManagerSyncScheduler,
     override val retryGate: RetryAfterGate,
     private val startupTimeoutMillis: Long = STARTUP_TIMEOUT_MILLIS,
 ) : SyncEnvironment {
     override suspend fun readiness(userHash: String): SyncReadiness {
+        if (scheduler.isSuspended(userHash)) return SyncReadiness.NotYet // sign-out in progress: no syncing.
         val settled = withTimeoutOrNull(startupTimeoutMillis) {
             rootState.first { it is RootState.Ready || it is RootState.SignedOut || it is RootState.ReauthenticationRequired || it is RootState.Fatal }
         } ?: return SyncReadiness.NotYet
@@ -33,7 +34,11 @@ class AppSyncEnvironment(
         }
     }
 
-    override suspend fun syncOnce(): SyncResult = sync.syncNow()
+    override suspend fun syncOnce(): SyncResult = repository.syncOnce()
+
+    override suspend fun requeueAfterRetryWindow(userHash: String) {
+        scheduler.requestSyncForHash(userHash)
+    }
 
     override suspend fun onSessionRequired(userHash: String) {
         scheduler.cancelPeriodic(userHash)
