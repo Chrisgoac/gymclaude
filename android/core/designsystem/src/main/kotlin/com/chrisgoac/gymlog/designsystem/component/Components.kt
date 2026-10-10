@@ -106,6 +106,8 @@ fun HierroButton(
     enabled: Boolean = true,
     loading: Boolean = false,
     loadingLabel: String = "Cargando",
+    /** Spoken label when the visible [text] is ambiguous out of context ("Subir" -> "Subir la rutina Push"). */
+    contentDescription: String? = null,
 ) {
     val colors = HierroTheme.colors
     val interaction = remember { MutableInteractionSource() }
@@ -135,7 +137,7 @@ fun HierroButton(
                 .hardBox(fill, colors.border, colors.shadow, shadowOffset, if (focused) 4.dp else HierroShape.border)
                 .clickable(interactionSource = interaction, indication = null, enabled = active, role = Role.Button, onClick = onClick)
                 .semantics {
-                    contentDescription = text
+                    this.contentDescription = contentDescription ?: text
                     if (loading) stateDescription = loadingLabel
                     if (!enabled) disabled()
                 }

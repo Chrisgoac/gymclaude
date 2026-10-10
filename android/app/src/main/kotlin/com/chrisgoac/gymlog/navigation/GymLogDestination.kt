@@ -27,6 +27,10 @@ sealed interface GymLogDestination {
     @Serializable data class ExerciseEditor(val id: String? = null) : GymLogDestination {
         override val title: Int get() = R.string.nav_exercise_editor
     }
+    /** [id] == null creates a routine. */
+    @Serializable data class RoutineEditor(val id: String? = null) : GymLogDestination {
+        override val title: Int get() = R.string.nav_routine_editor
+    }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 

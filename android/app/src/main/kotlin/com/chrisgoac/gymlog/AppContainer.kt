@@ -8,6 +8,8 @@ import com.chrisgoac.gymlog.auth.ClerkAuthGateway
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
 import com.chrisgoac.gymlog.data.catalog.CatalogAsset
 import com.chrisgoac.gymlog.data.exercise.OfflineExerciseRepository
+import com.chrisgoac.gymlog.data.routine.OfflineRoutineRepository
+import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.data.sync.BootstrapRepository
 import com.chrisgoac.gymlog.data.sync.ServerOffsetClock
@@ -111,6 +113,9 @@ class AppContainer(private val application: Application) {
 
     /** Catalog + custom exercises of the open account; writes are local (outbox) and never wait for HTTP. */
     val exerciseRepository: ExerciseRepository = OfflineExerciseRepository(databases, ::localMutationRunner)
+
+    /** Routines (ordered exercises, rotation) of the open account; writes are local (outbox) and never wait for HTTP. */
+    val routineRepository: RoutineRepository = OfflineRoutineRepository(databases, ::localMutationRunner, exerciseRepository)
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)

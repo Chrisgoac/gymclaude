@@ -37,6 +37,12 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
+import com.chrisgoac.gymlog.domain.routine.RoutineRepository
+import com.chrisgoac.gymlog.routines.RoutineEditorScreen
+import com.chrisgoac.gymlog.routines.RoutineEditorViewModel
+import com.chrisgoac.gymlog.routines.RoutineListScreen
+import com.chrisgoac.gymlog.routines.RoutineListViewModel
+import androidx.lifecycle.createSavedStateHandle
 import com.chrisgoac.gymlog.exercises.ExerciseDetailScreen
 import com.chrisgoac.gymlog.exercises.ExerciseDetailViewModel
 import com.chrisgoac.gymlog.exercises.ExerciseEditorScreen
@@ -68,6 +74,10 @@ fun GymLogApp(
     navController: NavHostController = rememberNavController(),
     settings: SettingsServices? = null,
     exercises: ExerciseRepository? = null,
+    routines: RoutineRepository? = null,
+    // TODO(Task 4): starting a workout from a routine is implemented with the workout session
+    // feature. Until then the Start button does nothing; no workout is faked.
+    onStartRoutine: (String) -> Unit = {},
 ) {
     val colors = HierroTheme.colors
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -80,7 +90,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, onStartRoutine)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -103,7 +113,14 @@ fun GymLogApp(
 }
 
 @Composable
-private fun GymLogNavHost(navController: NavHostController, modifier: Modifier, settings: SettingsServices?, exercises: ExerciseRepository?) {
+private fun GymLogNavHost(
+    navController: NavHostController,
+    modifier: Modifier,
+    settings: SettingsServices?,
+    exercises: ExerciseRepository?,
+    routines: RoutineRepository?,
+    onStartRoutine: (String) -> Unit,
+) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
     // and it survives navigation and rotation, but never another account.
     val settingsViewModel = settings?.let { services -> viewModel { SettingsViewModel(services.sync, services.signOut) } }
@@ -124,7 +141,34 @@ private fun GymLogNavHost(navController: NavHostController, modifier: Modifier, 
             }
         }
         navigation<GymLogGraph.Routines>(startDestination = GymLogDestination.Routines) {
-            composable<GymLogDestination.Routines> { SmokeScreen(GymLogDestination.Routines, navController) }
+            composable<GymLogDestination.Routines> {
+                if (routines == null) {
+                    SmokeScreen(GymLogDestination.Routines, navController)
+                } else {
+                    val viewModel = viewModel { RoutineListViewModel(routines) }
+                    RoutineListScreen(
+                        viewModel,
+                        onOpen = { navController.navigate(GymLogDestination.RoutineEditor(it)) },
+                        onCreate = { navController.navigate(GymLogDestination.RoutineEditor()) },
+                        onStartRoutine = onStartRoutine,
+                        onSettings = { navController.navigate(GymLogDestination.Settings) },
+                    )
+                }
+            }
+            composable<GymLogDestination.RoutineEditor> { entry ->
+                val id = entry.toRoute<GymLogDestination.RoutineEditor>().id
+                if (routines == null || exercises == null) {
+                    SmokeScreen(GymLogDestination.Routines, navController, secondary = true)
+                } else {
+                    // The draft is kept in the entry's SavedStateHandle, so it survives process death.
+                    val viewModel = viewModel { RoutineEditorViewModel(routines, exercises, createSavedStateHandle(), id) }
+                    RoutineEditorScreen(
+                        viewModel,
+                        onBack = { navController.popBackStack() },
+                        onDone = { navController.popBackStack() },
+                    )
+                }
+            }
         }
         navigation<GymLogGraph.Exercises>(startDestination = GymLogDestination.Exercises) {
             composable<GymLogDestination.Exercises> {

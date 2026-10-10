@@ -22,6 +22,7 @@ class MainActivity : ComponentActivity() {
                     onRetryBootstrap = container.rootStateMachine::retryBootstrap,
                     settings = container.settingsServices,
                     exercises = container.exerciseRepository,
+                    routines = container.routineRepository,
                 )
             }
         }

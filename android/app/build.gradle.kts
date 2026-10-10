@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.savedstate)
     implementation(libs.clerk.android.api)
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.lifecycle.process)
