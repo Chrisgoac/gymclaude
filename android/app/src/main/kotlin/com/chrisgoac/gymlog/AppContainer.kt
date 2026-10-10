@@ -44,6 +44,8 @@ import com.chrisgoac.gymlog.domain.SignOutUseCase
 import com.chrisgoac.gymlog.navigation.SettingsServices
 import com.chrisgoac.gymlog.domain.timer.RestTimerController
 import com.chrisgoac.gymlog.sync.AppSyncEnvironment
+import com.chrisgoac.gymlog.timer.RestTimerAccountWatcher
+import com.chrisgoac.gymlog.timer.RestTimerDeletionHook
 import com.chrisgoac.gymlog.timer.RestTimerNotifier
 import com.chrisgoac.gymlog.timer.UserScopedRestTimerStore
 import com.chrisgoac.gymlog.sync.BootstrapAutoRetry
@@ -75,14 +77,14 @@ class AppContainer(private val application: Application) {
     private val databaseManager = UserDatabaseManagerImpl(application)
     private val syncLocks = SyncLocks()
     private val restTimerNotifier = RestTimerNotifier(application)
-    private val restTimerStore: UserScopedRestTimerStore = UserScopedRestTimerStore(application.filesDir, currentUserHash = {
+    private fun currentUserHash(): String? =
         (rootStateMachine.state.value as? RootState.Ready)?.userId?.let(UserDatabaseManagerImpl::userHash)
-    })
-    private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks, onLocalDataDeleted = { hash ->
-        // A signed-out account's rest timer must neither fire nor survive in memory.
-        restTimerStore.forget(hash)
-        restTimerNotifier.cancel()
-    })
+
+    private val restTimerStore: UserScopedRestTimerStore = UserScopedRestTimerStore(application.filesDir, currentUserHash = ::currentUserHash)
+    private val restTimerDeletionHook = RestTimerDeletionHook(restTimerStore::forget, restTimerNotifier::cancel, ::currentUserHash)
+
+    // The hook releases the open DataStore before the directory goes; account changes are handled by RestTimerAccountWatcher.
+    private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks, onLocalDataDeleted = restTimerDeletionHook::onDeleted)
 
     /** The account's durable rest timer (state per user, wake-up by [RestTimerNotifier]). */
     val restTimer = RestTimerController(restTimerStore, restTimerNotifier)
@@ -205,6 +207,7 @@ class AppContainer(private val application: Application) {
     /** Starts the sync triggers: ready account, foreground, local mutations, connectivity (bootstrap retry). */
     fun startSync() {
         syncTriggers.start()
+        appScope.launch { RestTimerAccountWatcher(rootStateMachine.state, restTimer::detach).run() }
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) syncTriggers.onForeground() },
         )

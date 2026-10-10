@@ -53,13 +53,15 @@ class RestTimerController(
     suspend fun restore(sessionId: String) = mutex.withLock {
         val saved = safeRead()
         when {
-            saved == null -> _state.value = null
-            saved.sessionId != sessionId -> {
-                clearLocked()
+            saved == null -> {
+                _state.value = null
+                alarm.cancel() // a wake-up armed for a previous account/run must not outlive it
             }
+            saved.sessionId != sessionId -> clearLocked()
             else -> {
                 _state.value = saved
-                if (!RestTimer.isPaused(saved) && !saved.completionDelivered) {
+                // An end already in the past is not armed: tick() delivers it right away.
+                if (!RestTimer.isPaused(saved) && !saved.completionDelivered && saved.endsAtEpochMillis > clock()) {
                     alarm.schedule(saved.runId, saved.sessionId, saved.endsAtEpochMillis)
                 }
             }
@@ -80,9 +82,25 @@ class RestTimerController(
         if (!RestTimer.isPaused(next) && !next.completionDelivered) alarm.schedule(next.runId, next.sessionId, next.endsAtEpochMillis)
     }
 
+    /**
+     * Adds time. Extending a run that already ended (delivered or not) starts a NEW run; the old
+     * run's completion is dropped (never delivered late), and its alarm and any "Descanso terminado"
+     * notification are cancelled before the new wake-up is armed.
+     */
     suspend fun extend(seconds: Int) {
+        val before = _state.value
         val next = update { RestTimer.extend(it, clock(), seconds, newRunId()) } ?: return
+        if (before != null && next.runId != before.runId) alarm.cancel()
         if (!RestTimer.isPaused(next) && !next.completionDelivered) alarm.schedule(next.runId, next.sessionId, next.endsAtEpochMillis)
+    }
+
+    /**
+     * The signed-in account changed or signed out: forgets the in-memory run and disarms the
+     * wake-up, WITHOUT touching storage (the run still belongs to that account's own file).
+     */
+    suspend fun detach() = mutex.withLock {
+        _state.value = null
+        alarm.cancel()
     }
 
     /** Skip / workout finished / sign-out: forgets the run and disarms the wake-up. */

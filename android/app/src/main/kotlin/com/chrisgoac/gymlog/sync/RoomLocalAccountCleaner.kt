@@ -23,7 +23,7 @@ class RoomLocalAccountCleaner(
     context: Context,
     private val databases: UserDatabaseManagerImpl,
     private val locks: SyncLocks,
-    /** Runs after an account's files are deleted (by hash): releases per-user caches and background wake-ups. */
+    /** Runs just BEFORE an account's files are deleted (by hash): releases per-user caches (open files) and, for the current account only, wake-ups. */
     private val onLocalDataDeleted: (userHash: String) -> Unit = {},
 ) : LocalAccountCleaner {
     private val appContext = context.applicationContext
@@ -77,12 +77,12 @@ class RoomLocalAccountCleaner(
     }
 
     private suspend fun deleteByHash(hash: String) {
+        onLocalDataDeleted(hash)
         databases.closeAndDeleteHash(hash)
         withContext(Dispatchers.IO) {
             listOf(File(appContext.filesDir, "users/$hash"), File(appContext.cacheDir, "users/$hash")).forEach { dir ->
                 if (dir.exists() && !dir.deleteRecursively()) error("Could not delete ${dir.name}")
             }
         }
-        onLocalDataDeleted(hash)
     }
 }

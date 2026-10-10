@@ -101,6 +101,16 @@ class RestTimerNotifierTest {
         assertEquals(1, alarms.scheduledAlarms.size)
     }
 
+    @Test fun `the receiver stays silent while the app is in the foreground and posts otherwise`() {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        shadowOf(manager).setNotificationsEnabled(true)
+        val intent = android.content.Intent(RestTimerNotifier.ACTION_REST_DONE).putExtra(RestTimerNotifier.EXTRA_SESSION_ID, "s1")
+        RestTimerReceiver().handle(context, intent, appInForeground = true)
+        assertTrue(shadowOf(manager).allNotifications.isEmpty())
+        RestTimerReceiver().handle(context, intent, appInForeground = false)
+        assertEquals(1, shadowOf(manager).allNotifications.size)
+    }
+
     private class MemoryStore : com.chrisgoac.gymlog.domain.timer.RestTimerStore {
         var saved: com.chrisgoac.gymlog.domain.timer.RestTimerState? = null
         override suspend fun read() = saved

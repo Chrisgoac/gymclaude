@@ -226,4 +226,58 @@ class RestTimerTest {
         assertNull(store.saved)
         assertTrue(alarm.scheduled.isEmpty())
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `restore with nothing saved cancels a stale alarm and detach drops memory but keeps storage`() = runTest(UnconfinedTestDispatcher()) {
+        val alarm = RecordingAlarm()
+        val empty = controller(MemoryStore(), alarm)
+        empty.restore("s1")
+        assertEquals(1, alarm.cancels)
+
+        // Account A's run is never visible to account B.
+        val storeA = MemoryStore(); val a = RecordingAlarm()
+        val c = controller(storeA, a)
+        c.start("s1", 60)
+        c.detach()
+        assertNull(c.state.value)
+        assertTrue(a.cancels >= 1)
+        assertTrue("A's own file keeps its run", storeA.saved != null)
+        val storeB = MemoryStore()
+        val b = RecordingAlarm()
+        c.restore("s1") // rebinding to the (now B) store below
+        val forB = controller(storeB, b)
+        forB.restore("s1")
+        assertNull(forB.state.value)
+        assertEquals(1, b.cancels)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `restore does not arm an end already in the past and tick delivers it`() = runTest(UnconfinedTestDispatcher()) {
+        val store = MemoryStore(); val alarm = RecordingAlarm()
+        controller(store, alarm).start("s1", 60)
+        now += 90_000
+        val fresh = RecordingAlarm()
+        val c = controller(store, fresh)
+        val seen = mutableListOf<RestTimerCompletion>()
+        c.completions.onEach { seen += it }.launchIn(backgroundScope)
+        c.restore("s1"); c.tick()
+        assertTrue(fresh.scheduled.isEmpty())
+        assertEquals(1, seen.size)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `extending an ended undelivered run cancels the old alarm and notification before the new one is armed`() = runTest(UnconfinedTestDispatcher()) {
+        val store = MemoryStore(); val alarm = RecordingAlarm()
+        val c = controller(store, alarm)
+        val seen = mutableListOf<RestTimerCompletion>()
+        c.completions.onEach { seen += it }.launchIn(backgroundScope)
+        c.start("s1", 60)
+        now += 70_000 // ended, tick never ran, the alarm may already have posted its notification
+        val cancelsBefore = alarm.cancels
+        c.extend(30)
+        assertEquals(cancelsBefore + 1, alarm.cancels)
+        assertEquals("run-2", c.state.value!!.runId)
+        assertEquals(now + 30_000, alarm.scheduled.last().third)
+        assertTrue("old completion is dropped, not delivered late", seen.isEmpty())
+    }
 }

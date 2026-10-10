@@ -9,6 +9,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.chrisgoac.gymlog.MainActivity
 import com.chrisgoac.gymlog.R
 import com.chrisgoac.gymlog.domain.timer.RestTimerAlarm
@@ -103,6 +105,13 @@ class RestTimerNotifier(context: Context) : RestTimerAlarm {
 class RestTimerReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != RestTimerNotifier.ACTION_REST_DONE) return
+        val foreground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        handle(context, intent, appInForeground = foreground)
+    }
+
+    /** With the app on screen the in-app bar (haptic + announcement) already tells the user: no notification. */
+    internal fun handle(context: Context, intent: Intent, appInForeground: Boolean) {
+        if (appInForeground) return
         RestTimerNotifier(context).postFinished(intent.getStringExtra(RestTimerNotifier.EXTRA_SESSION_ID))
     }
 }
