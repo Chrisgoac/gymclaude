@@ -5,7 +5,7 @@ config({ path: '.env.local' });
 
 export default defineConfig({
   schema: './db/schema.ts',
-  out: './db/migrations',
+  out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
     // Conexión sin pgbouncer para las migraciones DDL.

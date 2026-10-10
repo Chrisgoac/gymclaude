@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { SERVER_TABLES } from '@/lib/sync/server-tables';
+import { SERVER_TABLES, withoutServerMeta } from '@/lib/sync/server-tables';
 import { resolveServerWrite } from '@/lib/sync/server-merge';
 import type { TableChanges } from '@/lib/sync/types';
 
@@ -25,7 +25,8 @@ export async function POST(req: Request) {
         .where(and(eq(table.id, rec.id), eq(table.userId, userId)))
         .limit(1);
       if (!resolveServerWrite(existing[0]?.updatedAt, rec.updatedAt)) continue;
-      const values = { ...rec, userId, serverUpdatedAt };
+      // El cliente no puede fijar metadatos de servidor (serverVersion, lastDeviceId…).
+      const values = { ...withoutServerMeta(rec), userId, serverUpdatedAt };
       // user_settings tiene PK compuesta (user_id, id); las demás tablas, id simple.
       const conflictTarget = name === 'userSettings' ? [table.userId, table.id] : table.id;
       await db.insert(table).values(values).onConflictDoUpdate({ target: conflictTarget, set: values });

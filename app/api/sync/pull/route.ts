@@ -1,9 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { and, eq, gte } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { SERVER_TABLES } from '@/lib/sync/server-tables';
+import { SERVER_TABLES, withoutServerMeta } from '@/lib/sync/server-tables';
 import type { TableChanges } from '@/lib/sync/types';
 
 export async function GET(req: Request) {
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
       .where(and(eq(table.userId, userId), gte(table.serverUpdatedAt, cursor)))) as any[];
     if (rows.length === 0) continue;
     for (const r of rows) if (r.serverUpdatedAt > maxSeen) maxSeen = r.serverUpdatedAt;
-    const records = rows.map(({ serverUpdatedAt: _s, ...rest }) => rest);
+    const records = rows.map(withoutServerMeta) as any[];
     changes.push({ table: name, records });
   }
   return NextResponse.json({ changes, cursor: maxSeen });

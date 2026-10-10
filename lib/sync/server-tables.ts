@@ -17,3 +17,13 @@ export const SERVER_TABLES: Record<string, PgTable> = {
   mesocycles: schema.mesocycles,
   achievements: schema.achievements,
 };
+
+/**
+ * Quita los campos solo-servidor (cursor legacy + metadatos v1). La sync legacy los descarta al
+ * leer y al escribir: el cliente nunca los ve ni puede fijarlos.
+ */
+export function withoutServerMeta<T extends Record<string, unknown>>(rec: T) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { serverUpdatedAt, serverVersion, lastDeviceId, lastMutationId, ...rest } = rec;
+  return rest;
+}

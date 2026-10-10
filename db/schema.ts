@@ -1,4 +1,15 @@
-import { pgTable, text, doublePrecision, integer, bigint, boolean, jsonb, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, doublePrecision, integer, bigint, bigserial, boolean, jsonb, primaryKey, index } from 'drizzle-orm/pg-core';
+
+// Metadatos solo-servidor de la sync v1. Nunca llegan del cliente.
+// serverVersion = sync_changes.sequence de la última escritura (nullable por compatibilidad con
+// escritores legacy; la migración 0001 rellena todas las filas existentes).
+function serverMeta() {
+  return {
+    serverVersion: bigint('server_version', { mode: 'number' }),
+    lastDeviceId: text('last_device_id'),
+    lastMutationId: text('last_mutation_id'),
+  };
+}
 
 // Columnas comunes de sincronización en cada tabla.
 const sync = {
@@ -7,6 +18,7 @@ const sync = {
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull(), // reloj del cliente (LWW)
   deletedAt: bigint('deleted_at', { mode: 'number' }), // tombstone (nullable)
   serverUpdatedAt: bigint('server_updated_at', { mode: 'number' }).notNull(), // reloj del servidor (cursor de pull)
+  ...serverMeta(),
 };
 
 export const exercises = pgTable('exercises', {
@@ -17,6 +29,9 @@ export const exercises = pgTable('exercises', {
   tipo: text('tipo').notNull(),
   videoUrl: text('video_url'),
   notas: text('notas'),
+  descripcion: text('descripcion'),
+  execution: text('execution'),
+  incrementoKg: doublePrecision('incremento_kg'),
   esPersonalizado: boolean('es_personalizado').notNull(),
 });
 
@@ -36,6 +51,7 @@ export const routineExercises = pgTable('routine_exercises', {
   orden: integer('orden').notNull(),
   seriesObjetivo: integer('series_objetivo'),
   repsObjetivo: integer('reps_objetivo'),
+  repsObjetivoMin: integer('reps_objetivo_min'),
   descansoSegundos: integer('descanso_segundos'),
   notas: text('notas'),
 });
@@ -87,6 +103,7 @@ export const userSettings = pgTable('user_settings', {
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
   deletedAt: bigint('deleted_at', { mode: 'number' }),
   serverUpdatedAt: bigint('server_updated_at', { mode: 'number' }).notNull(),
+  ...serverMeta(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.userId, t.id] }),
 }));
@@ -130,3 +147,30 @@ export const achievements = pgTable('achievements', {
   clave: text('clave').notNull(),
   fechaDesbloqueo: bigint('fecha_desbloqueo', { mode: 'number' }).notNull(),
 });
+
+// ── Infraestructura de la sync v1 (solo servidor, no se sincroniza) ──
+
+// Dedupe de mutaciones: la respuesta guardada se repite tal cual en reintentos.
+export const syncMutations = pgTable('sync_mutations', {
+  userId: text('user_id').notNull(),
+  mutationId: text('mutation_id').notNull(),
+  responseJson: jsonb('response_json').notNull(),
+  processedAt: bigint('processed_at', { mode: 'number' }).notNull(), // epoch ms
+}, (t) => [primaryKey({ columns: [t.userId, t.mutationId] })]);
+
+// Diario global de cambios: `sequence` es la única fuente de orden del pull.
+export const syncChanges = pgTable('sync_changes', {
+  sequence: bigserial('sequence', { mode: 'number' }).primaryKey(),
+  userId: text('user_id').notNull(),
+  tableName: text('table_name').notNull(),
+  recordId: text('record_id').notNull(),
+  changedAt: bigint('changed_at', { mode: 'number' }).notNull(), // epoch ms
+}, (t) => [index('sync_changes_user_sequence_idx').on(t.userId, t.sequence)]);
+
+// Contadores de rate-limit compartidos entre instancias (ventana fija).
+export const apiRateBuckets = pgTable('api_rate_buckets', {
+  scope: text('scope').notNull(),
+  subjectHash: text('subject_hash').notNull(),
+  windowStart: bigint('window_start', { mode: 'number' }).notNull(), // epoch ms
+  count: integer('count').notNull(),
+}, (t) => [primaryKey({ columns: [t.scope, t.subjectHash, t.windowStart] })]);
