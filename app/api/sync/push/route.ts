@@ -12,13 +12,14 @@ export async function POST(req: Request) {
   if (!userId) return new NextResponse('Unauthorized', { status: 401 });
 
   const changes = (await req.json()) as TableChanges[];
-  const now = Date.now();
   // Un id de mutación por request: identifica en lastMutationId todo lo escrito por este push.
   const mutationId = crypto.randomUUID();
 
   await getPoolDb().transaction(async (tx) => {
     await lockUserSync(tx, userId);
-    await applyLegacyPush(tx, userId, changes, { now, mutationId });
+    // `now` se lee ya con el lock: si se tomara antes, una request que esperó el lock escribiría
+    // un serverUpdatedAt anterior al de la que confirmó primero y el pull legacy podría saltarla.
+    await applyLegacyPush(tx, userId, changes, { now: Date.now(), mutationId });
   });
   return NextResponse.json({ ok: true });
 }

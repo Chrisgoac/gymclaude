@@ -77,6 +77,21 @@ describe('POST /api/sync/push (legacy PWA, unit)', () => {
     expect(typeof options.now).toBe('number');
   });
 
+  it('reads the write timestamp inside the transaction, after taking the sync lock', async () => {
+    auth.mockResolvedValue({ userId: 'u1' });
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => {
+      calls.push('now');
+      return 4242;
+    });
+    try {
+      await legacyPush([]);
+    } finally {
+      now.mockRestore();
+    }
+    expect(calls).toEqual(['begin', 'lock', 'now', 'apply']);
+    expect(vi.mocked(applyLegacyPush).mock.calls[0][3].now).toBe(4242);
+  });
+
   it('uses a fresh server-generated mutation id per request', async () => {
     auth.mockResolvedValue({ userId: 'u1' });
     await legacyPush([]);

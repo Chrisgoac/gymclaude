@@ -137,6 +137,20 @@ describe('POST /api/v1/sync/push', () => {
     expect(await errorOf(res)).toMatchObject({ code: 'INVALID_JSON', retryable: false });
   });
 
+  it('400 INVALID_JSON for a body that is not valid UTF-8', async () => {
+    const res = await post(new Uint8Array([0x7b, 0x22, 0xff, 0x22, 0x3a, 0x31, 0x7d]));
+    expect(res.status).toBe(400);
+    expect(await errorOf(res)).toMatchObject({ code: 'INVALID_JSON', retryable: false });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('400 INVALID_REQUEST for duplicate mutationIds in one request', async () => {
+    const res = await post(JSON.stringify({ mutations: [validBody.mutations[0], validBody.mutations[0]] }));
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).code).toBe('INVALID_REQUEST');
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
   it('400 INVALID_REQUEST when the body fails PushRequestSchema', async () => {
     for (const body of [{}, { mutations: [] }, { mutations: [{ ...validBody.mutations[0], mutationId: 'nope' }] }]) {
       const res = await post(JSON.stringify(body));

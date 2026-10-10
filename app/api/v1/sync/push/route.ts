@@ -9,6 +9,8 @@ import { pushMutations } from '@/lib/api/v1/sync/push';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+// Un push de 50 mutaciones × 50 operaciones son ~2.500 escrituras en una tx contra Neon.
+export const maxDuration = 60;
 
 const tooLarge = () => new ApiError(413, 'PAYLOAD_TOO_LARGE', 'Request body is too large', false);
 
@@ -44,14 +46,20 @@ async function readBodyCapped(request: Request, maxBytes: number): Promise<strin
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(bytes);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw invalidJson();
+  }
 }
+
+const invalidJson = () => new ApiError(400, 'INVALID_JSON', 'Request body is not valid JSON', false);
 
 function parseJson(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {
-    throw new ApiError(400, 'INVALID_JSON', 'Request body is not valid JSON', false);
+    throw invalidJson();
   }
 }
 

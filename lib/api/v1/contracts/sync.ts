@@ -2,9 +2,12 @@ import { z } from 'zod';
 import {
   DeviceIdSchema,
   EpochMsSchema,
+  Int32Schema,
+  JsonValueSchema,
   MutationIdSchema,
   RecordIdSchema,
   ServerVersionSchema,
+  TextSchema,
 } from './common';
 
 export { ApiErrorBodySchema, type ApiErrorBody } from './common';
@@ -24,8 +27,8 @@ const base = {
   updatedAt: EpochMsSchema,
   deletedAt: EpochMsSchema.nullable(),
 };
-const str = z.string();
-const int = z.number().int();
+const str = TextSchema;
+const int = Int32Schema;
 const num = z.number().finite();
 const opt = <T extends z.ZodType>(s: T) => s.nullish();
 
@@ -62,7 +65,7 @@ export const RecordSchemas = {
   }),
   mesocycles: record({
     nombre: str, objetivo: str, semanas: int, diasPorSemana: int, notas: opt(str),
-    progresion: z.json(), fechaInicio: EpochMsSchema,
+    progresion: JsonValueSchema, fechaInicio: EpochMsSchema,
   }),
   achievements: record({ clave: str, fechaDesbloqueo: EpochMsSchema }),
 } satisfies Record<SyncTableName, z.ZodType>;
@@ -94,17 +97,40 @@ export const SyncChangeSchema = z.discriminatedUnion('table', [
   changeFor('mesocycles'), changeFor('achievements'),
 ]);
 
+export const MAX_MUTATIONS_PER_PUSH = 50;
+export const MAX_OPERATIONS_PER_MUTATION = 50;
+
 export const PushMutationSchema = z
   .object({
     mutationId: MutationIdSchema,
     deviceId: DeviceIdSchema,
-    operations: z.array(SyncOperationSchema).min(1).max(200),
+    operations: z.array(SyncOperationSchema).min(1).max(MAX_OPERATIONS_PER_MUTATION),
   })
-  .strict();
+  .strict()
+  .superRefine((m, ctx) => {
+    // A mutation writes each record at most once: two operations on one record are ambiguous.
+    const seen = new Set<string>();
+    m.operations.forEach((op, i) => {
+      const key = `${op.table}\u0000${op.record.id}`;
+      if (seen.has(key)) {
+        ctx.addIssue({ code: 'custom', path: ['operations', i, 'record', 'id'], message: 'Duplicate (table, record.id) in mutation' });
+      }
+      seen.add(key);
+    });
+  });
 
 export const PushRequestSchema = z
-  .object({ mutations: z.array(PushMutationSchema).min(1).max(50) })
-  .strict();
+  .object({ mutations: z.array(PushMutationSchema).min(1).max(MAX_MUTATIONS_PER_PUSH) })
+  .strict()
+  .superRefine((req, ctx) => {
+    const seen = new Set<string>();
+    req.mutations.forEach((m, i) => {
+      if (seen.has(m.mutationId)) {
+        ctx.addIssue({ code: 'custom', path: ['mutations', i, 'mutationId'], message: 'Duplicate mutationId in request' });
+      }
+      seen.add(m.mutationId);
+    });
+  });
 
 export const SyncConflictSchema = z
   .object({

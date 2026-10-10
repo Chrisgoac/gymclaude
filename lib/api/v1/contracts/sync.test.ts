@@ -54,15 +54,83 @@ describe('sync v1 contracts', () => {
     expect(PushRequestSchema.safeParse({ mutations: many(50) }).success).toBe(true);
     expect(PushRequestSchema.safeParse({ mutations: many(51) }).success).toBe(false);
     const op = base.operations[2];
+    const ops = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ ...op, record: { ...op.record, id: `setting-${i}` } }));
     expect(
       PushRequestSchema.safeParse({ mutations: [{ ...base, operations: [] }] }).success,
     ).toBe(false);
     expect(
-      PushRequestSchema.safeParse({ mutations: [{ ...base, operations: Array(200).fill(op) }] }).success,
+      PushRequestSchema.safeParse({ mutations: [{ ...base, operations: ops(50) }] }).success,
     ).toBe(true);
     expect(
-      PushRequestSchema.safeParse({ mutations: [{ ...base, operations: Array(201).fill(op) }] }).success,
+      PushRequestSchema.safeParse({ mutations: [{ ...base, operations: ops(51) }] }).success,
     ).toBe(false);
+  });
+
+  it('rejects duplicate mutationIds within one request', () => {
+    const m = fixture('push-valid.json').mutations[0];
+    const r = PushRequestSchema.safeParse({ mutations: [m, { ...m, operations: [m.operations[0]] }] });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.map((i) => i.path)).toEqual([['mutations', 1, 'mutationId']]);
+  });
+
+  it('rejects the same (table, record.id) twice within one mutation', () => {
+    const f = fixture('push-valid.json');
+    const ops = f.mutations[0].operations;
+    ops.push({ ...ops[2], record: { ...ops[2].record, valor: '"other"' } });
+    const r = PushRequestSchema.safeParse(f);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.map((i) => i.path)).toEqual([['mutations', 0, 'operations', 3, 'record', 'id']]);
+    // Same id in different tables is fine.
+    const g = fixture('push-valid.json');
+    g.mutations[0].operations.push({
+      table: 'gyms', baseServerVersion: null,
+      record: { id: 'restSeconds', updatedAt: 1, deletedAt: null, nombre: 'G', orden: 0, archivada: false },
+    });
+    expect(PushRequestSchema.safeParse(g).success).toBe(true);
+  });
+
+  it('bounds integer fields to int32', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const withOrden = (orden: any) => {
+      const f = fixture('push-valid.json');
+      f.mutations[0].operations[1].record.orden = orden;
+      return PushRequestSchema.safeParse(f).success;
+    };
+    expect(withOrden(2147483647)).toBe(true);
+    expect(withOrden(-2147483648)).toBe(true);
+    expect(withOrden(2147483648)).toBe(false);
+    expect(withOrden(-2147483649)).toBe(false);
+  });
+
+  it('rejects U+0000 in string fields and inside json values', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mk = (patch: (f: Record<string, any>) => void) => {
+      const f = fixture('push-valid.json');
+      patch(f);
+      return PushRequestSchema.safeParse(f).success;
+    };
+    expect(mk((f) => (f.mutations[0].operations[0].record.nombre = 'a\u0000b'))).toBe(false);
+    expect(mk((f) => (f.mutations[0].operations[0].record.notas = '\u0000'))).toBe(false);
+    expect(mk((f) => (f.mutations[0].operations[2].record.valor = '"x\u0000"'))).toBe(false);
+    expect(mk((f) => (f.mutations[0].deviceId = 'dev\u0000'))).toBe(false);
+    const meso = (progresion: unknown) =>
+      PushRequestSchema.safeParse({
+        mutations: [{
+          mutationId: '6f9619ff-8b86-4d11-b42d-00c04fc964ff', deviceId: 'd',
+          operations: [{
+            table: 'mesocycles', baseServerVersion: null,
+            record: {
+              id: 'm1', updatedAt: 1, deletedAt: null, nombre: 'M', objetivo: 'o', semanas: 4,
+              diasPorSemana: 3, notas: null, progresion, fechaInicio: 1,
+            },
+          }],
+        }],
+      }).success;
+    expect(meso({ weeks: [{ note: 'ok' }] })).toBe(true);
+    expect(meso({ weeks: [{ note: 'bad\u0000' }] })).toBe(false);
+    expect(meso({ ['k\u0000']: 1 })).toBe(false);
+    expect(meso(['\u0000'])).toBe(false);
   });
 
   it('validates ids, deviceId, timestamps and versions', () => {
