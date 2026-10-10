@@ -51,9 +51,17 @@ class AuthViewModel(private val gateway: AuthGateway) : ViewModel() {
 
     init {
         viewModelScope.launch {
+            var previous: AuthSessionState? = null
             gateway.state.collect { session ->
-                // Drop secrets and the finished flow, so a later sign-out starts from a clean form.
-                if (session is AuthSessionState.SignedIn) mutableState.update { it.reset() }
+                when {
+                    // Drop secrets and the finished flow, so a later sign-out starts from a clean form.
+                    session is AuthSessionState.SignedIn -> mutableState.update { it.reset() }
+                    // An account just signed out: its email must not prefill the form for the next person.
+                    session is AuthSessionState.SignedOut &&
+                        (previous is AuthSessionState.SignedIn || previous is AuthSessionState.SessionExpired) ->
+                        mutableState.update { it.reset().copy(email = "") }
+                }
+                previous = session
             }
         }
         viewModelScope.launch {

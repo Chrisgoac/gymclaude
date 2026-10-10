@@ -133,6 +133,7 @@ class SignOutUseCase(
      * sign-out would strand a deletion mark on an account whose session is still alive.
      */
     private suspend fun finish(userId: String): SignOutOutcome = withContext(NonCancellable) {
+        var sessionEnded = false
         try {
             scheduler.cancel(userId)
             cleaner.markPendingDeletion(userId)
@@ -140,18 +141,28 @@ class SignOutUseCase(
                 // Best effort: a mark that survives is dropped at the next open of this account
                 // (intent marks never delete), so a failure here cannot lose data.
                 runCatching { cleaner.clearPendingDeletion(userId) }
-                scheduler.resume(userId)
-                scheduler.ensurePeriodic(userId)
-                scheduler.requestSync(userId)
+                restoreSync(userId)
                 return@withContext SignOutOutcome.Failed
             }
+            sessionEnded = true
             cleaner.confirmPendingDeletion(userId)
             cleaner.deleteLocalData(userId)
             SignOutOutcome.SignedOut
         } catch (_: Exception) {
+            // Failed before the session ended (e.g. the deletion mark could not be written): the
+            // user is still signed in and their work was already cancelled, so bring sync back.
+            if (!sessionEnded && currentUserId() == userId) {
+                runCatching { restoreSync(userId) }
+            }
             SignOutOutcome.Failed
         } finally {
             scheduler.resume(userId)
         }
+    }
+
+    private suspend fun restoreSync(userId: String) {
+        scheduler.resume(userId)
+        scheduler.ensurePeriodic(userId)
+        scheduler.requestSync(userId)
     }
 }

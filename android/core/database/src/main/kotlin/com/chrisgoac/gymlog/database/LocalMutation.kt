@@ -62,8 +62,10 @@ interface LocalMutationScope {
 
 /**
  * One logical user action (e.g. saving an edited workout: session + exercises + sets). Whatever
- * [block] puts becomes ONE outbox row whose operations keep the put order; [block]'s value is
- * returned by [LocalMutationRunner.run].
+ * [block] puts becomes ONE outbox row whose operations keep the put order; putting the same row
+ * twice keeps one operation, at the first put's position, with the last put's content. A block
+ * that puts nothing writes nothing (no outbox row). [block]'s value is returned by
+ * [LocalMutationRunner.run].
  */
 class LocalMutation<T>(val block: suspend LocalMutationScope.() -> T)
 
@@ -91,6 +93,7 @@ class RoomLocalMutationRunner(
     override suspend fun <T> run(mutation: LocalMutation<T>): T = database.withTransaction {
         val scope = StagingScope(store, clock)
         val result = mutation.block(scope)
+        if (scope.staged.isEmpty()) return@withTransaction result
 
         val stored = scope.staged.map { record -> record to store.find(record.table, record.id) }
         // LWW: a write that does not move past the version already held would lose (or be a
@@ -133,10 +136,11 @@ class RoomLocalMutationRunner(
         val staged = mutableListOf<SyncRecord>()
 
         override suspend fun find(table: SyncTable, id: RecordId): SyncRecord? =
-            staged.lastOrNull { it.table == table && it.id == id } ?: store.find(table, id)?.record
+            staged.firstOrNull { it.table == table && it.id == id } ?: store.find(table, id)?.record
 
         override fun put(record: SyncRecord) {
-            staged += record
+            val index = staged.indexOfFirst { it.table == record.table && it.id == record.id }
+            if (index >= 0) staged[index] = record else staged += record
         }
 
         override suspend fun nextTimestamp(table: SyncTable, id: RecordId): Long {

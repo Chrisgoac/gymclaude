@@ -150,6 +150,43 @@ class OutboxTransactionTest {
     }
 
     @Test
+    fun puttingTheSameRowTwiceKeepsOneOperationAtItsFirstPositionWithTheLastContent() = runTest {
+        val first = SampleRecords.loggedSet("ls-1", peso = 80.0)
+        val other = SampleRecords.loggedExercise("le-1")
+        val last = SampleRecords.loggedSet("ls-1", peso = 90.0)
+
+        runner().run(
+            LocalMutation {
+                put(first)
+                put(other)
+                put(last)
+                assertEquals("find sees the latest put", last, find(SyncTable.LOGGED_SETS, RecordId("ls-1")))
+            },
+        )
+
+        assertEquals(listOf(last, other), outboxMutations().single().operations.map { it.record })
+        assertEquals(last, store.find(SyncTable.LOGGED_SETS, RecordId("ls-1"))?.record)
+    }
+
+    @Test
+    fun theValidatorStillRejectsWhatStagingNeverProduces() {
+        fun mutation(vararg records: SyncRecord) = PushMutation(
+            MutationId(uuid(99)),
+            device,
+            records.map { it.toOperation(baseServerVersion = null) },
+        )
+        assertTrue(MutationValidator.problems(mutation(SampleRecords.gym("gy-1"), SampleRecords.gym("gy-1"))).isNotEmpty())
+        assertTrue(MutationValidator.problems(mutation()).isNotEmpty())
+    }
+
+    @Test
+    fun aMutationThatPutsNothingWritesNoOutboxRow() = runTest {
+        val result = runner().run(LocalMutation { "nothing to do" })
+        assertEquals("nothing to do", result)
+        assertTrue(db.syncDao().allOutbox().isEmpty())
+    }
+
+    @Test
     fun outboxIsFifoAndQuarantineDoesNotBlockLaterRows() = runTest {
         val r = runner()
         r.run(LocalMutation { put(SampleRecords.gym("gy-a")) })
@@ -188,9 +225,7 @@ class OutboxTransactionTest {
             "negative timestamp" to listOf(SampleRecords.session().copy(fecha = -1)),
             "negative deletedAt" to listOf(SampleRecords.gym().copy(deletedAt = -5)),
             "timestamp over 2^53-1" to listOf(SampleRecords.gym().copy(updatedAt = MutationValidator.MAX_SAFE_INTEGER + 1)),
-            "duplicate table/id" to listOf(SampleRecords.gym("gy-1"), SampleRecords.gym("gy-1")),
             "51 operations" to (1..51).map { SampleRecords.gym("gy-$it") },
-            "no operations" to emptyList(),
             "catalog exercise" to listOf(SampleRecords.exercise("seed-press-banca")),
             "non-finite weight" to listOf(SampleRecords.loggedSet(peso = Double.NaN)),
         )

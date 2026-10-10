@@ -26,13 +26,23 @@ class SignOutUseCaseTest {
     private val marks = mutableSetOf<String>()
     private var failClear = false
 
-    private fun cleaner(unsynced: Int, failDelete: Boolean = false, failCount: Boolean = false, cancelDelete: Boolean = false) = object : LocalAccountCleaner {
+    private fun cleaner(
+        unsynced: Int,
+        failDelete: Boolean = false,
+        failCount: Boolean = false,
+        cancelDelete: Boolean = false,
+        failMark: Boolean = false,
+    ) = object : LocalAccountCleaner {
         override suspend fun unsyncedChangeCount(userId: String): Int {
             events += "count:$userId"
             if (failCount) error("not the open database")
             return unsynced
         }
-        override suspend fun markPendingDeletion(userId: String) { events += "mark:$userId"; marks += userId }
+        override suspend fun markPendingDeletion(userId: String) {
+            events += "mark:$userId"
+            if (failMark) error("prefs")
+            marks += userId
+        }
         override suspend fun confirmPendingDeletion(userId: String) { events += "confirm:$userId" }
         override suspend fun clearPendingDeletion(userId: String) {
             events += "clear:$userId"
@@ -66,7 +76,9 @@ class SignOutUseCaseTest {
         failDelete: Boolean = false,
         failCount: Boolean = false,
         cancelDelete: Boolean = false,
-    ) = SignOutUseCase({ "u" }, scheduler, cleaner(unsynced, failDelete, failCount, cancelDelete), auth(authResult))
+        failMark: Boolean = false,
+        currentUser: () -> String? = { "u" },
+    ) = SignOutUseCase(currentUser, scheduler, cleaner(unsynced, failDelete, failCount, cancelDelete, failMark), auth(authResult))
 
     private val fullSignOut = listOf("suspend:u", "count:u", "cancel:u", "mark:u", "signOut", "confirm:u", "delete:u", "resume:u")
 
@@ -110,6 +122,22 @@ class SignOutUseCaseTest {
             listOf("suspend:u", "count:u", "cancel:u", "mark:u", "signOut", "clear:u", "resume:u", "periodic:u", "request:u", "resume:u"),
             events,
         )
+    }
+
+    @Test fun markFailureKeepsTheUserSignedInAndBringsTheirSyncBack() = runTest {
+        assertEquals(SignOutOutcome.Failed, useCase(0, failMark = true).begin())
+        assertEquals(
+            listOf("suspend:u", "count:u", "cancel:u", "mark:u", "resume:u", "periodic:u", "request:u", "resume:u"),
+            events,
+        )
+    }
+
+    @Test fun markFailureAfterTheAccountWentAwayDoesNotRescheduleIt() = runTest {
+        var reads = 0
+        // Signed in when the sign-out starts, no longer when the failure is handled.
+        val useCase = useCase(0, failMark = true, currentUser = { if (reads++ == 0) "u" else null })
+        assertEquals(SignOutOutcome.Failed, useCase.begin())
+        assertEquals(listOf("suspend:u", "count:u", "cancel:u", "mark:u", "resume:u"), events)
     }
 
     @Test fun deleteFailureIsReportedAndTheMarkSurvivesForTheNextStartSweep() = runTest {

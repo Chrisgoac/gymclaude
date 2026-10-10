@@ -92,15 +92,18 @@ fun GymLogApp(navController: NavHostController = rememberNavController(), settin
 
 @Composable
 private fun GymLogNavHost(navController: NavHostController, modifier: Modifier, settings: SettingsServices?) {
-    // Activity-scoped so Settings and its diagnostics share one state and it survives navigation.
+    // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
+    // and it survives navigation and rotation, but never another account.
     val settingsViewModel = settings?.let { services -> viewModel { SettingsViewModel(services.sync, services.signOut) } }
     // An unanswered sign-out confirmation survives Settings -> diagnostics and rotation (it lives in
     // the ViewModel); it is dropped, and sync resumes, once the user is on any other destination.
+    // The back stack is null until the graph is set (also right after a rotation): that is "not
+    // known yet", not "left Settings", or a pending confirmation would be dropped on rotation.
     val destination by navController.currentBackStackEntryAsState()
-    val inSettings = destination?.destination?.let {
+    val inSettings: Boolean? = destination?.destination?.let {
         it.hasRoute(GymLogDestination.Settings::class) || it.hasRoute(GymLogDestination.SyncDiagnostics::class)
-    } == true
-    LaunchedEffect(inSettings) { if (!inSettings) settingsViewModel?.onSettingsLeft() }
+    }
+    LaunchedEffect(inSettings) { if (inSettings == false) settingsViewModel?.onSettingsLeft() }
 
     NavHost(navController, startDestination = GymLogGraph.Train, modifier = modifier) {
         navigation<GymLogGraph.Train>(startDestination = GymLogDestination.Train) {

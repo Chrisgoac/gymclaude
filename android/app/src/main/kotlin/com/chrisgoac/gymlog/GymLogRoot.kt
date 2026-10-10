@@ -10,7 +10,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -41,7 +50,7 @@ fun GymLogRoot(
         is RootState.Bootstrapping -> CenteredStatus {
             HierroLoadingState(stringResource(R.string.root_bootstrapping, (state.progress * 100).roundToInt()))
         }
-        is RootState.Ready -> GymLogApp(settings = settings)
+        is RootState.Ready -> AccountScope(state.userId) { GymLogApp(settings = settings) }
         is RootState.Fatal -> CenteredStatus {
             val config = state.message == "config"
             HierroEmptyState(
@@ -65,6 +74,55 @@ private fun AuthRoute(authGateway: () -> AuthGateway, notice: String?) {
     // Activity-scoped: survives the screen leaving and re-entering composition.
     val viewModel = viewModel { AuthViewModel(authGateway()) }
     AuthScreen(viewModel, notice = notice)
+}
+
+/**
+ * Gives the signed-in shell a [ViewModelStoreOwner] of its own, keyed by [userId]: ViewModels
+ * created inside (Settings, navigation back stack state) never outlive the account. The store lives
+ * in an activity-scoped holder so it survives rotation, and is cleared when the account changes or
+ * the shell leaves composition for any other root state (sign-out, expiry).
+ */
+@Composable
+private fun AccountScope(userId: String, content: @Composable () -> Unit) {
+    val holder = viewModel { AccountStoreHolder() }
+    key(userId) {
+        val owner = remember(holder) { holder.ownerFor(userId) }
+        val activity = LocalActivity.current
+        DisposableEffect(owner) {
+            // Leaving composition because of a configuration change keeps the store (rotation).
+            onDispose { if (activity?.isChangingConfigurations != true) holder.release(userId) }
+        }
+        CompositionLocalProvider(LocalViewModelStoreOwner provides owner) { content() }
+    }
+}
+
+/** Activity-scoped: holds the [ViewModelStore] of the account whose shell is showing. */
+internal class AccountStoreHolder : ViewModel() {
+    private var userId: String? = null
+    private var store: ViewModelStore? = null
+
+    fun ownerFor(userId: String): ViewModelStoreOwner {
+        if (this.userId != userId) {
+            store?.clear()
+            this.userId = userId
+            store = ViewModelStore()
+        }
+        val current = checkNotNull(store)
+        return object : ViewModelStoreOwner {
+            override val viewModelStore: ViewModelStore = current
+        }
+    }
+
+    fun release(userId: String) {
+        if (this.userId != userId) return
+        store?.clear()
+        store = null
+        this.userId = null
+    }
+
+    override fun onCleared() {
+        store?.clear()
+    }
 }
 
 @Composable

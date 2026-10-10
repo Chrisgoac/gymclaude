@@ -144,7 +144,8 @@ class AuthViewModelTest {
         gateway.state.value = AuthSessionState.SignedIn("user_1"); advanceUntilIdle()
         gateway.state.value = AuthSessionState.SignedOut; advanceUntilIdle()
 
-        assertEquals(AuthUiState(email = "ana@example.com"), vm.state.value)
+        // A clean form: no code stage and, after a sign-out, not even the previous account's email.
+        assertEquals(AuthUiState(), vm.state.value)
     }
 
     @Test fun signUpResendReusesThePendingSignUp() = runTest(dispatcher) {
@@ -172,6 +173,23 @@ class AuthViewModelTest {
         gateway.state.value = AuthSessionState.SignedIn("user_1"); advanceUntilIdle()
         assertEquals("", vm.state.value.password)
         assertEquals("", vm.state.value.code)
+    }
+
+    @Test fun signingOutClearsTheEmailOfThePreviousAccount() = runTest(dispatcher) {
+        val vm = newViewModel()
+        vm.onEmailChange("ana@example.com")
+        gateway.state.value = AuthSessionState.SignedIn("user_1"); advanceUntilIdle()
+        assertEquals("ana@example.com", vm.state.value.email)
+        gateway.state.value = AuthSessionState.SignedOut; advanceUntilIdle()
+        assertEquals("", vm.state.value.email)
+    }
+
+    @Test fun theInitialSignedOutStateKeepsWhatIsBeingTyped() = runTest(dispatcher) {
+        val vm = newViewModel()
+        vm.onEmailChange("ana@example.com")
+        gateway.state.value = AuthSessionState.Loading; advanceUntilIdle()
+        gateway.state.value = AuthSessionState.SignedOut; advanceUntilIdle()
+        assertEquals("ana@example.com", vm.state.value.email)
     }
 }
 
