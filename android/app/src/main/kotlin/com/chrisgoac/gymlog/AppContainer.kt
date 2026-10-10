@@ -2,6 +2,7 @@ package com.chrisgoac.gymlog
 
 import android.app.Application
 import android.content.Context
+import androidx.core.content.edit
 import com.chrisgoac.gymlog.auth.ClerkAuthGateway
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
 import com.chrisgoac.gymlog.data.sync.BootstrapRepository
@@ -87,7 +88,7 @@ class AppContainer(application: Application) {
             val existing = prefs.getString("deviceId", null)
             if (existing != null) return DeviceId(existing)
             val created = "android-" + UUID.randomUUID()
-            prefs.edit().putString("deviceId", created).apply()
+            prefs.edit { putString("deviceId", created) }
             return DeviceId(created)
         }
 

@@ -92,7 +92,19 @@ class RoomLocalMutationRunner(
         val scope = StagingScope(store, clock)
         val result = mutation.block(scope)
 
-        val staged = scope.staged.map { record -> record to store.find(record.table, record.id)?.serverVersion }
+        val stored = scope.staged.map { record -> record to store.find(record.table, record.id) }
+        // LWW: a write that does not move past the version already held would lose (or be a
+        // no-op) on the server. Stamp with LocalMutationScope.nextTimestamp.
+        val notNewer = stored.filter { (record, existing) -> existing != null && record.updatedAt <= existing.record.updatedAt }
+        if (notNewer.isNotEmpty()) {
+            throw InvalidLocalMutationException(
+                notNewer.map { (record, existing) ->
+                    "${record.table.wire}/${record.id.value}: updatedAt ${record.updatedAt} must be greater than the stored " +
+                        "${existing!!.record.updatedAt}; stamp it with nextTimestamp"
+                },
+            )
+        }
+        val staged = stored.map { (record, existing) -> record to existing?.serverVersion }
         val pushMutation = PushMutation(
             mutationId = newMutationId(),
             deviceId = deviceId,

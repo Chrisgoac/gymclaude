@@ -57,11 +57,18 @@ class PendingEdits {
         decoded.keys.retainAll(ids)
         val missing = ids - decoded.keys
         if (missing.isNotEmpty()) {
-            dao.outboxByIds(missing.toList()).forEach { row -> decoded[row.mutationId] = keysOf(row.payloadJson) }
+            // Chunked: SQLite before 3.32 (API 26-29) allows at most 999 bound variables.
+            missing.chunked(MAX_IDS_PER_QUERY).forEach { chunk ->
+                dao.outboxByIds(chunk).forEach { row -> decoded[row.mutationId] = keysOf(row.payloadJson) }
+            }
         }
         val result = HashMap<Pair<SyncTable, String>, Long>()
         decoded.values.forEach { keys -> keys.forEach { (key, updatedAt) -> result.merge(key, updatedAt, ::maxOf) } }
         return result
+    }
+
+    private companion object {
+        const val MAX_IDS_PER_QUERY = 500
     }
 
     /** An undecodable payload protects nothing; push quarantines it as CORRUPT_PAYLOAD. */

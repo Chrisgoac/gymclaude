@@ -265,11 +265,7 @@ class SyncRepositoryTest {
         api.onPull = { page("c2", hasMore = false, change("ex-1", 11), change("ex-2", 12), change("ex-3", 13)) }
         val failing = PullPageApplier { index -> if (index == 1) throw IllegalStateException("crash mid-page") }
 
-        try {
-            repository(failing).syncOnce()
-            fail("the failure must propagate")
-        } catch (_: IllegalStateException) {
-        }
+        assertEquals("a local failure is reported, not thrown", SyncResult.Failed(SyncRepositoryImpl.LOCAL_ERROR, 0), repository(failing).syncOnce())
 
         assertNull(stored("ex-1"))
         assertNull(stored("ex-2"))
@@ -433,6 +429,57 @@ class SyncRepositoryTest {
 
         assertEquals("c1", db.syncDao().cursor()?.cursor)
         assertEquals(BootstrapState.COMPLETED, db.syncDao().bootstrapCheckpoint()?.state)
+    }
+
+    @Test
+    fun pullWithMoreThanAThousandPendingMutationsStillApplies() = runTest {
+        markBootstrapped("c1")
+        api.onPull = {
+            // The user queues a large offline backlog while the pull is in flight.
+            repeat(1_100) { enqueue("ex-$it") }
+            page("c2", hasMore = false, change("ex-5", 30), change("server-only", 31))
+        }
+
+        assertEquals(SyncResult.Success(pushed = 0, pulled = 1, quarantined = 0), repository().syncOnce())
+        assertEquals(1_100, db.syncDao().outboxCount(OutboxStatus.PENDING))
+        assertEquals("local ex-5", stored("ex-5")?.nombre)
+        assertNotNull(stored("server-only"))
+        assertEquals("c2", db.syncDao().cursor()?.cursor)
+    }
+
+    @Test
+    fun oneUsersRunFinishingDoesNotClearAnotherUsersRunningFlag() = runTest {
+        markBootstrapped("c1")
+        val other = Room.inMemoryDatabaseBuilder(context, GymLogDatabase::class.java).build()
+        markBootstrapped("c1", other)
+        val gates = mapOf("a" to CompletableDeferred<Unit>(), "b" to CompletableDeferred<Unit>())
+        val entered = mapOf("a" to CompletableDeferred<Unit>(), "b" to CompletableDeferred<Unit>())
+        var current = "a"
+        api.onPull = { cursor ->
+            val who = current
+            entered.getValue(who).complete(Unit)
+            gates.getValue(who).await()
+            page(cursor!!, hasMore = false)
+        }
+        val repo = repository()
+        try {
+            val runA = async(Dispatchers.Default) { repo.syncOnce() }
+            withContext(Dispatchers.Default) { entered.getValue("a").await() }
+            current = "b"
+            databases.state.value = OpenUserDatabase("user_b", other)
+            val runB = async(Dispatchers.Default) { repo.syncOnce() }
+            withContext(Dispatchers.Default) { entered.getValue("b").await() }
+
+            gates.getValue("a").complete(Unit)
+            runA.await()
+            assertTrue("B is still running", repo.observeStatus().first().running)
+
+            gates.getValue("b").complete(Unit)
+            runB.await()
+            assertEquals(false, repo.observeStatus().first { !it.running }.running)
+        } finally {
+            other.close()
+        }
     }
 
     @Test

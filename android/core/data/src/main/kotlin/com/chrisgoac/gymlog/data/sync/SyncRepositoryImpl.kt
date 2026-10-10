@@ -1,5 +1,6 @@
 package com.chrisgoac.gymlog.data.sync
 
+import android.util.Log
 import androidx.room.withTransaction
 import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.UserDatabaseManager
@@ -15,6 +16,7 @@ import com.chrisgoac.gymlog.model.PushMutation
 import com.chrisgoac.gymlog.model.PushRequest
 import com.chrisgoac.gymlog.network.SyncApi
 import com.chrisgoac.gymlog.network.SyncApiException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,8 +49,8 @@ class SyncRepositoryImpl(
     private val applier: PullPageApplier = PullPageApplier(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) : SyncRepository {
-    /** User whose run is in progress, if any. */
-    private val runningUser = MutableStateFlow<String?>(null)
+    /** Users with a run in progress (one per user at most; different users may overlap). */
+    private val runningUsers = MutableStateFlow<Set<String>>(emptySet())
 
     /** Last result per user, so switching account never shows the previous account's outcome. */
     private val lastResults = MutableStateFlow<Map<String, SyncResult>>(emptyMap())
@@ -60,14 +62,14 @@ class SyncRepositoryImpl(
         } else {
             val dao = open.database.syncDao()
             combine(
-                runningUser,
+                runningUsers,
                 lastResults,
                 dao.observeOutboxCount(OutboxStatus.PENDING),
                 dao.observeOutboxCount(OutboxStatus.QUARANTINED),
                 dao.observeBootstrapCheckpoint(),
             ) { running, results, pending, quarantined, checkpoint ->
                 SyncStatus(
-                    running = running == open.userId,
+                    running = open.userId in running,
                     pendingMutations = pending,
                     quarantinedMutations = quarantined,
                     restoreComplete = checkpoint?.completed == true,
@@ -80,7 +82,7 @@ class SyncRepositoryImpl(
     override suspend fun syncOnce(): SyncResult {
         val open = databases.current.value ?: return SyncResult.SessionRequired(quarantined = 0)
         return locks.forUser(open.userId).withLock {
-            runningUser.value = open.userId
+            runningUsers.update { it + open.userId }
             val run = RunCounters()
             try {
                 val result = try {
@@ -89,11 +91,18 @@ class SyncRepositoryImpl(
                     SyncResult.Success(pushed = run.pushed, pulled = run.pulled, quarantined = run.quarantined)
                 } catch (e: SyncApiException) {
                     e.toResult(run.quarantined)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // A local failure (Room/SQLite, a closed database) must not escape the worker
+                    // as an unhandled crash; the transaction already rolled back.
+                    Log.w(TAG, "Sync failed locally", e)
+                    SyncResult.Failed(LOCAL_ERROR, run.quarantined)
                 }
                 lastResults.update { it + (open.userId to result) }
                 result
             } finally {
-                runningUser.value = null
+                runningUsers.update { it - open.userId }
             }
         }
     }
@@ -235,6 +244,10 @@ class SyncRepositoryImpl(
         private const val MALFORMED_ERROR = "MALFORMED_RESPONSE"
         private const val NONE_ACCEPTED_ERROR = "NONE_ACCEPTED"
         const val CORRUPT_PAYLOAD = "CORRUPT_PAYLOAD"
+
+        /** [SyncResult.Failed] code for an unexpected local (database) failure. */
+        const val LOCAL_ERROR = "LOCAL_ERROR"
+        private const val TAG = "GymLogSync"
         private val MUTATION_PATH = Regex("^mutations[.\\[](\\d+)")
 
         /** Non-retryable codes caused by one mutation's content (README "Quarantine of poison mutations", plus 413). */

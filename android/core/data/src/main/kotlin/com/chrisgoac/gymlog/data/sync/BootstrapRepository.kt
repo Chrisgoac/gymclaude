@@ -63,6 +63,7 @@ class BootstrapRepository(
                 resetCheckpoint(dao)
                 cursor = null
                 pages = 0
+                written = 0
                 onProgress(0f)
                 continue
             }

@@ -257,4 +257,24 @@ class OutboxTransactionTest {
         sync.saveBootstrapCheckpoint(inProgress.copy(state = BootstrapState.COMPLETED, lastCursor = "MjAw", pagesApplied = 2))
         assertEquals(true, sync.observeBootstrapCheckpoint().first()?.completed)
     }
+
+    @Test
+    fun writeThatDoesNotMovePastTheStoredVersionIsRejected() = runTest {
+        store.put(SampleRecords.exercise(updatedAt = SampleRecords.T), serverVersion = 4)
+
+        for (stale in listOf(SampleRecords.T, SampleRecords.T - 1)) {
+            try {
+                runner().run(LocalMutation { put(SampleRecords.exercise(updatedAt = stale).copy(nombre = "edit")) })
+                fail("updatedAt $stale must be rejected")
+            } catch (expected: InvalidLocalMutationException) {
+                assertTrue(expected.problems.single().contains("nextTimestamp"))
+            }
+        }
+        assertTrue(db.syncDao().allOutbox().isEmpty())
+        assertEquals("Press banca", (store.find(SyncTable.EXERCISES, RecordId("ex-1"))!!.record as ExerciseRecord).nombre)
+
+        // Stamped through nextTimestamp, the same edit goes through.
+        runner().run(LocalMutation { put(SampleRecords.exercise(updatedAt = nextTimestamp(SyncTable.EXERCISES, RecordId("ex-1")))) })
+        assertEquals(SampleRecords.T + 1, store.find(SyncTable.EXERCISES, RecordId("ex-1"))!!.record.updatedAt)
+    }
 }
