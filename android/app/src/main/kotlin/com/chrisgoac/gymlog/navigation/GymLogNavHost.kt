@@ -38,6 +38,13 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
+import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
+import com.chrisgoac.gymlog.train.ActiveWorkoutPlaceholderScreen
+import com.chrisgoac.gymlog.train.ActiveWorkoutPlaceholderViewModel
+import com.chrisgoac.gymlog.train.StartWorkoutUseCase
+import com.chrisgoac.gymlog.train.TrainEvent
+import com.chrisgoac.gymlog.train.TrainHomeScreen
+import com.chrisgoac.gymlog.train.TrainHomeViewModel
 import com.chrisgoac.gymlog.routines.RoutineEditorScreen
 import com.chrisgoac.gymlog.routines.RoutineEditorViewModel
 import com.chrisgoac.gymlog.routines.RoutineListScreen
@@ -75,9 +82,7 @@ fun GymLogApp(
     settings: SettingsServices? = null,
     exercises: ExerciseRepository? = null,
     routines: RoutineRepository? = null,
-    // TODO(Task 4): starting a workout from a routine is implemented with the workout session
-    // feature. Until then the Start button does nothing; no workout is faked.
-    onStartRoutine: (String) -> Unit = {},
+    workouts: WorkoutRepository? = null,
 ) {
     val colors = HierroTheme.colors
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -90,7 +95,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, onStartRoutine)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -119,10 +124,32 @@ private fun GymLogNavHost(
     settings: SettingsServices?,
     exercises: ExerciseRepository?,
     routines: RoutineRepository?,
-    onStartRoutine: (String) -> Unit,
+    workouts: WorkoutRepository?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
     // and it survives navigation and rotation, but never another account.
+    // One Train ViewModel per account shell: the Train tab and the Routines tab's "Empezar" both start
+    // workouts through it, so they share the gym selection and the one-active-workout guard.
+    val trainViewModel = if (workouts != null && routines != null) {
+        viewModel { TrainHomeViewModel(workouts, routines, StartWorkoutUseCase(workouts)) }
+    } else {
+        null
+    }
+    LaunchedEffect(trainViewModel) {
+        trainViewModel?.eventFlow?.collect { event ->
+            when (event) {
+                is TrainEvent.OpenWorkout -> navController.navigate(GymLogDestination.ActiveWorkout(event.sessionId)) { launchSingleTop = true }
+                // The error card lives on the Train tab: take the user there if the start came from elsewhere.
+                is TrainEvent.StartFailed -> if (navController.currentDestination?.hierarchy?.any { it.hasRoute(GymLogGraph.Train::class) } != true) {
+                    navController.navigate(GymLogGraph.Train) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
+        }
+    }
     val settingsViewModel = settings?.let { services -> viewModel { SettingsViewModel(services.sync, services.signOut) } }
     // An unanswered sign-out confirmation survives Settings -> diagnostics and rotation (it lives in
     // the ViewModel); it is dropped, and sync resumes, once the user is on any other destination.
@@ -137,7 +164,26 @@ private fun GymLogNavHost(
     NavHost(navController, startDestination = GymLogGraph.Train, modifier = modifier) {
         navigation<GymLogGraph.Train>(startDestination = GymLogDestination.Train) {
             composable<GymLogDestination.Train> {
-                SmokeScreen(GymLogDestination.Train, navController, showSecondaryCards = true)
+                if (trainViewModel == null) {
+                    SmokeScreen(GymLogDestination.Train, navController, showSecondaryCards = true)
+                } else {
+                    TrainHomeScreen(
+                        trainViewModel,
+                        onOpenWorkout = { navController.navigate(GymLogDestination.ActiveWorkout(it)) { launchSingleTop = true } },
+                        onOpenBody = { navController.navigate(GymLogDestination.Body) },
+                        onOpenAchievements = { navController.navigate(GymLogDestination.Achievements) },
+                        onSettings = { navController.navigate(GymLogDestination.Settings) },
+                    )
+                }
+            }
+            composable<GymLogDestination.ActiveWorkout> { entry ->
+                val sessionId = entry.toRoute<GymLogDestination.ActiveWorkout>().sessionId
+                if (workouts == null) {
+                    SmokeScreen(GymLogDestination.Train, navController, secondary = true)
+                } else {
+                    val viewModel = viewModel(key = sessionId) { ActiveWorkoutPlaceholderViewModel(workouts, sessionId) }
+                    ActiveWorkoutPlaceholderScreen(viewModel, onBack = { navController.popBackStack() })
+                }
             }
         }
         navigation<GymLogGraph.Routines>(startDestination = GymLogDestination.Routines) {
@@ -150,7 +196,7 @@ private fun GymLogNavHost(
                         viewModel,
                         onOpen = { navController.navigate(GymLogDestination.RoutineEditor(it)) },
                         onCreate = { navController.navigate(GymLogDestination.RoutineEditor()) },
-                        onStartRoutine = onStartRoutine,
+                        onStartRoutine = { trainViewModel?.startRoutine(it) },
                         onSettings = { navController.navigate(GymLogDestination.Settings) },
                     )
                 }

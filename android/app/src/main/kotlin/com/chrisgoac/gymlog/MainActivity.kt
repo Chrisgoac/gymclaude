@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
                     settings = container.settingsServices,
                     exercises = container.exerciseRepository,
                     routines = container.routineRepository,
+                    workouts = container.workoutRepository,
                 )
             }
         }

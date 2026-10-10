@@ -31,6 +31,10 @@ sealed interface GymLogDestination {
     @Serializable data class RoutineEditor(val id: String? = null) : GymLogDestination {
         override val title: Int get() = R.string.nav_routine_editor
     }
+    /** The workout [sessionId] in progress (placeholder until set logging exists). */
+    @Serializable data class ActiveWorkout(val sessionId: String) : GymLogDestination {
+        override val title: Int get() = R.string.nav_active_workout
+    }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 

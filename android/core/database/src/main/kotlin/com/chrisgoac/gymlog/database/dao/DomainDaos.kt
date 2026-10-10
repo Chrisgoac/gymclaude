@@ -64,6 +64,10 @@ interface RoutineExerciseDao {
     @Query("SELECT * FROM routine_exercises WHERE deletedAt IS NULL ORDER BY orden, id")
     fun observeLive(): Flow<List<RoutineExerciseEntity>>
 
+    /** Live exercises of one routine in order; usable inside a mutation transaction. */
+    @Query("SELECT * FROM routine_exercises WHERE routineId = :routineId AND deletedAt IS NULL ORDER BY orden, id")
+    suspend fun liveForRoutine(routineId: String): List<RoutineExerciseEntity>
+
     @Query("SELECT * FROM routine_exercises ORDER BY id")
     suspend fun getAll(): List<RoutineExerciseEntity>
 }
@@ -77,6 +81,13 @@ interface WorkoutSessionDao {
 
     @Query("SELECT * FROM workout_sessions WHERE deletedAt IS NULL ORDER BY fecha DESC, id")
     fun observeLive(): Flow<List<WorkoutSessionEntity>>
+
+    /** Active = not finished (`duracionSegundos` null) and not deleted; newest first. */
+    @Query("SELECT * FROM workout_sessions WHERE deletedAt IS NULL AND duracionSegundos IS NULL ORDER BY fecha DESC, id")
+    fun observeActive(): Flow<List<WorkoutSessionEntity>>
+
+    @Query("SELECT * FROM workout_sessions WHERE deletedAt IS NULL AND duracionSegundos IS NULL ORDER BY fecha DESC, id")
+    suspend fun findActive(): List<WorkoutSessionEntity>
 
     @Query("SELECT * FROM workout_sessions ORDER BY id")
     suspend fun getAll(): List<WorkoutSessionEntity>

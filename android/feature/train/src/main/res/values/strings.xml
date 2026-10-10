@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="es">
+    <string name="train_title">Entrenar</string>
+    <string name="train_settings">Ajustes</string>
+    <string name="train_loading">Cargando</string>
+    <string name="train_error_title">No se pudo cargar el entrenamiento</string>
+    <string name="train_error_message">Inténtalo de nuevo. Tus datos siguen guardados en este dispositivo.</string>
+    <string name="train_retry">Reintentar</string>
+
+    <string name="train_continue_title">Continuar entrenamiento</string>
+    <string name="train_continue_started">Empezado %1$s</string>
+    <string name="train_continue_button">Continuar</string>
+
+    <string name="train_next_badge">Siguiente rutina</string>
+    <string name="train_next_start">Empezar %1$s</string>
+    <string name="train_next_start_description">Empezar la rutina %1$s</string>
+    <string name="train_no_routine_title">Aún no tienes rutinas</string>
+    <string name="train_no_routine_message">Crea una en la pestaña Rutinas o empieza un entrenamiento libre.</string>
+
+    <string name="train_free_start">Entrenamiento libre</string>
+    <string name="train_free_start_description">Empezar un entrenamiento libre</string>
+
+    <string name="train_gym_title">Gimnasio</string>
+    <string name="train_gym_none">Sin gimnasio</string>
+    <string name="train_gym_selected">Seleccionado</string>
+
+    <string name="train_week_title">Esta semana</string>
+    <plurals name="train_week_sessions">
+        <item quantity="one">%1$d sesión de %2$d</item>
+        <item quantity="other">%1$d sesiones de %2$d</item>
+    </plurals>
+    <plurals name="train_streak">
+        <item quantity="one">Racha: %1$d semana</item>
+        <item quantity="other">Racha: %1$d semanas</item>
+    </plurals>
+    <string name="train_streak_none">Sin racha todavía</string>
+
+    <string name="train_coach_title">Coach</string>
+    <string name="train_coach_pro">Pro · próximamente</string>
+    <string name="train_body">Cuerpo</string>
+    <string name="train_achievements">Logros</string>
+
+    <string name="train_error_gym">El gimnasio elegido ya no existe. Elige otro o entrena sin gimnasio.</string>
+    <string name="train_error_routine_gone">Esa rutina ya no existe.</string>
+    <string name="train_error_routine_archived">Esa rutina está archivada. Restáurala para empezarla.</string>
+    <string name="train_error_failed">No se pudo empezar el entrenamiento. Inténtalo de nuevo.</string>
+    <string name="train_dismiss">Cerrar</string>
+
+    <string name="workout_title">Entrenamiento</string>
+    <string name="workout_back">Atrás</string>
+    <string name="workout_loading">Cargando entrenamiento</string>
+    <string name="workout_missing_title">No se encontró el entrenamiento</string>
+    <string name="workout_missing_message">Puede que se haya eliminado.</string>
+    <string name="workout_empty_title">Sin ejercicios todavía</string>
+    <string name="workout_empty_message">Las series se podrán registrar en la siguiente versión.</string>
+    <string name="workout_unknown_exercise">Ejercicio eliminado</string>
+</resources>

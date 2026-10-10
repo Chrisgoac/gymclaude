@@ -69,6 +69,7 @@ dependencies {
     implementation(project(":feature:auth"))
     implementation(project(":feature:train"))
     implementation(project(":feature:routines"))
+    implementation(project(":feature:train"))
     implementation(project(":feature:exercises"))
     implementation(project(":feature:progress"))
     implementation(project(":feature:history"))
