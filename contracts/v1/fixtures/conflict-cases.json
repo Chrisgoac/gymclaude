@@ -1,0 +1,151 @@
+{
+  "description": "Shared sync v1 conflict fixtures. TypeScript (server) and Kotlin (client) must produce identical results. Version tuple = (updatedAt, deviceId, mutationId), compared lexicographically: updatedAt numerically, then deviceId and mutationId by UTF-16 code units. The incoming write is applied iff compare(incoming, existing) > 0; compare == 0 means the same mutation was already applied (no-op). A tombstone (deletedAt set) is an ordinary record under LWW: it applies when its tuple is greater, and a live record never resurrects a tombstoned row unless its tuple is greater. A stale baseServerVersion (non-null and different from the stored serverVersion, or null while the row exists, or non-null while the row does not exist) never blocks the LWW winner: the write still resolves deterministically and a conflict is reported (STALE_BASE when the incoming write applies, SUPERSEDED whenever it loses). A missing stored lastDeviceId/lastMutationId compares as the empty string.",
+  "futureClockToleranceMs": 300000,
+  "mergeCases": [
+    {
+      "name": "new record applies",
+      "existing": null,
+      "incoming": { "updatedAt": 1000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": null,
+      "expected": { "compare": null, "apply": true, "conflict": null }
+    },
+    {
+      "name": "newer timestamp wins",
+      "existing": { "updatedAt": 1000, "deviceId": "dev-z", "mutationId": "ffffffff-ffff-4fff-bfff-ffffffffffff", "deletedAt": null, "serverVersion": "7" },
+      "incoming": { "updatedAt": 1001, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": "7",
+      "expected": { "compare": 1, "apply": true, "conflict": null }
+    },
+    {
+      "name": "equal timestamps: device tie-break, higher deviceId wins",
+      "existing": { "updatedAt": 1000, "deviceId": "dev-a", "mutationId": "ffffffff-ffff-4fff-bfff-ffffffffffff", "deletedAt": null, "serverVersion": "7" },
+      "incoming": { "updatedAt": 1000, "deviceId": "dev-b", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": "7",
+      "expected": { "compare": 1, "apply": true, "conflict": null }
+    },
+    {
+      "name": "equal timestamps: device tie-break, lower deviceId loses",
+      "existing": { "updatedAt": 1000, "deviceId": "dev-b", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null, "serverVersion": "7" },
+      "incoming": { "updatedAt": 1000, "deviceId": "dev-a", "mutationId": "ffffffff-ffff-4fff-bfff-ffffffffffff", "deletedAt": null },
+      "baseServerVersion": "7",
+      "expected": { "compare": -1, "apply": false, "conflict": "SUPERSEDED" }
+    },
+    {
+      "name": "equal timestamp and device: mutation tie-break, higher mutationId wins",
+      "existing": { "updatedAt": 1000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null, "serverVersion": "7" },
+      "incoming": { "updatedAt": 1000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000002", "deletedAt": null },
+      "baseServerVersion": "7",
+      "expected": { "compare": 1, "apply": true, "conflict": null }
+    },
+    {
+      "name": "equal timestamp and device: mutation tie-break, lower mutationId loses",
+      "existing": { "updatedAt": 1000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000002", "deletedAt": null, "serverVersion": "7" },
+      "incoming": { "updatedAt": 1000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": "7",
+      "expected": { "compare": -1, "apply": false, "conflict": "SUPERSEDED" }
+    },
+    {
+      "name": "identical tuple (same mutation re-applied) is a no-op",
+      "existing": { "updatedAt": 1000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null, "serverVersion": "7" },
+      "incoming": { "updatedAt": 1000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": "7",
+      "expected": { "compare": 0, "apply": false, "conflict": null }
+    },
+    {
+      "name": "stale baseServerVersion, incoming newer: applied and reported STALE_BASE",
+      "existing": { "updatedAt": 1000, "deviceId": "dev-b", "mutationId": "00000000-0000-4000-8000-000000000009", "deletedAt": null, "serverVersion": "9" },
+      "incoming": { "updatedAt": 2000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": "7",
+      "expected": { "compare": 1, "apply": true, "conflict": "STALE_BASE" }
+    },
+    {
+      "name": "null baseServerVersion while the row exists: applied and reported STALE_BASE",
+      "existing": { "updatedAt": 1000, "deviceId": "dev-b", "mutationId": "00000000-0000-4000-8000-000000000009", "deletedAt": null, "serverVersion": "9" },
+      "incoming": { "updatedAt": 2000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": null,
+      "expected": { "compare": 1, "apply": true, "conflict": "STALE_BASE" }
+    },
+    {
+      "name": "non-null baseServerVersion while the row is missing: applied and reported STALE_BASE",
+      "existing": null,
+      "incoming": { "updatedAt": 2000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": "7",
+      "expected": { "compare": null, "apply": true, "conflict": "STALE_BASE" }
+    },
+    {
+      "name": "stale baseServerVersion, incoming older: not applied, reported SUPERSEDED",
+      "existing": { "updatedAt": 3000, "deviceId": "dev-b", "mutationId": "00000000-0000-4000-8000-000000000009", "deletedAt": null, "serverVersion": "9" },
+      "incoming": { "updatedAt": 2000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": "7",
+      "expected": { "compare": -1, "apply": false, "conflict": "SUPERSEDED" }
+    },
+    {
+      "name": "tombstone wins over an older live row",
+      "existing": { "updatedAt": 1000, "deviceId": "dev-b", "mutationId": "00000000-0000-4000-8000-000000000009", "deletedAt": null, "serverVersion": "9" },
+      "incoming": { "updatedAt": 1500, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": 1500 },
+      "baseServerVersion": "9",
+      "expected": { "compare": 1, "apply": true, "conflict": null }
+    },
+    {
+      "name": "older live record does not resurrect a tombstone",
+      "existing": { "updatedAt": 1500, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": 1500, "serverVersion": "10" },
+      "incoming": { "updatedAt": 1200, "deviceId": "dev-b", "mutationId": "00000000-0000-4000-8000-000000000002", "deletedAt": null },
+      "baseServerVersion": "9",
+      "expected": { "compare": -1, "apply": false, "conflict": "SUPERSEDED" }
+    },
+    {
+      "name": "newer live record does resurrect a tombstone",
+      "existing": { "updatedAt": 1500, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": 1500, "serverVersion": "10" },
+      "incoming": { "updatedAt": 1600, "deviceId": "dev-b", "mutationId": "00000000-0000-4000-8000-000000000002", "deletedAt": null },
+      "baseServerVersion": "10",
+      "expected": { "compare": 1, "apply": true, "conflict": null }
+    },
+    {
+      "name": "legacy PWA row (backfilled metadata) loses to a newer tuple",
+      "existing": { "updatedAt": 1000, "deviceId": "legacy-pwa", "mutationId": "legacy-backfill:42", "deletedAt": null, "serverVersion": "42" },
+      "incoming": { "updatedAt": 1000, "deviceId": "pixel-8", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": "42",
+      "expected": { "compare": 1, "apply": true, "conflict": null }
+    },
+    {
+      "name": "row without stored device/mutation metadata compares them as empty strings",
+      "existing": { "updatedAt": 1000, "deviceId": null, "mutationId": null, "deletedAt": null, "serverVersion": null },
+      "incoming": { "updatedAt": 1000, "deviceId": "dev-a", "mutationId": "00000000-0000-4000-8000-000000000001", "deletedAt": null },
+      "baseServerVersion": null,
+      "expected": { "compare": 1, "apply": true, "conflict": "STALE_BASE" }
+    }
+  ],
+  "pushCases": [
+    {
+      "name": "duplicate mutationId is replayed from the stored response without writing again",
+      "kind": "duplicateMutation",
+      "expected": { "secondResponseEqualsFirst": true, "additionalSyncChanges": 0 }
+    },
+    {
+      "name": "record id owned by another user is rejected without revealing data",
+      "kind": "crossUserRecordId",
+      "expected": { "status": 409, "code": "RECORD_ID_CONFLICT" }
+    },
+    {
+      "name": "updatedAt more than five minutes in the future is rejected",
+      "kind": "futureTimestamp",
+      "serverNow": 1767225600000,
+      "incoming": { "updatedAt": 1767225900001, "deletedAt": null },
+      "expected": { "status": 400, "code": "FUTURE_TIMESTAMP" }
+    },
+    {
+      "name": "deletedAt more than five minutes in the future is rejected",
+      "kind": "futureTimestamp",
+      "serverNow": 1767225600000,
+      "incoming": { "updatedAt": 1767225600000, "deletedAt": 1767225900001 },
+      "expected": { "status": 400, "code": "FUTURE_TIMESTAMP" }
+    },
+    {
+      "name": "exactly five minutes in the future is accepted",
+      "kind": "futureTimestamp",
+      "serverNow": 1767225600000,
+      "incoming": { "updatedAt": 1767225900000, "deletedAt": 1767225900000 },
+      "expected": { "status": 200, "code": null }
+    }
+  ]
+}
