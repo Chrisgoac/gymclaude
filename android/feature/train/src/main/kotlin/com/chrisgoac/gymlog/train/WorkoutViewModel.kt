@@ -39,11 +39,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
@@ -132,19 +134,33 @@ class WorkoutViewModel(
 
     private val attempt = MutableStateFlow(0)
 
-    /** Everything read from the repositories; a fresh subscription per call (retry re-subscribes). */
+    /**
+     * ONE Room subscription to the workout per screen, shared by the state and its derived reads.
+     * Failures are carried as values (a failing upstream must not escape into viewModelScope) and
+     * tagged with the attempt, so after [retry] a stale failure is never replayed as current.
+     */
+    private val sharedWorkout: Flow<Pair<Int, Result<WorkoutAggregate?>>> = attempt
+        .flatMapLatest { n ->
+            workouts.observeWorkout(sessionId)
+                .map { n to Result.success(it) }
+                .catch { emit(n to Result.failure(it)) }
+        }
+        .shareIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), replay = 1)
+
+    /** Everything read from the repositories for the current attempt. */
     private fun snapshot(): Flow<Snapshot> {
-        val workout = workouts.observeWorkout(sessionId)
+        val current = attempt.value
+        val workout = sharedWorkout.filter { it.first == current }.map { it.second.getOrThrow() }
         return combine(
-        workout,
-        workout.map { w -> w?.let { HistoryKey(it.exercises.map { e -> e.exerciseId }.toSet(), it.session.gymId) } }
-            .distinctUntilChanged()
-            .flatMapLatest { key -> if (key == null) flowOf(emptyMap()) else log.observeExerciseHistory(key.exerciseIds, sessionId, key.gymId) },
-        workout.map { it?.session?.routineId }.distinctUntilChanged()
-            .flatMapLatest { id -> if (id == null) flowOf(null) else routines.observeRoutine(id) },
-        exerciseCatalog.observeExercises().map { all -> all.associateBy { it.id } },
-        log.observeProgressionSettings(),
-    ) { w, history, routine, catalog, settings -> Snapshot(w, history, routine, catalog, settings) }
+            workout,
+            workout.map { w -> w?.let { HistoryKey(it.exercises.map { e -> e.exerciseId }.toSet(), it.session.gymId) } }
+                .distinctUntilChanged()
+                .flatMapLatest { key -> if (key == null) flowOf(emptyMap()) else log.observeExerciseHistory(key.exerciseIds, sessionId, key.gymId) },
+            workout.map { it?.session?.routineId }.distinctUntilChanged()
+                .flatMapLatest { id -> if (id == null) flowOf(null) else routines.observeRoutine(id) },
+            exerciseCatalog.observeExercises().map { all -> all.associateBy { it.id } },
+            log.observeProgressionSettings(),
+        ) { w, history, routine, catalog, settings -> Snapshot(w, history, routine, catalog, settings) }
     }
 
     private val exerciseCatalog = exercises

@@ -126,7 +126,7 @@ class AppContainer(private val application: Application) {
         OfflineWorkoutRepository(databases, ::localMutationRunner, exerciseRepository, now = syncClock::nowMillis)
 
     /** Set logging inside a workout (sets, order, notes, history for suggestions); local writes only. */
-    val workoutLogRepository: WorkoutLogRepository = OfflineWorkoutLogRepository(databases, ::localMutationRunner, exerciseRepository)
+    val workoutLogRepository: WorkoutLogRepository = OfflineWorkoutLogRepository(databases, ::localMutationRunner)
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)

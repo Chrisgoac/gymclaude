@@ -65,16 +65,18 @@ private class FakeLog : WorkoutRepository, WorkoutLogRepository {
     var addGate: CompletableDeferred<Unit>? = null
     var failRemove = false
     var failObserve = 0
+    var observeCalls = 0
     private var ids = 0
 
     override fun observeActiveWorkout(): Flow<WorkoutAggregate?> = workout
-    override fun observeWorkout(sessionId: String): Flow<WorkoutAggregate?> =
+    override fun observeWorkout(sessionId: String): Flow<WorkoutAggregate?> {
+        observeCalls++
         if (failObserve > 0) {
             failObserve--
-            flow { throw IllegalStateException("disk") }
-        } else {
-            workout.map { it.takeIf { w -> w.session.id == sessionId } }
+            return flow { throw IllegalStateException("disk") }
         }
+        return workout.map { it.takeIf { w -> w.session.id == sessionId } }
+    }
     override fun observeGyms(): Flow<List<Gym>> = flowOf(emptyList())
     override fun observeTrainingSummary(): Flow<TrainingSummary> = flowOf(TrainingSummary(0, 3, 0))
     override suspend fun startFreeWorkout(gymId: String?) = StartedWorkout("s1", true)
@@ -483,5 +485,13 @@ class WorkoutViewModelTest {
         vm.addSet("le1")
         advanceUntilIdle()
         assertEquals(listOf("addSet:le1:62.5:8"), repo.writes)
+    }
+
+    @Test fun `the screen holds a single workout subscription`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.openPicker()
+        runCurrent()
+        assertEquals(WorkoutLogStatus.Ready, vm.state.value.status)
+        assertEquals(1, repo.observeCalls)
     }
 }

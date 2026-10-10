@@ -9,7 +9,7 @@ import com.chrisgoac.gymlog.database.LocalMutation
 import com.chrisgoac.gymlog.database.OpenUserDatabase
 import com.chrisgoac.gymlog.database.RoomLocalMutationRunner
 import com.chrisgoac.gymlog.database.UserDatabaseManager
-import com.chrisgoac.gymlog.database.dao.LATEST_HISTORY_SQL
+import com.chrisgoac.gymlog.database.dao.LATEST_HISTORY_CANDIDATE_SQL
 import com.chrisgoac.gymlog.database.entity.CatalogExerciseEntity
 import com.chrisgoac.gymlog.database.entity.LoggedExerciseEntity
 import com.chrisgoac.gymlog.database.entity.LoggedSetEntity
@@ -63,7 +63,7 @@ class OfflineWorkoutLogRepositoryTest {
     private val nextId = { "00000000-0000-4000-8000-%012d".format(++ids) }
     private val exercises = OfflineExerciseRepository(manager, { runner })
     private val workouts = OfflineWorkoutRepository(manager, { runner }, exercises, now = { now }, newId = nextId)
-    private val log = OfflineWorkoutLogRepository(manager, { runner }, exercises, newId = nextId)
+    private val log = OfflineWorkoutLogRepository(manager, { runner }, newId = nextId)
 
     @Before fun seedCatalog() = runTest {
         db.catalogDao().upsertAll(
@@ -289,14 +289,21 @@ class OfflineWorkoutLogRepositoryTest {
         val gym1 = log.observeExerciseHistory(setOf("seed-press"), "current", "g1").first()
         assertEquals(10_296L, gym1.getValue("seed-press").date)
 
-        // Query scope: exactly the chosen sessions' sets come back, never the whole history.
-        val rows = db.workoutHistoryDao().latestHistory(listOf("seed-press", "seed-curl"), "current", null)
-        assertEquals(8, rows.size)
-        // And the plan walks the indexes instead of scanning the history tables.
-        val sql = LATEST_HISTORY_SQL.replace(":exerciseIds", "'seed-press','seed-curl'").replace(":excludeSessionId", "'current'").replace(":gymId", "NULL")
-        val plan = db.query("EXPLAIN QUERY PLAN $sql", null).use { c -> buildList { while (c.moveToNext()) add(c.getString(3)) } }
-        assertTrue(plan.toString(), plan.any { "index_logged_exercises_exerciseId" in it })
-        assertTrue(plan.toString(), plan.any { "index_logged_sets_loggedExerciseId" in it })
-        assertTrue(plan.toString(), plan.none { Regex("""^SCAN (logged_sets|logged_exercises|workout_sessions)\b""").containsMatchIn(it) && "INDEX" !in it })
+        // Query scope: one logged exercise per exercise, then only its sets.
+        assertEquals("hist-297-seed-press", db.workoutHistoryDao().latestCandidate("seed-press", "current", null)!!.loggedExerciseId)
+        assertEquals(4, db.loggedSetDao().liveForExercise("hist-297-seed-press").size)
+
+        // The plan walks sessions newest-first by index and stops: no sort, no subquery, no un-indexed scan.
+        for (gym in listOf("NULL", "'g1'")) {
+            val sql = LATEST_HISTORY_CANDIDATE_SQL.replace(":exerciseId", "'seed-press'").replace(":excludeSessionId", "'current'").replace(":gymId", gym)
+            val plan = db.query("EXPLAIN QUERY PLAN $sql", null).use { c -> buildList { while (c.moveToNext()) add(c.getString(3)) } }
+            assertTrue(plan.toString(), plan.any { "index_workout_sessions_fecha" in it })
+            // Per session a point probe by sessionId, never the exerciseId index (that would re-read the whole history per session).
+            assertTrue(plan.toString(), plan.any { "SEARCH le USING INDEX index_logged_exercises_sessionId" in it })
+            assertTrue(plan.toString(), plan.first().startsWith("SCAN s USING INDEX index_workout_sessions_fecha"))
+            assertTrue(plan.toString(), plan.any { "index_logged_sets_loggedExerciseId" in it })
+            assertTrue(plan.toString(), plan.none { "TEMP B-TREE" in it || "SUBQUERY" in it })
+            assertTrue(plan.toString(), plan.none { Regex("""^SCAN (ls|le)\b""").containsMatchIn(it) && "INDEX" !in it })
+        }
     }
 }

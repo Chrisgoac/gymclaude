@@ -9,7 +9,6 @@ import com.chrisgoac.gymlog.database.entity.LoggedExerciseEntity
 import com.chrisgoac.gymlog.database.entity.LoggedSetEntity
 import com.chrisgoac.gymlog.database.entity.toRecord
 import com.chrisgoac.gymlog.domain.exercise.ExerciseNotFoundException
-import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.domain.workout.ExerciseHistory
 import com.chrisgoac.gymlog.domain.workout.HistorySet
 import com.chrisgoac.gymlog.domain.workout.ProgressionSettings
@@ -27,7 +26,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapLatest
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -41,8 +41,6 @@ import java.util.UUID
 class OfflineWorkoutLogRepository(
     private val databases: UserDatabaseManager,
     private val runnerFor: (GymLogDatabase) -> LocalMutationRunner,
-    /** Catalog + custom exercises: an added exercise must exist (catalog rows are not in the sync tables). */
-    private val exercises: ExerciseRepository,
     private val newId: () -> String = { UUID.randomUUID().toString() },
 ) : WorkoutLogRepository {
 
@@ -59,15 +57,20 @@ class OfflineWorkoutLogRepository(
             if (open == null) {
                 flowOf(emptyMap())
             } else {
-                // Scoped query: only the latest earlier logged exercise per id and its sets are read,
-                // so re-running it after an edit of the current session stays cheap.
-                open.database.workoutHistoryDao()
-                    .observeLatestHistory(exerciseIds.sorted(), excludeSessionId, gymId)
-                    .map { rows ->
-                        rows.groupBy { it.exerciseId }.mapValues { (_, sets) ->
-                            ExerciseHistory(sets.first().fecha, sets.map { HistorySet(it.peso, it.reps, it.esCalentamiento == true) })
-                        }
+                val database = open.database
+                // Re-read when any of the three tables changes; each read is one LIMIT 1 query per
+                // exercise plus that logged exercise's sets, so it stays cheap on every commit of the
+                // current session (and distinctUntilChanged swallows the identical result).
+                database.invalidationTracker.createFlow(SESSIONS, LOGGED_EXERCISES, LOGGED_SETS).mapLatest {
+                    database.withTransaction {
+                        exerciseIds.sorted().mapNotNull { exerciseId ->
+                            val candidate = database.workoutHistoryDao().latestCandidate(exerciseId, excludeSessionId, gymId)
+                                ?: return@mapNotNull null
+                            val sets = database.loggedSetDao().liveForExercise(candidate.loggedExerciseId)
+                            exerciseId to ExerciseHistory(candidate.fecha, sets.map { HistorySet(it.peso, it.reps, it.esCalentamiento == true) })
+                        }.toMap()
                     }
+                }
             }
         }.distinctUntilChanged()
     }
@@ -88,8 +91,11 @@ class OfflineWorkoutLogRepository(
     // ---- Writes ----
 
     override suspend fun addExercise(sessionId: String, exerciseId: String): String {
-        // Checked before the transaction: the catalog is a separate local table read through the repository.
-        exercises.observeExercise(exerciseId).first() ?: throw ExerciseNotFoundException(exerciseId)
+        // Point lookups before the transaction: a packaged catalog exercise or a live custom one.
+        val database = checkNotNull(databases.current.value) { "No account database is open" }.database
+        val exists = database.catalogDao().findById(exerciseId) != null ||
+            database.exerciseDao().findById(exerciseId)?.let { it.deletedAt == null && it.esPersonalizado } == true
+        if (!exists) throw ExerciseNotFoundException(exerciseId)
         return addLoggedExercise(sessionId, exerciseId)
     }
 
@@ -231,5 +237,11 @@ class OfflineWorkoutLogRepository(
         if (index < 0) return rows
         val destination = (index + delta).coerceIn(0, rows.lastIndex)
         return rows.toMutableList().apply { add(destination, removeAt(index)) }
+    }
+
+    private companion object {
+        const val SESSIONS = "workout_sessions"
+        const val LOGGED_EXERCISES = "logged_exercises"
+        const val LOGGED_SETS = "logged_sets"
     }
 }
