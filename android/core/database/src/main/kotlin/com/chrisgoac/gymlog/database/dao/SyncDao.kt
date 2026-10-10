@@ -27,6 +27,12 @@ interface SyncDao {
     @Query("SELECT * FROM outbox_mutations WHERE status = 'PENDING' ORDER BY sequence LIMIT :limit")
     suspend fun pendingOutbox(limit: Int): List<OutboxMutationEntity>
 
+    @Query("SELECT mutationId FROM outbox_mutations WHERE status = 'PENDING'")
+    suspend fun pendingOutboxIds(): List<String>
+
+    @Query("SELECT * FROM outbox_mutations WHERE mutationId IN (:mutationIds)")
+    suspend fun outboxByIds(mutationIds: List<String>): List<OutboxMutationEntity>
+
     @Query("SELECT * FROM outbox_mutations ORDER BY sequence")
     suspend fun allOutbox(): List<OutboxMutationEntity>
 

@@ -4,9 +4,9 @@ plugins {
 
 dependencies {
     implementation(project(":core:model"))
-    api(project(":core:domain"))
-    api(project(":core:database"))
-    api(project(":core:network"))
+    implementation(project(":core:domain"))
+    implementation(project(":core:database"))
+    implementation(project(":core:network"))
     implementation(libs.androidx.room.ktx)
 
     testImplementation(libs.junit)

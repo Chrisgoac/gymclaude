@@ -51,6 +51,13 @@ interface LocalMutationScope {
      * `deletedAt` set: a tombstone, never a physical delete. Callers stamp `updatedAt`.
      */
     fun put(record: SyncRecord)
+
+    /**
+     * The `updatedAt` (and `deletedAt` for a tombstone) to stamp on a write to ([table], [id]):
+     * the server-corrected clock, but always strictly after the version this device already holds
+     * for that row, so a device clock running behind still produces a write that wins LWW.
+     */
+    suspend fun nextTimestamp(table: SyncTable, id: RecordId): Long
 }
 
 /**
@@ -75,13 +82,14 @@ interface LocalMutationRunner {
 class RoomLocalMutationRunner(
     private val database: GymLogDatabase,
     private val deviceId: DeviceId,
+    /** Server-corrected wall clock (device now + server offset); stamps outbox rows and [LocalMutationScope.nextTimestamp]. */
     private val clock: () -> Long = System::currentTimeMillis,
     private val newMutationId: () -> MutationId = { MutationId(UUID.randomUUID().toString()) },
 ) : LocalMutationRunner {
     private val store = RecordStore(database)
 
     override suspend fun <T> run(mutation: LocalMutation<T>): T = database.withTransaction {
-        val scope = StagingScope(store)
+        val scope = StagingScope(store, clock)
         val result = mutation.block(scope)
 
         val staged = scope.staged.map { record -> record to store.find(record.table, record.id)?.serverVersion }
@@ -109,7 +117,7 @@ class RoomLocalMutationRunner(
         result
     }
 
-    private class StagingScope(private val store: RecordStore) : LocalMutationScope {
+    private class StagingScope(private val store: RecordStore, private val clock: () -> Long) : LocalMutationScope {
         val staged = mutableListOf<SyncRecord>()
 
         override suspend fun find(table: SyncTable, id: RecordId): SyncRecord? =
@@ -117,6 +125,11 @@ class RoomLocalMutationRunner(
 
         override fun put(record: SyncRecord) {
             staged += record
+        }
+
+        override suspend fun nextTimestamp(table: SyncTable, id: RecordId): Long {
+            val seen = find(table, id)?.updatedAt ?: return clock()
+            return maxOf(clock(), seen + 1)
         }
     }
 }

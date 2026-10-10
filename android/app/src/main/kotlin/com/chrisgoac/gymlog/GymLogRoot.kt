@@ -27,7 +27,7 @@ import kotlin.math.roundToInt
 
 /** Renders [RootState]: product navigation ([GymLogApp]) exists only once the user is [RootState.Ready]. */
 @Composable
-fun GymLogRoot(state: RootState, authGateway: () -> AuthGateway) {
+fun GymLogRoot(state: RootState, authGateway: () -> AuthGateway, onRetryBootstrap: () -> Unit = {}) {
     when (state) {
         RootState.Loading -> CenteredStatus { HierroLoadingState(stringResource(R.string.root_loading)) }
         RootState.SignedOut -> AuthRoute(authGateway, notice = null)
@@ -40,7 +40,15 @@ fun GymLogRoot(state: RootState, authGateway: () -> AuthGateway) {
             val config = state.message == "config"
             HierroEmptyState(
                 title = stringResource(if (config) R.string.root_fatal_config_title else R.string.root_fatal_title),
-                message = stringResource(if (config) R.string.root_fatal_config_message else R.string.root_fatal_message),
+                message = stringResource(
+                    when {
+                        config -> R.string.root_fatal_config_message
+                        state.canRetry -> R.string.root_fatal_retry_message
+                        else -> R.string.root_fatal_message
+                    },
+                ),
+                actionLabel = if (state.canRetry) stringResource(R.string.root_retry) else null,
+                onAction = if (state.canRetry) onRetryBootstrap else null,
             )
         }
     }

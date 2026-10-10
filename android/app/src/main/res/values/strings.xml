@@ -19,6 +19,8 @@
     <string name="root_reauth">Tu sesión ha caducado. Vuelve a entrar para seguir sincronizando: los datos de este dispositivo siguen aquí.</string>
     <string name="root_fatal_title">Algo falló</string>
     <string name="root_fatal_message">No se pudieron preparar tus datos. Cierra la app y vuelve a abrirla con conexión.</string>
+    <string name="root_fatal_retry_message">No se pudieron descargar tus datos. Comprueba la conexión y vuelve a intentarlo: lo ya descargado se conserva.</string>
+    <string name="root_retry">Reintentar</string>
     <string name="root_fatal_config_title">Falta configuración</string>
     <string name="root_fatal_config_message">Esta compilación no tiene la clave pública de Clerk (clerk.publishableKey en android/local.properties).</string>
 

@@ -4,6 +4,7 @@ import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.UserDatabaseManager
 import com.chrisgoac.gymlog.network.AuthSessionProvider
 import com.chrisgoac.gymlog.network.AuthState
+import com.chrisgoac.gymlog.network.SyncApiException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -27,11 +28,17 @@ sealed interface RootState {
     /** The session expired; [userId]'s local data is kept until they sign in again. */
     data class ReauthenticationRequired(val userId: String) : RootState
 
-    /** Unrecoverable: `config` (no publishable key) or `bootstrap`. */
-    data class Fatal(val message: String) : RootState
+    /**
+     * Cannot continue: `config` (no publishable key) or `bootstrap`. [canRetry] is true when the
+     * failure was transient (offline, server busy): [RootStateMachine.retryBootstrap] resumes it.
+     */
+    data class Fatal(val message: String, val canRetry: Boolean = false) : RootState
 }
 
-/** Downloads a user's cloud data into their freshly opened database (Task 7). */
+/**
+ * Downloads a user's cloud data into their database, resuming from its checkpoint. Throws
+ * [SyncApiException] on network/server failure (transient ones are retryable).
+ */
 fun interface BootstrapRunner {
     suspend fun run(userId: String, database: GymLogDatabase, onProgress: (Float) -> Unit)
 }
@@ -112,8 +119,9 @@ class RootStateMachine(
             // A cancelled or superseded run must never publish state, even if the runner swallows
             // cancellation or fails because its database was closed underneath it.
             fun isCurrent() = self.isActive && bootstrapJob === self
+            var database: GymLogDatabase? = null
             try {
-                val database = databases.open(userId)
+                database = databases.open(userId)
                 bootstrap.run(userId, database) { progress ->
                     if (isCurrent()) mutableState.value = RootState.Bootstrapping(userId, progress.coerceIn(0f, 1f))
                 }
@@ -125,17 +133,48 @@ class RootStateMachine(
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled // cancelBootstrap() already reset the bookkeeping.
-            } catch (_: Exception) {
+            } catch (failure: Exception) {
                 if (isCurrent()) {
-                    // TODO: offer a retry for retryable (offline) failures; the runner already resumes from its checkpoint.
+                    val transient = failure.isTransientSyncFailure()
+                    // A transient failure on an account restored before (e.g. a replacement
+                    // bootstrap after INVALID_CURSOR) keeps the local copy usable; background sync
+                    // resumes the download from its checkpoint.
+                    val restoredBefore = transient && database?.let { hasCompletedBootstrap(it) } == true
+                    if (!isCurrent()) return@launch
                     bootstrapJob = null
                     bootstrappingUserId = null
-                    mutableState.value = RootState.Fatal(BOOTSTRAP)
+                    if (restoredBefore) {
+                        bootstrappedUserId = userId
+                        mutableState.value = RootState.Ready(userId)
+                    } else {
+                        mutableState.value = RootState.Fatal(BOOTSTRAP, canRetry = transient)
+                    }
                 }
             }
         }
         bootstrapJob = job
         job.start()
+    }
+
+    /** Re-runs a bootstrap that failed transiently, for the account that is still signed in. */
+    fun retryBootstrap() {
+        val failed = mutableState.value
+        val authState = auth.state.value
+        if (failed !is RootState.Fatal || !failed.canRetry || authState !is AuthState.SignedIn) return
+        scope.launch { startBootstrap(authState.userId) }
+    }
+
+    /** The incremental cursor exists only once a bootstrap has completed on this database. */
+    private suspend fun hasCompletedBootstrap(database: GymLogDatabase): Boolean = try {
+        database.syncDao().cursor() != null
+    } catch (_: IllegalStateException) {
+        false // Closed underneath us (sign-out/switch): treat as never restored.
+    }
+
+    private fun Exception.isTransientSyncFailure(): Boolean = when (this) {
+        is SyncApiException.Transport, is SyncApiException.Malformed -> true
+        is SyncApiException.Api -> retryable
+        else -> false
     }
 
     /** Cancels any running bootstrap and waits for it, so it is gone before its database is closed. */

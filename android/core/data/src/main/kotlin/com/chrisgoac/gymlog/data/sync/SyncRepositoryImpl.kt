@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.withLock
 
 /**
@@ -46,23 +47,32 @@ class SyncRepositoryImpl(
     private val applier: PullPageApplier = PullPageApplier(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) : SyncRepository {
-    private val running = MutableStateFlow(false)
-    private val lastResult = MutableStateFlow<SyncResult?>(null)
+    /** User whose run is in progress, if any. */
+    private val runningUser = MutableStateFlow<String?>(null)
+
+    /** Last result per user, so switching account never shows the previous account's outcome. */
+    private val lastResults = MutableStateFlow<Map<String, SyncResult>>(emptyMap())
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeStatus(): Flow<SyncStatus> = databases.current.flatMapLatest { open ->
         if (open == null) {
-            combine(running, lastResult) { isRunning, last -> SyncStatus(isRunning, 0, 0, restoreComplete = false, lastResult = last) }
+            flowOf(SyncStatus(running = false, pendingMutations = 0, quarantinedMutations = 0, restoreComplete = false, lastResult = null))
         } else {
             val dao = open.database.syncDao()
             combine(
-                running,
-                lastResult,
+                runningUser,
+                lastResults,
                 dao.observeOutboxCount(OutboxStatus.PENDING),
                 dao.observeOutboxCount(OutboxStatus.QUARANTINED),
                 dao.observeBootstrapCheckpoint(),
-            ) { isRunning, last, pending, quarantined, checkpoint ->
-                SyncStatus(isRunning, pending, quarantined, restoreComplete = checkpoint?.completed == true, lastResult = last)
+            ) { running, results, pending, quarantined, checkpoint ->
+                SyncStatus(
+                    running = running == open.userId,
+                    pendingMutations = pending,
+                    quarantinedMutations = quarantined,
+                    restoreComplete = checkpoint?.completed == true,
+                    lastResult = results[open.userId],
+                )
             }
         }
     }
@@ -70,7 +80,7 @@ class SyncRepositoryImpl(
     override suspend fun syncOnce(): SyncResult {
         val open = databases.current.value ?: return SyncResult.SessionRequired(quarantined = 0)
         return locks.forUser(open.userId).withLock {
-            running.value = true
+            runningUser.value = open.userId
             val run = RunCounters()
             try {
                 val result = try {
@@ -80,10 +90,10 @@ class SyncRepositoryImpl(
                 } catch (e: SyncApiException) {
                     e.toResult(run.quarantined)
                 }
-                lastResult.value = result
+                lastResults.update { it + (open.userId to result) }
                 result
             } finally {
-                running.value = false
+                runningUser.value = null
             }
         }
     }
@@ -92,6 +102,7 @@ class SyncRepositoryImpl(
         var pushed = 0
         var pulled = 0
         var quarantined = 0
+        val pending = PendingEdits()
     }
 
     // ---- Push ----
@@ -102,9 +113,16 @@ class SyncRepositoryImpl(
         while (true) {
             val batch = fitBodyBudget(dao.pendingOutbox(batchLimit))
             if (batch.isEmpty()) return
-            val mutations = batch.map { ContractJson.decodeFromString(PushMutation.serializer(), it.payloadJson) }
+            val mutations = batch.map { row -> decodeOrNull(row) }
+            val corrupt = batch.filterIndexed { index, _ -> mutations[index] == null }
+            if (corrupt.isNotEmpty()) {
+                // Cannot be resent byte-for-byte: keep it, flag it, never let it block the queue.
+                corrupt.forEach { dao.quarantineOutbox(it.mutationId, CORRUPT_PAYLOAD) }
+                run.quarantined += corrupt.size
+                continue
+            }
             val response = try {
-                api.push(PushRequest(mutations))
+                api.push(PushRequest(mutations.filterNotNull()))
             } catch (e: SyncApiException.Api) {
                 if (e.retryable) {
                     batch.forEach { dao.recordOutboxFailure(it.mutationId, e.errorCode()) }
@@ -136,10 +154,19 @@ class SyncRepositoryImpl(
             val sent = batch.mapTo(HashSet()) { it.mutationId }
             val accepted = response.acceptedMutationIds.map { it.value }.filter { it in sent }.distinct()
             // Nothing accepted would resend the same batch forever: try again on the next run.
-            if (accepted.isEmpty()) throw SyncApiException.Malformed("Push accepted none of ${batch.size} mutations")
+            if (accepted.isEmpty()) {
+                batch.forEach { dao.recordOutboxFailure(it.mutationId, NONE_ACCEPTED_ERROR) }
+                throw SyncApiException.Malformed("Push accepted none of ${batch.size} mutations")
+            }
             dao.deleteOutbox(accepted)
             run.pushed += accepted.size
         }
+    }
+
+    private fun decodeOrNull(row: OutboxMutationEntity): PushMutation? = try {
+        ContractJson.decodeFromString(PushMutation.serializer(), row.payloadJson)
+    } catch (_: IllegalArgumentException) {
+        null // SerializationException is an IllegalArgumentException.
     }
 
     /** Keeps the FIFO prefix whose encoded request stays within [PUSH_BODY_BUDGET_BYTES] (at least one row). */
@@ -179,7 +206,7 @@ class SyncRepositoryImpl(
                 return
             }
             database.withTransaction {
-                run.pulled += applier.apply(database, page)
+                run.pulled += applier.apply(database, page, run.pending)
                 dao.saveCursor(SyncCursorEntity(cursor = page.cursor, updatedAt = clock()))
             }
             cursor = page.cursor
@@ -206,6 +233,8 @@ class SyncRepositoryImpl(
         private const val REQUEST_ENVELOPE_BYTES = 16 // {"mutations":[]}
         private const val TRANSPORT_ERROR = "TRANSPORT"
         private const val MALFORMED_ERROR = "MALFORMED_RESPONSE"
+        private const val NONE_ACCEPTED_ERROR = "NONE_ACCEPTED"
+        const val CORRUPT_PAYLOAD = "CORRUPT_PAYLOAD"
         private val MUTATION_PATH = Regex("^mutations[.\\[](\\d+)")
 
         /** Non-retryable codes caused by one mutation's content (README "Quarantine of poison mutations", plus 413). */

@@ -2,6 +2,10 @@ package com.chrisgoac.gymlog
 
 import androidx.test.core.app.ApplicationProvider
 import com.chrisgoac.gymlog.database.UserDatabaseManagerImpl
+import com.chrisgoac.gymlog.database.entity.SyncCursorEntity
+import com.chrisgoac.gymlog.model.ApiErrorCode
+import com.chrisgoac.gymlog.network.SyncApiException
+import java.io.IOException
 import com.chrisgoac.gymlog.network.AuthSessionProvider
 import com.chrisgoac.gymlog.network.AuthState
 import kotlinx.coroutines.CancellationException
@@ -9,6 +13,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -139,6 +144,44 @@ class RootStateMachineTest {
         assertEquals(RootState.Fatal("bootstrap"), machine.state.value)
     }
 
+    @Test fun transientFailureOnAFirstBootstrapOffersARetry() = runTest(UnconfinedTestDispatcher()) {
+        bootstrap.failure = SyncApiException.Transport(IOException("offline"))
+        val machine = machine()
+        auth.state.value = AuthState.SignedIn(USER_A)
+        // Classifying the failure reads the database on Room's executor.
+        assertEquals(RootState.Fatal("bootstrap", canRetry = true), machine.settled())
+
+        bootstrap.failure = null
+        machine.retryBootstrap()
+
+        assertEquals(RootState.Ready(USER_A), machine.state.first { it is RootState.Ready })
+        assertEquals(listOf(USER_A, USER_A), bootstrap.runs)
+    }
+
+    @Test fun transientFailureOnAPreviouslyRestoredDatabaseKeepsTheAppUsable() = runTest(UnconfinedTestDispatcher()) {
+        val runner = BootstrapRunner { _, database, _ ->
+            // Restored on an earlier run; this replacement download fails offline.
+            database.syncDao().saveCursor(SyncCursorEntity(cursor = "c1", updatedAt = 1L))
+            throw SyncApiException.Api(503, ApiErrorCode.RETRY_LATER, "RETRY_LATER", true, null, null, null, "busy")
+        }
+        val machine = RootStateMachine(auth, databases, runner, backgroundScope, true).also { it.start() }
+        auth.state.value = AuthState.SignedIn(USER_A)
+        assertEquals(RootState.Ready(USER_A), machine.settled())
+    }
+
+    @Test fun nonRetryableBootstrapFailureCannotBeRetried() = runTest(UnconfinedTestDispatcher()) {
+        bootstrap.failure = SyncApiException.Api(400, ApiErrorCode.INVALID_REQUEST, "INVALID_REQUEST", false, null, null, null, "bad")
+        val machine = machine()
+        auth.state.value = AuthState.SignedIn(USER_A)
+        assertEquals(RootState.Fatal("bootstrap", canRetry = false), machine.state.value)
+
+        bootstrap.failure = null
+        machine.retryBootstrap()
+
+        assertEquals(RootState.Fatal("bootstrap", canRetry = false), machine.state.value)
+        assertEquals(listOf(USER_A), bootstrap.runs)
+    }
+
     @Test fun cancelledBootstrapThatFailsAfterwardsCannotOverwriteSignedOut() = runTest(StandardTestDispatcher()) {
         val runner = BootstrapRunner { _, database, _ ->
             database.openHelper.writableDatabase
@@ -183,6 +226,8 @@ class RootStateMachineTest {
         assertEquals(RootState.Bootstrapping(USER_B, 0f), machine.state.value)
         assertEquals(USER_B, databases.current.value?.userId)
     }
+
+    private suspend fun RootStateMachine.settled(): RootState = state.first { it !is RootState.Bootstrapping && it !is RootState.Loading }
 
     private companion object {
         const val USER_A = "user_root_a"

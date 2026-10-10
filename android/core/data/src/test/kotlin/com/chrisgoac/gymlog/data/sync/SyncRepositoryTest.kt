@@ -11,6 +11,7 @@ import com.chrisgoac.gymlog.database.RoomLocalMutationRunner
 import com.chrisgoac.gymlog.database.UserDatabaseManager
 import com.chrisgoac.gymlog.database.entity.BootstrapCheckpointEntity
 import com.chrisgoac.gymlog.database.entity.BootstrapState
+import com.chrisgoac.gymlog.database.entity.OutboxMutationEntity
 import com.chrisgoac.gymlog.database.entity.OutboxStatus
 import com.chrisgoac.gymlog.database.entity.SyncCursorEntity
 import com.chrisgoac.gymlog.domain.SyncResult
@@ -25,6 +26,7 @@ import com.chrisgoac.gymlog.model.PushRequest
 import com.chrisgoac.gymlog.model.PushResponse
 import com.chrisgoac.gymlog.model.RecordId
 import com.chrisgoac.gymlog.model.SyncTable
+import com.chrisgoac.gymlog.network.ServerClock
 import com.chrisgoac.gymlog.network.SyncApi
 import com.chrisgoac.gymlog.network.SyncApiException
 import kotlinx.coroutines.CompletableDeferred
@@ -33,6 +35,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -310,7 +313,7 @@ class SyncRepositoryTest {
     }
 
     @Test
-    fun pullDoesNotClobberARecordWithAPendingOutboxEdit() = runTest {
+    fun pendingEditNewerThanThePulledRecordSurvivesThePull() = runTest {
         markBootstrapped("c1")
         // The user edits ex-1 offline while the pull is in flight.
         api.onPull = {
@@ -343,7 +346,147 @@ class SyncRepositoryTest {
         assertNotNull(stored("ex-2"))
     }
 
+    @Test
+    fun pendingEditOlderThanThePulledRecordAdoptsTheServerCopy() = runTest {
+        markBootstrapped("c1")
+        var mutationId = ""
+        api.onPull = {
+            mutationId = enqueue("ex-1", nombre = "offline edit") // updatedAt T + 1
+            page("c2", hasMore = false, change("ex-1", 30, nombre = "server", updatedAt = T + 100))
+        }
+
+        repository().syncOnce()
+
+        assertEquals("server", stored("ex-1")?.nombre)
+        assertEquals(T + 100, stored("ex-1")?.updatedAt)
+        assertEquals(30L, stored("ex-1")?.serverVersion)
+        assertEquals("the edit stays queued for the server to resolve", OutboxStatus.PENDING, outboxStatus(mutationId).status)
+    }
+
+    @Test
+    fun writeAfterSeeingAServerVersionWinsEvenWithADeviceClockBehind() = runTest {
+        markBootstrapped("c1")
+        val v2 = T + 5_000
+        api.onPull = { page("c2", hasMore = false, change("ex-1", 7, updatedAt = v2)) }
+        repository().syncOnce()
+
+        // Device clock far behind and no server offset learned yet.
+        val skewed = ServerOffsetClock(ServerClock { 1_000L })
+        val runner = RoomLocalMutationRunner(db, DeviceId("dev-1"), clock = skewed::nowMillis, newMutationId = { MutationId(uuid(99)) })
+        val stamped = runner.run(
+            LocalMutation {
+                val now = nextTimestamp(SyncTable.EXERCISES, RecordId("ex-1"))
+                put(exercise("ex-1", updatedAt = now, nombre = "edited"))
+                now
+            },
+        )
+
+        assertEquals(v2 + 1, stamped)
+        assertEquals(v2 + 1, stored("ex-1")?.updatedAt)
+        // A correct clock ahead of the stored version is used as is.
+        val ahead = RoomLocalMutationRunner(db, DeviceId("dev-1"), clock = { v2 + 60_000 }, newMutationId = { MutationId(uuid(98)) })
+        assertEquals(v2 + 60_000, ahead.run(LocalMutation { nextTimestamp(SyncTable.EXERCISES, RecordId("ex-1")).also { put(exercise("ex-1", updatedAt = it)) } }))
+    }
+
+    @Test
+    fun corruptOutboxPayloadIsQuarantinedAndDoesNotBlockTheQueue() = runTest {
+        markBootstrapped("c1")
+        val dao = db.syncDao()
+        dao.insertOutbox(
+            OutboxMutationEntity(
+                mutationId = uuid(50), deviceId = "dev-1", payloadJson = "{not json", createdAt = T,
+                attemptCount = 0, lastErrorCode = null, sequence = dao.nextOutboxSequence(), status = OutboxStatus.PENDING,
+            ),
+        )
+        val good = enqueue("ex-good")
+        api.onPush = ::accept
+
+        assertEquals(SyncResult.Success(pushed = 1, pulled = 0, quarantined = 1), repository().syncOnce())
+        assertEquals(listOf(listOf(good)), api.pushedIds())
+        val corrupt = outboxStatus(uuid(50))
+        assertEquals(OutboxStatus.QUARANTINED, corrupt.status)
+        assertEquals(SyncRepositoryImpl.CORRUPT_PAYLOAD, corrupt.lastErrorCode)
+    }
+
+    @Test
+    fun pushThatAcceptsNothingRecordsTheFailureAndStops() = runTest {
+        markBootstrapped("c1")
+        val a = enqueue("ex-a")
+        api.onPush = { PushResponse(emptyList(), emptyList()) }
+
+        assertEquals(SyncResult.Retryable(null, 0), repository().syncOnce())
+        assertEquals(1, api.pushRequests.size)
+        val row = outboxStatus(a)
+        assertEquals(OutboxStatus.PENDING, row.status)
+        assertEquals(1, row.attemptCount)
+        assertEquals("NONE_ACCEPTED", row.lastErrorCode)
+    }
+
+    @Test
+    fun otherPullErrorsKeepTheCursor() = runTest {
+        markBootstrapped("c1")
+        api.onPull = { throw apiError("INVALID_REQUEST") }
+        assertEquals(SyncResult.Failed("INVALID_REQUEST", 0), repository().syncOnce())
+
+        api.onPull = { throw apiError("RATE_LIMITED", status = 429, retryable = true, retryAfterSeconds = 5) }
+        assertEquals(SyncResult.Retryable(5_000, 0), repository().syncOnce())
+
+        assertEquals("c1", db.syncDao().cursor()?.cursor)
+        assertEquals(BootstrapState.COMPLETED, db.syncDao().bootstrapCheckpoint()?.state)
+    }
+
+    @Test
+    fun statusIsPerUser() = runTest {
+        markBootstrapped("c1")
+        val repo = repository()
+        repo.syncOnce()
+        assertEquals(SyncResult.Success(0, 0, 0), repo.observeStatus().first().lastResult)
+
+        val other = Room.inMemoryDatabaseBuilder(context, GymLogDatabase::class.java).build()
+        try {
+            databases.state.value = OpenUserDatabase("user_other", other)
+            val status = repo.observeStatus().first()
+            assertNull("another account never sees this account's result", status.lastResult)
+            assertEquals(false, status.restoreComplete)
+        } finally {
+            other.close()
+        }
+    }
+
     // ---- Bootstrap ----
+
+    @Test
+    fun bootstrapRestartsFromScratchWhenTheCheckpointCursorIsInvalid() = runTest {
+        db.syncDao().saveBootstrapCheckpoint(BootstrapCheckpointEntity(state = BootstrapState.IN_PROGRESS, lastCursor = "p1", pagesApplied = 3, updatedAt = T))
+        api.onPull = { cursor ->
+            when (cursor) {
+                "p1" -> throw apiError("INVALID_CURSOR")
+                null -> page("q1", hasMore = false, change("ex-1", 1))
+                else -> error("unexpected cursor $cursor")
+            }
+        }
+
+        BootstrapRepository(api, locks).run(USER, db)
+
+        assertEquals(listOf("p1", null), api.pullCursors)
+        val checkpoint = db.syncDao().bootstrapCheckpoint()!!
+        assertTrue(checkpoint.completed)
+        assertEquals(1, checkpoint.pagesApplied)
+        assertEquals("q1", db.syncDao().cursor()?.cursor)
+    }
+
+    @Test
+    fun invalidCursorFromAnEmptyCursorIsNotRetriedForever() = runTest {
+        api.onPull = { throw apiError("INVALID_CURSOR") }
+        try {
+            BootstrapRepository(api, locks).run(USER, db)
+            fail("must propagate")
+        } catch (e: SyncApiException.Api) {
+            assertEquals(ApiErrorCode.INVALID_CURSOR, e.code)
+        }
+        assertEquals(listOf<String?>(null), api.pullCursors)
+    }
+
 
     @Test
     fun bootstrapAppliesEveryTableAndTombstoneAndMarksReady() = runTest {
@@ -468,8 +611,8 @@ class SyncRepositoryTest {
 
     private fun page(cursor: String, hasMore: Boolean, vararg changes: ExerciseChange) = PullResponse(changes.toList(), cursor, hasMore)
 
-    private fun change(id: String, serverVersion: Long, nombre: String = "server $id") =
-        ExerciseChange(exercise(id, nombre = nombre), serverVersion)
+    private fun change(id: String, serverVersion: Long, nombre: String = "server $id", updatedAt: Long = T) =
+        ExerciseChange(exercise(id, updatedAt = updatedAt, nombre = nombre), serverVersion)
 
     private fun apiError(
         code: String,

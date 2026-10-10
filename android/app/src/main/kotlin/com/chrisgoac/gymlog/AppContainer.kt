@@ -1,12 +1,17 @@
 package com.chrisgoac.gymlog
 
 import android.app.Application
+import android.content.Context
 import com.chrisgoac.gymlog.auth.ClerkAuthGateway
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
 import com.chrisgoac.gymlog.data.sync.BootstrapRepository
 import com.chrisgoac.gymlog.data.sync.ServerOffsetClock
 import com.chrisgoac.gymlog.data.sync.SyncLocks
 import com.chrisgoac.gymlog.data.sync.SyncRepositoryImpl
+import com.chrisgoac.gymlog.database.GymLogDatabase
+import com.chrisgoac.gymlog.database.LocalMutationRunner
+import com.chrisgoac.gymlog.database.LocalMutationScope
+import com.chrisgoac.gymlog.database.RoomLocalMutationRunner
 import com.chrisgoac.gymlog.database.UserDatabaseManager
 import com.chrisgoac.gymlog.database.UserDatabaseManagerImpl
 import com.chrisgoac.gymlog.domain.DefaultSyncUseCases
@@ -14,6 +19,7 @@ import com.chrisgoac.gymlog.domain.SyncClock
 import com.chrisgoac.gymlog.domain.SyncRepository
 import com.chrisgoac.gymlog.domain.SyncUseCases
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
+import com.chrisgoac.gymlog.model.DeviceId
 import com.chrisgoac.gymlog.network.AuthSessionProvider
 import com.chrisgoac.gymlog.network.AuthState
 import com.chrisgoac.gymlog.network.ServerClock
@@ -25,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.util.UUID
 
 /** Manual DI root, one per process. */
 class AppContainer(application: Application) {
@@ -50,6 +57,16 @@ class AppContainer(application: Application) {
     /** Stamps updatedAt/deletedAt of local writes (device now + server offset). */
     val syncClock: SyncClock = ServerOffsetClock(serverClock)
 
+    /** Stable per installation (contract `deviceId`, 1..128 chars); never derived from the account. */
+    private val deviceId: DeviceId by lazy { installationDeviceId(application) }
+
+    /**
+     * Local writes of [database] (the open account's): domain rows + outbox in one transaction,
+     * stamped through [LocalMutationScope.nextTimestamp] with [syncClock].
+     */
+    fun localMutationRunner(database: GymLogDatabase): LocalMutationRunner =
+        RoomLocalMutationRunner(database, deviceId, clock = syncClock::nowMillis)
+
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val syncLocks = SyncLocks()
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)
@@ -65,6 +82,15 @@ class AppContainer(application: Application) {
         .also { it.start() }
 
     private companion object {
+        fun installationDeviceId(application: Application): DeviceId {
+            val prefs = application.getSharedPreferences("gymlog.installation", Context.MODE_PRIVATE)
+            val existing = prefs.getString("deviceId", null)
+            if (existing != null) return DeviceId(existing)
+            val created = "android-" + UUID.randomUUID()
+            prefs.edit().putString("deviceId", created).apply()
+            return DeviceId(created)
+        }
+
         fun initializeClerk(application: Application, publishableKey: String): Boolean {
             if (publishableKey.isBlank()) return false
             return try {

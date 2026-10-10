@@ -16,7 +16,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             GymLogTheme {
                 val rootState by container.rootStateMachine.state.collectAsState()
-                GymLogRoot(rootState, authGateway = { container.authGateway })
+                GymLogRoot(
+                    rootState,
+                    authGateway = { container.authGateway },
+                    onRetryBootstrap = container.rootStateMachine::retryBootstrap,
+                )
             }
         }
     }

@@ -2,10 +2,13 @@ package com.chrisgoac.gymlog.data.sync
 
 import androidx.room.withTransaction
 import com.chrisgoac.gymlog.database.GymLogDatabase
+import com.chrisgoac.gymlog.database.dao.SyncDao
 import com.chrisgoac.gymlog.database.entity.BootstrapCheckpointEntity
 import com.chrisgoac.gymlog.database.entity.BootstrapState
 import com.chrisgoac.gymlog.database.entity.SyncCursorEntity
+import com.chrisgoac.gymlog.model.ApiErrorCode
 import com.chrisgoac.gymlog.network.SyncApi
+import com.chrisgoac.gymlog.network.SyncApiException
 import kotlinx.coroutines.sync.withLock
 
 /**
@@ -49,12 +52,23 @@ class BootstrapRepository(
         var cursor = checkpoint.lastCursor
         var pages = checkpoint.pagesApplied
         var written = 0
+        val pending = PendingEdits()
         onProgress(progress(pages))
-        do {
-            val page = api.pull(cursor)
+        while (true) {
+            val page = try {
+                api.pull(cursor)
+            } catch (e: SyncApiException.Api) {
+                // The checkpoint cursor is no longer valid: start the download over.
+                if (e.code != ApiErrorCode.INVALID_CURSOR || cursor == null) throw e
+                resetCheckpoint(dao)
+                cursor = null
+                pages = 0
+                onProgress(0f)
+                continue
+            }
             val done = !page.hasMore
             database.withTransaction {
-                written += applier.apply(database, page)
+                written += applier.apply(database, page, pending)
                 val now = clock()
                 dao.saveBootstrapCheckpoint(
                     BootstrapCheckpointEntity(
@@ -69,8 +83,8 @@ class BootstrapRepository(
             pages++
             cursor = page.cursor
             onProgress(if (done) 1f else progress(pages))
-        } while (!done)
-        return written
+            if (done) return written
+        }
     }
 
     /**
@@ -79,10 +93,14 @@ class BootstrapRepository(
      * download's last page. Caller holds the user's sync lock.
      */
     internal suspend fun restartLocked(database: GymLogDatabase): Int {
-        database.syncDao().saveBootstrapCheckpoint(
+        resetCheckpoint(database.syncDao())
+        return resumeLocked(database)
+    }
+
+    private suspend fun resetCheckpoint(dao: SyncDao) {
+        dao.saveBootstrapCheckpoint(
             BootstrapCheckpointEntity(state = BootstrapState.IN_PROGRESS, lastCursor = null, pagesApplied = 0, updatedAt = clock()),
         )
-        return resumeLocked(database)
     }
 
     private fun progress(pagesApplied: Int): Float = pagesApplied / (pagesApplied + 1f)

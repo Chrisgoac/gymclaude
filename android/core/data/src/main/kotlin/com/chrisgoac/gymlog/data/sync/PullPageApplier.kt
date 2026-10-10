@@ -15,8 +15,12 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Explicit DTO -> entity mapping goes through [RecordStore] (core:database mappers). Every change
  * is a full-record replace stamped with the server's `serverVersion`; tombstones are rows with
- * `deletedAt` set. A record that still has a PENDING outbox operation is skipped: the unsynced
- * local edit wins locally until it is pushed, and the server's LWW decision arrives on a later pull.
+ * `deletedAt` set.
+ *
+ * A record with a PENDING outbox operation keeps its local copy only while that operation's
+ * `updatedAt` is strictly greater than the pulled one (it will win LWW once pushed). Otherwise the
+ * server copy is applied: the operation stays queued and the server resolves it on push, so the
+ * device converges instead of holding an edit that has already lost.
  */
 class PullPageApplier internal constructor(
     /** Test seam: runs after each written change, to simulate a failure mid-page. */
@@ -25,24 +29,48 @@ class PullPageApplier internal constructor(
     constructor() : this({})
 
     /** Must run inside a Room transaction. Returns the number of changes written. */
-    suspend fun apply(database: GymLogDatabase, page: PullResponse): Int {
+    suspend fun apply(database: GymLogDatabase, page: PullResponse, pending: PendingEdits = PendingEdits()): Int {
         val store = RecordStore(database)
-        val locallyPending = pendingRecordKeys(database)
+        val localUpdatedAt = pending.refresh(database)
         var written = 0
         page.changes.forEachIndexed { index, change ->
-            if ((change.table to change.record.id.value) in locallyPending) return@forEachIndexed
+            val local = localUpdatedAt[change.table to change.record.id.value]
+            if (local != null && local > change.record.updatedAt) return@forEachIndexed
             store.put(change.record, serverVersion = change.serverVersion)
             written++
             afterChangeWritten(index)
         }
         return written
     }
+}
 
-    private suspend fun pendingRecordKeys(database: GymLogDatabase): Set<Pair<SyncTable, String>> =
-        database.syncDao().pendingOutbox(Int.MAX_VALUE).flatMapTo(HashSet()) { row ->
-            ContractJson.decodeFromString(PushMutation.serializer(), row.payloadJson)
-                .operations.map { it.table to it.record.id.value }
+/**
+ * Highest pending `updatedAt` per (table, id), kept across the pages of one run. Outbox payloads
+ * are immutable, so each one is decoded once; each page only re-reads the pending id list.
+ */
+class PendingEdits {
+    private val decoded = HashMap<String, Map<Pair<SyncTable, String>, Long>>()
+
+    internal suspend fun refresh(database: GymLogDatabase): Map<Pair<SyncTable, String>, Long> {
+        val dao = database.syncDao()
+        val ids = dao.pendingOutboxIds().toSet()
+        decoded.keys.retainAll(ids)
+        val missing = ids - decoded.keys
+        if (missing.isNotEmpty()) {
+            dao.outboxByIds(missing.toList()).forEach { row -> decoded[row.mutationId] = keysOf(row.payloadJson) }
         }
+        val result = HashMap<Pair<SyncTable, String>, Long>()
+        decoded.values.forEach { keys -> keys.forEach { (key, updatedAt) -> result.merge(key, updatedAt, ::maxOf) } }
+        return result
+    }
+
+    /** An undecodable payload protects nothing; push quarantines it as CORRUPT_PAYLOAD. */
+    private fun keysOf(payloadJson: String): Map<Pair<SyncTable, String>, Long> = try {
+        ContractJson.decodeFromString(PushMutation.serializer(), payloadJson)
+            .operations.associate { (it.table to it.record.id.value) to it.record.updatedAt }
+    } catch (_: IllegalArgumentException) {
+        emptyMap() // SerializationException is an IllegalArgumentException.
+    }
 }
 
 /** One mutex per user: at most one push/pull/bootstrap touches a user's sync state at a time (spec 10.5). */
