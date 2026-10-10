@@ -9,7 +9,9 @@ import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
 import com.chrisgoac.gymlog.data.catalog.CatalogAsset
 import com.chrisgoac.gymlog.data.exercise.OfflineExerciseRepository
 import com.chrisgoac.gymlog.data.routine.OfflineRoutineRepository
+import com.chrisgoac.gymlog.data.workout.OfflineWorkoutLogRepository
 import com.chrisgoac.gymlog.data.workout.OfflineWorkoutRepository
+import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
@@ -122,6 +124,9 @@ class AppContainer(private val application: Application) {
     /** Workout sessions (active workout, start flows, weekly summary) of the open account; writes are local (outbox). */
     val workoutRepository: WorkoutRepository =
         OfflineWorkoutRepository(databases, ::localMutationRunner, exerciseRepository, now = syncClock::nowMillis)
+
+    /** Set logging inside a workout (sets, order, notes, history for suggestions); local writes only. */
+    val workoutLogRepository: WorkoutLogRepository = OfflineWorkoutLogRepository(databases, ::localMutationRunner)
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)

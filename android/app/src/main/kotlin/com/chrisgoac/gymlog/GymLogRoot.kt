@@ -33,6 +33,7 @@ import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
+import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.navigation.GymLogApp
 import com.chrisgoac.gymlog.navigation.SettingsServices
@@ -48,6 +49,7 @@ fun GymLogRoot(
     exercises: ExerciseRepository? = null,
     routines: RoutineRepository? = null,
     workouts: WorkoutRepository? = null,
+    workoutLog: WorkoutLogRepository? = null,
 ) {
     when (state) {
         RootState.Loading -> CenteredStatus { HierroLoadingState(stringResource(R.string.root_loading)) }
@@ -56,7 +58,7 @@ fun GymLogRoot(
         is RootState.Bootstrapping -> CenteredStatus {
             HierroLoadingState(stringResource(R.string.root_bootstrapping, (state.progress * 100).roundToInt()))
         }
-        is RootState.Ready -> AccountScope(state.userId) { GymLogApp(settings = settings, exercises = exercises, routines = routines, workouts = workouts) }
+        is RootState.Ready -> AccountScope(state.userId) { GymLogApp(settings = settings, exercises = exercises, routines = routines, workouts = workouts, workoutLog = workoutLog) }
         is RootState.Fatal -> CenteredStatus {
             val config = state.message == "config"
             HierroEmptyState(

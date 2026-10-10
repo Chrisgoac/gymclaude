@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { inferirSalto, INCREMENTO_DEFAULTS, calcularSugerencia, describeMotivo } from '@/lib/progresion';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Equipment } from '@/lib/db/types';
+import type { ModoProgresion, Sugerencia } from '@/lib/progresion';
 
 const defaults = INCREMENTO_DEFAULTS;
 
@@ -106,5 +110,49 @@ describe('describeMotivo', () => {
     expect(describeMotivo({ pesoSugerido: 0, repsSugeridas: 0, motivo: 'off' }, 5)).toBeNull();
     expect(describeMotivo({ pesoSugerido: 0, repsSugeridas: 0, motivo: 'libre' }, 5)).toBeNull();
     expect(describeMotivo({ pesoSugerido: 0, repsSugeridas: 0, motivo: 'sin-historial' }, 5)).toBeNull();
+  });
+});
+
+// Shared with the Android port (android/core/domain ProgressionTest), read in place.
+
+type Num = number | null;
+type ProgressionFixture = {
+  inferirSalto: { name: string; pesos: number[]; equipamiento: Equipment; override: Num; expected: number }[];
+  calcularSugerencia: {
+    name: string;
+    input: {
+      modo: ModoProgresion;
+      ultimo: { peso: number; reps: number }[] | null;
+      objetivo: { repsObjetivo: Num; repsObjetivoMin: Num } | null;
+      salto: number;
+      esCorporal: boolean;
+    };
+    expected: Sugerencia;
+  }[];
+  describeMotivo: { name: string; sugerencia: Sugerencia; salto: number; expected: string | null }[];
+};
+const progressionFixture: ProgressionFixture = JSON.parse(
+  readFileSync(join(process.cwd(), 'contracts/domain/progression.json'), 'utf8'),
+);
+const opt = (v: Num) => (v == null ? undefined : v);
+
+describe('progresión (fixture compartido contracts/domain/progression.json)', () => {
+  it.each(progressionFixture.inferirSalto)('inferirSalto: $name', ({ pesos, equipamiento, override, expected }) => {
+    expect(inferirSalto(pesos, { equipamiento, defaults, override: opt(override) })).toBe(expected);
+  });
+  it.each(progressionFixture.calcularSugerencia)('calcularSugerencia: $name', ({ input, expected }) => {
+    const s = calcularSugerencia({
+      modo: input.modo,
+      ultimo: input.ultimo ?? undefined,
+      objetivo: input.objetivo
+        ? { repsObjetivo: opt(input.objetivo.repsObjetivo), repsObjetivoMin: opt(input.objetivo.repsObjetivoMin) }
+        : undefined,
+      salto: input.salto,
+      esCorporal: input.esCorporal,
+    });
+    expect(s).toEqual(expected);
+  });
+  it.each(progressionFixture.describeMotivo)('describeMotivo: $name', ({ sugerencia, salto, expected }) => {
+    expect(describeMotivo(sugerencia, salto)).toBe(expected);
   });
 });

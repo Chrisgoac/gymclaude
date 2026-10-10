@@ -1,0 +1,47 @@
+{
+  "description": "Cases for lib/progresion.ts (inferirSalto, calcularSugerencia, describeMotivo) and its Android port (core:domain workout/Progression.kt). 'defaults' of inferirSalto are INCREMENTO_DEFAULTS. Weights in kg; null = absent/undefined.",
+  "inferirSalto": [
+    { "name": "override manual gana", "pesos": [60, 62.5], "equipamiento": "barra", "override": 1.25, "expected": 1.25 },
+    { "name": "override 0 se ignora → inferencia", "pesos": [60, 62.5, 65], "equipamiento": "barra", "override": 0, "expected": 2.5 },
+    { "name": "mancuernas de 2 en 2", "pesos": [20, 22, 24], "equipamiento": "mancuerna", "override": null, "expected": 2 },
+    { "name": "un solo peso distinto → default barra", "pesos": [60, 60], "equipamiento": "barra", "override": null, "expected": 2.5 },
+    { "name": "sin historial máquina → default", "pesos": [], "equipamiento": "maquina", "override": null, "expected": 5 },
+    { "name": "peso corporal sin historial → 0", "pesos": [], "equipamiento": "peso_corporal", "override": null, "expected": 0 },
+    { "name": "los ceros no cuentan", "pesos": [0, 0, 10], "equipamiento": "polea", "override": null, "expected": 2.5 },
+    { "name": "discos de 1,25", "pesos": [10, 11.25], "equipamiento": "otro", "override": null, "expected": 1.25 },
+    { "name": "salto raro se ajusta al sano más cercano", "pesos": [60, 63], "equipamiento": "barra", "override": null, "expected": 2.5 },
+    { "name": "MCD de varias diferencias", "pesos": [50, 50.5, 57.5], "equipamiento": "barra", "override": null, "expected": 0.5 },
+    { "name": "sin ruido de coma flotante", "pesos": [15, 12.5, 13.75], "equipamiento": "barra", "override": null, "expected": 1.25 }
+  ],
+  "calcularSugerencia": [
+    { "name": "off repite la última serie", "input": { "modo": "off", "ultimo": [{ "peso": 60, "reps": 8 }, { "peso": 62.5, "reps": 6 }], "objetivo": { "repsObjetivo": 8, "repsObjetivoMin": null }, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 62.5, "repsSugeridas": 6, "motivo": "off" } },
+    { "name": "off sin historial", "input": { "modo": "off", "ultimo": null, "objetivo": null, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 0, "repsSugeridas": 0, "motivo": "off" } },
+    { "name": "entreno libre copia la última", "input": { "modo": "objetivo", "ultimo": [{ "peso": 40, "reps": 10 }], "objetivo": null, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 40, "repsSugeridas": 10, "motivo": "libre" } },
+    { "name": "objetivo sin reps → libre", "input": { "modo": "objetivo", "ultimo": [{ "peso": 40, "reps": 10 }], "objetivo": { "repsObjetivo": null, "repsObjetivoMin": 6 }, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 40, "repsSugeridas": 10, "motivo": "libre" } },
+    { "name": "reps objetivo 0 → libre", "input": { "modo": "doble", "ultimo": [{ "peso": 50, "reps": 5 }], "objetivo": { "repsObjetivo": 0, "repsObjetivoMin": null }, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 50, "repsSugeridas": 5, "motivo": "libre" } },
+    { "name": "sin historial con objetivo", "input": { "modo": "objetivo", "ultimo": null, "objetivo": { "repsObjetivo": 10, "repsObjetivoMin": null }, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 0, "repsSugeridas": 10, "motivo": "sin-historial" } },
+    { "name": "historial vacío = sin historial", "input": { "modo": "doble", "ultimo": [], "objetivo": { "repsObjetivo": 12, "repsObjetivoMin": 8 }, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 0, "repsSugeridas": 12, "motivo": "sin-historial" } },
+    { "name": "objetivo cumplido sube peso", "input": { "modo": "objetivo", "ultimo": [{ "peso": 60, "reps": 8 }, { "peso": 60, "reps": 9 }], "objetivo": { "repsObjetivo": 8, "repsObjetivoMin": null }, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 62.5, "repsSugeridas": 8, "motivo": "subio-peso" } },
+    { "name": "objetivo fallado repite", "input": { "modo": "objetivo", "ultimo": [{ "peso": 60, "reps": 8 }, { "peso": 60, "reps": 7 }], "objetivo": { "repsObjetivo": 8, "repsObjetivoMin": null }, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 60, "repsSugeridas": 8, "motivo": "repite" } },
+    { "name": "modo repite cumplido sube peso", "input": { "modo": "repite", "ultimo": [{ "peso": 60, "reps": 8 }], "objetivo": { "repsObjetivo": 8, "repsObjetivoMin": 6 }, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 62.5, "repsSugeridas": 8, "motivo": "subio-peso" } },
+    { "name": "doble cumplido sube peso y vuelve al mínimo", "input": { "modo": "doble", "ultimo": [{ "peso": 40, "reps": 12 }, { "peso": 40, "reps": 12 }], "objetivo": { "repsObjetivo": 12, "repsObjetivoMin": 8 }, "salto": 2, "esCorporal": false }, "expected": { "pesoSugerido": 42, "repsSugeridas": 8, "motivo": "subio-peso" } },
+    { "name": "doble fallado suma una rep", "input": { "modo": "doble", "ultimo": [{ "peso": 40, "reps": 12 }, { "peso": 40, "reps": 10 }], "objetivo": { "repsObjetivo": 12, "repsObjetivoMin": 8 }, "salto": 2, "esCorporal": false }, "expected": { "pesoSugerido": 40, "repsSugeridas": 11, "motivo": "subio-reps" } },
+    { "name": "doble fallado no pasa del tope", "input": { "modo": "doble", "ultimo": [{ "peso": 40, "reps": 11 }, { "peso": 40, "reps": 12 }], "objetivo": { "repsObjetivo": 12, "repsObjetivoMin": 8 }, "salto": 2, "esCorporal": false }, "expected": { "pesoSugerido": 40, "repsSugeridas": 12, "motivo": "subio-reps" } },
+    { "name": "doble sin mínimo usa tope - 4", "input": { "modo": "doble", "ultimo": [{ "peso": 30, "reps": 10 }], "objetivo": { "repsObjetivo": 10, "repsObjetivoMin": null }, "salto": 5, "esCorporal": false }, "expected": { "pesoSugerido": 35, "repsSugeridas": 6, "motivo": "subio-peso" } },
+    { "name": "doble con mínimo mayor que el tope", "input": { "modo": "doble", "ultimo": [{ "peso": 100, "reps": 5 }], "objetivo": { "repsObjetivo": 5, "repsObjetivoMin": 8 }, "salto": 2.5, "esCorporal": false }, "expected": { "pesoSugerido": 102.5, "repsSugeridas": 5, "motivo": "subio-peso" } },
+    { "name": "doble con tope bajo: mínimo 1", "input": { "modo": "doble", "ultimo": [{ "peso": 140, "reps": 3 }], "objetivo": { "repsObjetivo": 3, "repsObjetivoMin": null }, "salto": 5, "esCorporal": false }, "expected": { "pesoSugerido": 145, "repsSugeridas": 1, "motivo": "subio-peso" } },
+    { "name": "corporal cumplido suma una rep a la última", "input": { "modo": "objetivo", "ultimo": [{ "peso": 0, "reps": 10 }, { "peso": 0, "reps": 12 }], "objetivo": { "repsObjetivo": 10, "repsObjetivoMin": null }, "salto": 0, "esCorporal": true }, "expected": { "pesoSugerido": 0, "repsSugeridas": 13, "motivo": "subio-reps" } },
+    { "name": "corporal fallado repite el objetivo", "input": { "modo": "objetivo", "ultimo": [{ "peso": 0, "reps": 10 }, { "peso": 0, "reps": 8 }], "objetivo": { "repsObjetivo": 10, "repsObjetivoMin": null }, "salto": 0, "esCorporal": true }, "expected": { "pesoSugerido": 0, "repsSugeridas": 10, "motivo": "repite" } },
+    { "name": "corporal doble fallado repite el tope", "input": { "modo": "doble", "ultimo": [{ "peso": 0, "reps": 12 }], "objetivo": { "repsObjetivo": 15, "repsObjetivoMin": 10 }, "salto": 0, "esCorporal": true }, "expected": { "pesoSugerido": 0, "repsSugeridas": 15, "motivo": "repite" } }
+  ],
+  "describeMotivo": [
+    { "name": "sube peso 2,5", "sugerencia": { "pesoSugerido": 62.5, "repsSugeridas": 8, "motivo": "subio-peso" }, "salto": 2.5, "expected": "▲ +2.5 kg" },
+    { "name": "sube peso entero", "sugerencia": { "pesoSugerido": 105, "repsSugeridas": 8, "motivo": "subio-peso" }, "salto": 5, "expected": "▲ +5 kg" },
+    { "name": "sube peso 1,25", "sugerencia": { "pesoSugerido": 11.25, "repsSugeridas": 8, "motivo": "subio-peso" }, "salto": 1.25, "expected": "▲ +1.25 kg" },
+    { "name": "sube reps", "sugerencia": { "pesoSugerido": 40, "repsSugeridas": 11, "motivo": "subio-reps" }, "salto": 2, "expected": "▲ +1 rep" },
+    { "name": "repite", "sugerencia": { "pesoSugerido": 60, "repsSugeridas": 8, "motivo": "repite" }, "salto": 2.5, "expected": "= repite" },
+    { "name": "sin historial sin badge", "sugerencia": { "pesoSugerido": 0, "repsSugeridas": 10, "motivo": "sin-historial" }, "salto": 2.5, "expected": null },
+    { "name": "libre sin badge", "sugerencia": { "pesoSugerido": 40, "repsSugeridas": 10, "motivo": "libre" }, "salto": 2.5, "expected": null },
+    { "name": "off sin badge", "sugerencia": { "pesoSugerido": 40, "repsSugeridas": 10, "motivo": "off" }, "salto": 2.5, "expected": null }
+  ]
+}

@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -140,19 +139,6 @@ class TrainHomeViewModel(
         startError.value = error
         events.send(TrainEvent.StartFailed(error))
     }
-
-    private companion object {
-        const val STOP_TIMEOUT_MILLIS = 5_000L
-    }
-}
-
-data class ActiveWorkoutUiState(val loaded: Boolean = false, val workout: WorkoutAggregate? = null)
-
-/** Read-only view of one workout for the placeholder screen (Task 5 replaces it with real logging). */
-class ActiveWorkoutPlaceholderViewModel(workouts: WorkoutRepository, sessionId: String) : ViewModel() {
-    val state: StateFlow<ActiveWorkoutUiState> = workouts.observeWorkout(sessionId)
-        .map { ActiveWorkoutUiState(loaded = true, workout = it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), ActiveWorkoutUiState())
 
     private companion object {
         const val STOP_TIMEOUT_MILLIS = 5_000L

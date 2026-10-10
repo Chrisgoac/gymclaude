@@ -38,9 +38,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
+import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
-import com.chrisgoac.gymlog.train.ActiveWorkoutPlaceholderScreen
-import com.chrisgoac.gymlog.train.ActiveWorkoutPlaceholderViewModel
+import com.chrisgoac.gymlog.train.ActiveWorkoutScreen
+import com.chrisgoac.gymlog.train.WorkoutViewModel
 import com.chrisgoac.gymlog.train.StartWorkoutUseCase
 import com.chrisgoac.gymlog.train.TrainEvent
 import com.chrisgoac.gymlog.train.TrainHomeScreen
@@ -83,6 +84,7 @@ fun GymLogApp(
     exercises: ExerciseRepository? = null,
     routines: RoutineRepository? = null,
     workouts: WorkoutRepository? = null,
+    workoutLog: WorkoutLogRepository? = null,
 ) {
     val colors = HierroTheme.colors
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -95,7 +97,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -125,6 +127,7 @@ private fun GymLogNavHost(
     exercises: ExerciseRepository?,
     routines: RoutineRepository?,
     workouts: WorkoutRepository?,
+    workoutLog: WorkoutLogRepository?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
     // and it survives navigation and rotation, but never another account.
@@ -178,11 +181,15 @@ private fun GymLogNavHost(
             }
             composable<GymLogDestination.ActiveWorkout> { entry ->
                 val sessionId = entry.toRoute<GymLogDestination.ActiveWorkout>().sessionId
-                if (workouts == null) {
+                if (workouts == null || workoutLog == null || exercises == null || routines == null) {
                     SmokeScreen(GymLogDestination.Train, navController, secondary = true)
                 } else {
-                    val viewModel = viewModel(key = sessionId) { ActiveWorkoutPlaceholderViewModel(workouts, sessionId) }
-                    ActiveWorkoutPlaceholderScreen(viewModel, onBack = { navController.popBackStack() })
+                    // Typed drafts live in the entry's SavedStateHandle (process death); the session itself is in Room.
+                    // Rest timer (Task 6) hooks into onSetCompleted.
+                    val viewModel = viewModel(key = sessionId) {
+                        WorkoutViewModel(sessionId, workouts, workoutLog, exercises, routines, createSavedStateHandle())
+                    }
+                    ActiveWorkoutScreen(viewModel, onBack = { navController.popBackStack() })
                 }
             }
         }

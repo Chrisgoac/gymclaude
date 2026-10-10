@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
                     exercises = container.exerciseRepository,
                     routines = container.routineRepository,
                     workouts = container.workoutRepository,
+                    workoutLog = container.workoutLogRepository,
                 )
             }
         }

@@ -1,0 +1,536 @@
+package com.chrisgoac.gymlog.train
+
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.chrisgoac.gymlog.domain.exercise.Equipment
+import com.chrisgoac.gymlog.domain.exercise.Exercise
+import com.chrisgoac.gymlog.domain.exercise.ExerciseFilter
+import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
+import com.chrisgoac.gymlog.domain.routine.Routine
+import com.chrisgoac.gymlog.domain.routine.RoutineRepository
+import com.chrisgoac.gymlog.domain.workout.ExerciseHistory
+import com.chrisgoac.gymlog.domain.workout.FieldParse
+import com.chrisgoac.gymlog.domain.workout.HistorySet
+import com.chrisgoac.gymlog.domain.workout.Progression
+import com.chrisgoac.gymlog.domain.workout.ProgressionSettings
+import com.chrisgoac.gymlog.domain.workout.RepTarget
+import com.chrisgoac.gymlog.domain.workout.SetChange
+import com.chrisgoac.gymlog.domain.workout.SetFieldError
+import com.chrisgoac.gymlog.domain.workout.SetValidation
+import com.chrisgoac.gymlog.domain.workout.Suggestion
+import com.chrisgoac.gymlog.domain.workout.WorkoutAggregate
+import com.chrisgoac.gymlog.domain.workout.WorkoutLimits
+import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
+import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
+import com.chrisgoac.gymlog.domain.workout.WorkoutSet
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+enum class WorkoutLogStatus { Loading, Ready, Missing, Failed }
+
+/** Routine target for one exercise of the workout. */
+data class ExerciseTarget(val sets: Int?, val repsMin: Int?, val repsMax: Int?, val restSeconds: Int?)
+
+/**
+ * One set row. [weightText]/[repsText] are what the field shows: the typed draft while there is
+ * one, otherwise the stored value. Errors are for the typed draft (nothing invalid is stored).
+ */
+data class SetRowUi(
+    val id: String,
+    val number: Int,
+    val weightText: String,
+    val repsText: String,
+    val warmup: Boolean,
+    val completed: Boolean,
+    val weightError: SetFieldError? = null,
+    val repsError: SetFieldError? = null,
+    /** The set in the same position last time, if any. */
+    val previous: HistorySet? = null,
+)
+
+data class ExerciseLogUi(
+    val id: String,
+    val exerciseId: String,
+    /** Null when the exercise no longer exists. */
+    val name: String?,
+    val target: ExerciseTarget?,
+    /** Last set of the previous session of this exercise, and that session's date. */
+    val previous: HistorySet?,
+    val previousDate: Long?,
+    val suggestion: Suggestion?,
+    /** Short progression badge ("▲ +2.5 kg"), or null for none. */
+    val suggestionBadge: String?,
+    val sets: List<SetRowUi>,
+    val isFirst: Boolean,
+    val isLast: Boolean,
+)
+
+data class WorkoutLogUiState(
+    val status: WorkoutLogStatus = WorkoutLogStatus.Loading,
+    val startedAt: Long? = null,
+    val notes: String = "",
+    val notesTooLong: Boolean = false,
+    val exercises: List<ExerciseLogUi> = emptyList(),
+    val pickerOpen: Boolean = false,
+    val pickerQuery: String = "",
+    /** A local write failed (storage): shown until dismissed; the typed values are kept. */
+    val writeFailed: Boolean = false,
+)
+
+/**
+ * Logging screen of one workout. Typed weight/reps stay as text drafts (saved in [savedState], so
+ * they survive process death) and reach Room only once they parse: each valid field edit is
+ * committed ~[debounceMillis] after the last keystroke, while completing or adding a set commits
+ * at once. Every committed change is one repository call (one local mutation).
+ *
+ * Writes run in a scope that outlives the ViewModel and are serialized, so [flushPending] (on
+ * leave) and [onCleared] still persist what was typed. [onSetCompleted] receives the routine's rest
+ * seconds for the completed set (the rest timer hook).
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class WorkoutViewModel(
+    private val sessionId: String,
+    private val workouts: WorkoutRepository,
+    private val log: WorkoutLogRepository,
+    exercises: ExerciseRepository,
+    private val routines: RoutineRepository,
+    private val savedState: SavedStateHandle,
+    private val onSetCompleted: (restSeconds: Int?) -> Unit = {},
+    private val debounceMillis: Long = DEBOUNCE_MILLIS,
+) : ViewModel() {
+    private val local = MutableStateFlow(restore())
+
+    /** Not tied to viewModelScope: a commit started on leave must finish after the ViewModel is cleared. */
+    private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val writeLock = Mutex()
+    private val timers = mutableMapOf<String, Job>()
+
+    private val workout: Flow<WorkoutAggregate?> = workouts.observeWorkout(sessionId)
+        .shareIn(viewModelScope, SharingStarted.WhileSubscribed(), replay = 1)
+
+    private val snapshot: Flow<Snapshot> = combine(
+        workout,
+        workout.map { w -> w?.let { HistoryKey(it.exercises.map { e -> e.exerciseId }.toSet(), it.session.gymId) } }
+            .distinctUntilChanged()
+            .flatMapLatest { key -> if (key == null) flowOf(emptyMap()) else log.observeExerciseHistory(key.exerciseIds, sessionId, key.gymId) },
+        workout.map { it?.session?.routineId }.distinctUntilChanged()
+            .flatMapLatest { id -> if (id == null) flowOf(null) else routines.observeRoutine(id) },
+        exercises.observeExercises().map { all -> all.associateBy { it.id } },
+        log.observeProgressionSettings(),
+    ) { w, history, routine, catalog, settings -> Snapshot(w, history, routine, catalog, settings) }
+
+    val state: StateFlow<WorkoutLogUiState> = combine(snapshot, local, ::build)
+        .onStart { emit(WorkoutLogUiState()) }
+        .catch { emit(WorkoutLogUiState(WorkoutLogStatus.Failed)) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), WorkoutLogUiState())
+
+    /** Exercises matching the picker query; empty while the picker is closed. */
+    val pickerResults: StateFlow<List<Exercise>> = local
+        .map { if (it.pickerOpen) it.pickerQuery else null }
+        .distinctUntilChanged()
+        .flatMapLatest { query -> if (query == null) flowOf(emptyList()) else exercises.observeExercises(ExerciseFilter(query = query)) }
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    init {
+        // Restored drafts were typed but maybe never committed: commit the valid ones again.
+        local.value.drafts.keys.forEach(::schedule)
+        if (local.value.notes != null) schedule(NOTES_KEY)
+    }
+
+    // ---- Set fields ----
+
+    fun onWeight(setId: String, text: String) = editDraft(setId) { it.copy(weight = text) }
+
+    fun onReps(setId: String, text: String) = editDraft(setId) { it.copy(reps = text) }
+
+    private fun editDraft(setId: String, transform: (SetDraft) -> SetDraft) {
+        val next = update { l ->
+            l.copy(drafts = l.drafts + (setId to transform(l.drafts[setId] ?: SetDraft())), completionErrors = l.completionErrors - setId)
+        }
+        val draft = next.drafts.getValue(setId)
+        // Only something valid is worth waiting for; an invalid latest text cancels the pending write.
+        if (draft.hasValidField()) schedule(setId) else cancelTimer(setId)
+    }
+
+    fun setWarmup(setId: String, warmup: Boolean) = launchWrite { log.updateSet(setId, SetChange(warmup = warmup)) }
+
+    /**
+     * Commits the set now and marks it completed. Repeated taps are ignored; the hook fires once.
+     * Invalid fields or zero reps leave it open with the error shown.
+     */
+    fun completeSet(setId: String) {
+        val current = local.value
+        if (setId in current.completed) return
+        val draft = current.drafts[setId]
+        if (draft != null && draft.hasInvalidField()) return
+        update { it.copy(completed = it.completed + setId) }
+        cancelTimer(setId)
+        writeScope.launch {
+            val stored = currentSet(setId)
+            val reps = draft?.reps?.let { (SetValidation.parseReps(it) as? FieldParse.Valid)?.value } ?: stored?.reps
+            val error = if (stored == null) null else reps?.let(SetValidation::completionError)
+            if (stored == null || error != null) {
+                update { it.copy(completed = it.completed - setId, completionErrors = if (error != null) it.completionErrors + (setId to error) else it.completionErrors) }
+                // Whatever valid was typed is still stored.
+                commitSet(setId)
+                return@launch
+            }
+            if (!commitSet(setId)) {
+                update { it.copy(completed = it.completed - setId) }
+                return@launch
+            }
+            // The committed draft is the stored value now; a newer one typed meanwhile is kept.
+            update { l -> if (l.drafts[setId] == draft) l.copy(drafts = l.drafts - setId) else l }
+            onSetCompleted(restSecondsFor(setId))
+        }
+    }
+
+    /** Takes the completed mark off (nothing is written). */
+    fun reopenSet(setId: String) {
+        update { it.copy(completed = it.completed - setId) }
+    }
+
+    /** Appends a set copying the last one (pending edits first), or the suggestion for the first set. */
+    fun addSet(loggedExerciseId: String) {
+        if (loggedExerciseId in local.value.addingSets) return
+        update { it.copy(addingSets = it.addingSets + loggedExerciseId) }
+        writeScope.launch {
+            try {
+                val exercise = freshWorkout()?.exercises?.firstOrNull { it.id == loggedExerciseId } ?: return@launch
+                exercise.sets.forEach { flushSet(it.id) }
+                val last = exercise.sets.lastOrNull()
+                val (weight, reps) = if (last != null) {
+                    val draft = local.value.drafts[last.id]
+                    (draft?.validWeight() ?: last.weight) to (draft?.validReps() ?: last.reps)
+                } else {
+                    state.value.exercises.firstOrNull { it.id == loggedExerciseId }?.suggestion
+                        ?.takeIf { SetValidation.isStorable(it.weight, it.reps) }
+                        ?.let { it.weight to it.reps }
+                        ?: (0.0 to 0)
+                }
+                write { log.addSet(loggedExerciseId, weight, reps) }
+            } finally {
+                update { it.copy(addingSets = it.addingSets - loggedExerciseId) }
+            }
+        }
+    }
+
+    fun removeSet(setId: String) {
+        cancelTimer(setId)
+        forget(setOf(setId))
+        launchWrite { log.removeSet(setId) }
+    }
+
+    fun moveSet(setId: String, delta: Int) = launchWrite { log.moveSet(setId, delta) }
+
+    // ---- Exercises ----
+
+    fun openPicker() {
+        update { it.copy(pickerOpen = true, pickerQuery = "") }
+    }
+
+    fun closePicker() {
+        update { it.copy(pickerOpen = false, pickerQuery = "") }
+    }
+
+    fun onPickerQuery(value: String) {
+        update { it.copy(pickerQuery = value) }
+    }
+
+    /** Adds [exercise] at the end and closes the picker; a second tap while it is being added is ignored. */
+    fun addExercise(exercise: Exercise) {
+        if (local.value.addingExercise) return
+        update { it.copy(addingExercise = true, pickerOpen = false, pickerQuery = "") }
+        writeScope.launch {
+            try {
+                write { log.addExercise(sessionId, exercise.id) }
+            } finally {
+                update { it.copy(addingExercise = false) }
+            }
+        }
+    }
+
+    fun removeExercise(loggedExerciseId: String) {
+        writeScope.launch {
+            val setIds = freshWorkout()?.exercises?.firstOrNull { it.id == loggedExerciseId }?.sets?.map { it.id }.orEmpty()
+            setIds.forEach(::cancelTimer)
+            forget(setIds.toSet())
+            write { log.removeExercise(loggedExerciseId) }
+        }
+    }
+
+    fun moveExercise(loggedExerciseId: String, delta: Int) = launchWrite { log.moveExercise(loggedExerciseId, delta) }
+
+    // ---- Notes ----
+
+    fun onNotes(text: String) {
+        update { it.copy(notes = text) }
+        if (notesValid(text)) schedule(NOTES_KEY) else cancelTimer(NOTES_KEY)
+    }
+
+    fun dismissWriteError() {
+        update { it.copy(writeFailed = false) }
+    }
+
+    // ---- Flushing ----
+
+    /** Commits every pending edit now (call before leaving the screen or finishing). */
+    fun flushPending(): Job = writeScope.launch { flushAll() }
+
+    override fun onCleared() {
+        writeScope.launch { flushAll() }
+    }
+
+    private suspend fun flushAll() {
+        local.value.drafts.keys.forEach { flushSet(it) }
+        cancelTimer(NOTES_KEY)
+        commitNotes()
+    }
+
+    private suspend fun flushSet(setId: String) {
+        cancelTimer(setId)
+        commitSet(setId)
+    }
+
+    private fun schedule(key: String) {
+        cancelTimer(key)
+        timers[key] = writeScope.launch {
+            delay(debounceMillis)
+            timers.remove(key)
+            if (key == NOTES_KEY) commitNotes() else commitSet(key)
+        }
+    }
+
+    private fun cancelTimer(key: String) {
+        timers.remove(key)?.cancel()
+    }
+
+    /** Writes the draft's valid fields (field by field). False if a write failed. */
+    private suspend fun commitSet(setId: String): Boolean {
+        val draft = local.value.drafts[setId] ?: return true
+        val change = SetChange(weight = draft.validWeight(), reps = draft.validReps())
+        if (change == SetChange()) return true
+        return write { log.updateSet(setId, change) }
+    }
+
+    private suspend fun commitNotes(): Boolean {
+        val notes = local.value.notes ?: return true
+        if (!notesValid(notes)) return true
+        return write { log.updateNotes(sessionId, notes) }
+    }
+
+    private fun launchWrite(block: suspend () -> Unit) {
+        writeScope.launch { write(block) }
+    }
+
+    /** Serialized local write; a failure is shown, never thrown. */
+    private suspend fun write(block: suspend () -> Unit): Boolean = writeLock.withLock {
+        try {
+            block()
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            update { it.copy(writeFailed = true) }
+            false
+        }
+    }
+
+    /** Read straight from the repository: also valid after the ViewModel (and its shared flows) is cleared. */
+    private suspend fun freshWorkout(): WorkoutAggregate? = workouts.observeWorkout(sessionId).first()
+
+    private suspend fun currentSet(setId: String): WorkoutSet? =
+        freshWorkout()?.exercises?.flatMap { it.sets }?.firstOrNull { it.id == setId }
+
+    private suspend fun restSecondsFor(setId: String): Int? {
+        val current = freshWorkout() ?: return null
+        val exerciseId = current.exercises.firstOrNull { e -> e.sets.any { it.id == setId } }?.exerciseId ?: return null
+        val routineId = current.session.routineId ?: return null
+        return routines.observeRoutine(routineId).first()?.exercises?.firstOrNull { it.exerciseId == exerciseId }?.restSeconds
+    }
+
+    private fun forget(setIds: Set<String>) {
+        update { it.copy(drafts = it.drafts - setIds, completed = it.completed - setIds, completionErrors = it.completionErrors - setIds) }
+    }
+
+    // ---- State ----
+
+    private fun build(data: Snapshot, l: Local): WorkoutLogUiState {
+        val aggregate = data.workout
+            ?: return WorkoutLogUiState(WorkoutLogStatus.Missing, pickerOpen = l.pickerOpen, pickerQuery = l.pickerQuery, writeFailed = l.writeFailed)
+        val routine = data.routine?.takeIf { aggregate.session.routineId == it.id }
+        val notes = l.notes ?: aggregate.session.notes.orEmpty()
+        return WorkoutLogUiState(
+            status = WorkoutLogStatus.Ready,
+            startedAt = aggregate.session.startedAt,
+            notes = notes,
+            notesTooLong = !notesValid(notes),
+            exercises = aggregate.exercises.mapIndexed { index, exercise ->
+                val target = routine?.exercises?.firstOrNull { it.exerciseId == exercise.exerciseId }
+                    ?.let { ExerciseTarget(it.sets, it.repsMin, it.repsMax, it.restSeconds) }
+                val history = data.history[exercise.exerciseId]
+                val definition = data.exercises[exercise.exerciseId]
+                val (suggestion, badge) = suggestionFor(definition, history, target, routine != null, data.settings)
+                ExerciseLogUi(
+                    id = exercise.id,
+                    exerciseId = exercise.exerciseId,
+                    name = exercise.exerciseName ?: definition?.name,
+                    target = target,
+                    previous = history?.lastSet,
+                    previousDate = history?.date,
+                    suggestion = suggestion,
+                    suggestionBadge = badge,
+                    sets = exercise.sets.mapIndexed { position, set -> row(set, position, l, history) },
+                    isFirst = index == 0,
+                    isLast = index == aggregate.exercises.lastIndex,
+                )
+            },
+            pickerOpen = l.pickerOpen,
+            pickerQuery = l.pickerQuery,
+            writeFailed = l.writeFailed,
+        )
+    }
+
+    private fun row(set: WorkoutSet, position: Int, l: Local, history: ExerciseHistory?): SetRowUi {
+        val draft = l.drafts[set.id]
+        return SetRowUi(
+            id = set.id,
+            number = position + 1,
+            weightText = draft?.weight ?: SetValidation.formatWeight(set.weight),
+            repsText = draft?.reps ?: set.reps.toString(),
+            warmup = set.warmup,
+            completed = set.id in l.completed,
+            weightError = draft?.weight?.let { (SetValidation.parseWeight(it) as? FieldParse.Invalid)?.error },
+            repsError = draft?.reps?.let { (SetValidation.parseReps(it) as? FieldParse.Invalid)?.error } ?: l.completionErrors[set.id],
+            previous = history?.sets?.getOrNull(position),
+        )
+    }
+
+    /** PWA LoggedExerciseCard: the routine target only counts in a routine workout. */
+    private fun suggestionFor(
+        exercise: Exercise?,
+        history: ExerciseHistory?,
+        target: ExerciseTarget?,
+        fromRoutine: Boolean,
+        settings: ProgressionSettings,
+    ): Pair<Suggestion?, String?> {
+        if (exercise == null) return null to null
+        val working = history?.workingSets
+        val step = Progression.inferStep(working.orEmpty().map { it.weight }, exercise.equipment, settings.increments, exercise.incrementKg)
+        val suggestion = Progression.suggest(
+            mode = settings.mode,
+            last = working,
+            target = if (fromRoutine) target?.let { RepTarget(repsMax = it.repsMax, repsMin = it.repsMin) } else null,
+            step = step,
+            bodyweight = exercise.equipment == Equipment.PESO_CORPORAL,
+        )
+        return suggestion to Progression.describe(suggestion, step)
+    }
+
+    private fun notesValid(text: String) = text.trim().length <= WorkoutLimits.NOTES_MAX
+
+    private fun update(transform: (Local) -> Local): Local = local.updateAndGet(transform).also(::persist)
+
+    // ---- Saved state (process death) ----
+
+    private fun persist(l: Local) {
+        val ids = ArrayList(l.drafts.keys)
+        savedState[KEY_DRAFT_IDS] = ids
+        savedState[KEY_DRAFT_WEIGHTS] = ArrayList(ids.map { l.drafts.getValue(it).weight ?: ABSENT })
+        savedState[KEY_DRAFT_REPS] = ArrayList(ids.map { l.drafts.getValue(it).reps ?: ABSENT })
+        savedState[KEY_COMPLETED] = ArrayList(l.completed)
+        savedState[KEY_NOTES] = l.notes
+        savedState[KEY_PICKER_OPEN] = l.pickerOpen
+        savedState[KEY_PICKER_QUERY] = l.pickerQuery
+    }
+
+    private fun restore(): Local {
+        val ids = savedState.get<ArrayList<String>>(KEY_DRAFT_IDS).orEmpty()
+        val weights = savedState.get<ArrayList<String>>(KEY_DRAFT_WEIGHTS).orEmpty()
+        val reps = savedState.get<ArrayList<String>>(KEY_DRAFT_REPS).orEmpty()
+        val drafts = if (weights.size == ids.size && reps.size == ids.size) {
+            ids.indices.associate { i -> ids[i] to SetDraft(weights[i].takeIf { it != ABSENT }, reps[i].takeIf { it != ABSENT }) }
+        } else {
+            emptyMap()
+        }
+        return Local(
+            drafts = drafts,
+            completed = savedState.get<ArrayList<String>>(KEY_COMPLETED).orEmpty().toSet(),
+            notes = savedState.get<String>(KEY_NOTES),
+            pickerOpen = savedState.get<Boolean>(KEY_PICKER_OPEN) ?: false,
+            pickerQuery = savedState.get<String>(KEY_PICKER_QUERY).orEmpty(),
+        )
+    }
+
+    /** A field draft: null = not edited (the stored value shows). */
+    private data class SetDraft(val weight: String? = null, val reps: String? = null) {
+        fun validWeight(): Double? = weight?.let { (SetValidation.parseWeight(it) as? FieldParse.Valid)?.value }
+        fun validReps(): Int? = reps?.let { (SetValidation.parseReps(it) as? FieldParse.Valid)?.value }
+        fun hasValidField() = validWeight() != null || validReps() != null
+        fun hasInvalidField() = (weight != null && validWeight() == null) || (reps != null && validReps() == null)
+    }
+
+    private data class Local(
+        val drafts: Map<String, SetDraft> = emptyMap(),
+        val completed: Set<String> = emptySet(),
+        val completionErrors: Map<String, SetFieldError> = emptyMap(),
+        /** Typed notes; null = untouched (the stored notes show). */
+        val notes: String? = null,
+        val pickerOpen: Boolean = false,
+        val pickerQuery: String = "",
+        val writeFailed: Boolean = false,
+        val addingSets: Set<String> = emptySet(),
+        val addingExercise: Boolean = false,
+    )
+
+    private data class HistoryKey(val exerciseIds: Set<String>, val gymId: String?)
+
+    private data class Snapshot(
+        val workout: WorkoutAggregate?,
+        val history: Map<String, ExerciseHistory>,
+        val routine: Routine?,
+        val exercises: Map<String, Exercise>,
+        val settings: ProgressionSettings,
+    )
+
+    private companion object {
+        const val DEBOUNCE_MILLIS = 400L
+        const val STOP_TIMEOUT_MILLIS = 5_000L
+        const val NOTES_KEY = "\u0000notes"
+        /** Marks "not edited" in the saved lists (a typed field never contains NUL). */
+        const val ABSENT = "\u0000"
+        const val KEY_DRAFT_IDS = "workout.draftIds"
+        const val KEY_DRAFT_WEIGHTS = "workout.draftWeights"
+        const val KEY_DRAFT_REPS = "workout.draftReps"
+        const val KEY_COMPLETED = "workout.completed"
+        const val KEY_NOTES = "workout.notes"
+        const val KEY_PICKER_OPEN = "workout.pickerOpen"
+        const val KEY_PICKER_QUERY = "workout.pickerQuery"
+    }
+}

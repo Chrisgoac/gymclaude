@@ -5,10 +5,10 @@ plugins {
 dependencies {
     implementation(project(":core:model"))
     api(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.kotlinx.serialization.json)
 }
 
 // Domain fixtures shared with the PWA are read in place from <repo>/contracts/domain, never copied.

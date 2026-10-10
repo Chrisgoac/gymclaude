@@ -103,6 +103,10 @@ interface LoggedExerciseDao {
     @Query("SELECT * FROM logged_exercises WHERE deletedAt IS NULL ORDER BY orden, id")
     fun observeLive(): Flow<List<LoggedExerciseEntity>>
 
+    /** Live exercises of one session in order; usable inside a mutation transaction. */
+    @Query("SELECT * FROM logged_exercises WHERE sessionId = :sessionId AND deletedAt IS NULL ORDER BY orden, id")
+    suspend fun liveForSession(sessionId: String): List<LoggedExerciseEntity>
+
     @Query("SELECT * FROM logged_exercises ORDER BY id")
     suspend fun getAll(): List<LoggedExerciseEntity>
 }
@@ -116,6 +120,10 @@ interface LoggedSetDao {
 
     @Query("SELECT * FROM logged_sets WHERE deletedAt IS NULL ORDER BY orden, id")
     fun observeLive(): Flow<List<LoggedSetEntity>>
+
+    /** Live sets of one logged exercise in order; usable inside a mutation transaction. */
+    @Query("SELECT * FROM logged_sets WHERE loggedExerciseId = :loggedExerciseId AND deletedAt IS NULL ORDER BY orden, id")
+    suspend fun liveForExercise(loggedExerciseId: String): List<LoggedSetEntity>
 
     @Query("SELECT * FROM logged_sets ORDER BY id")
     suspend fun getAll(): List<LoggedSetEntity>
