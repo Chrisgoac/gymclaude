@@ -136,11 +136,13 @@ interface UserDatabaseManager {
 
 ### Backend gate
 
-- [ ] Run `npx vitest run lib/api/v1 db app/api/v1`.
-- [ ] Run `npm run lint`.
-- [ ] Run `npm run build`.
-- [ ] Confirm legacy PWA sync route tests remain green.
-- [ ] Record row counts for all 14 synchronized tables on a test account before and after bootstrap.
+- [x] Run `npx vitest run lib/api/v1 db app/api/v1`.
+- [x] Run `npm run lint`.
+- [x] Run `npm run build`.
+- [x] Confirm legacy PWA sync route tests remain green.
+- [x] Record row counts for all 14 synchronized tables on a test account before and after bootstrap.
+
+Evidence: [android-phase-01-backend.md](../../verification/android-phase-01-backend.md) (commit `12af079`).
 
 ### Android foundation gate
 
