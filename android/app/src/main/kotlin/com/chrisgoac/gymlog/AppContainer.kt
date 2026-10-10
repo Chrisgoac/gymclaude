@@ -3,11 +3,22 @@ package com.chrisgoac.gymlog
 import android.app.Application
 import com.chrisgoac.gymlog.auth.ClerkAuthGateway
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
+import com.chrisgoac.gymlog.data.sync.BootstrapRepository
+import com.chrisgoac.gymlog.data.sync.ServerOffsetClock
+import com.chrisgoac.gymlog.data.sync.SyncLocks
+import com.chrisgoac.gymlog.data.sync.SyncRepositoryImpl
 import com.chrisgoac.gymlog.database.UserDatabaseManager
 import com.chrisgoac.gymlog.database.UserDatabaseManagerImpl
+import com.chrisgoac.gymlog.domain.DefaultSyncUseCases
+import com.chrisgoac.gymlog.domain.SyncClock
+import com.chrisgoac.gymlog.domain.SyncRepository
+import com.chrisgoac.gymlog.domain.SyncUseCases
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
 import com.chrisgoac.gymlog.network.AuthSessionProvider
 import com.chrisgoac.gymlog.network.AuthState
+import com.chrisgoac.gymlog.network.ServerClock
+import com.chrisgoac.gymlog.network.SyncApi
+import com.chrisgoac.gymlog.network.createSyncApi
 import com.clerk.api.Clerk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +44,24 @@ class AppContainer(application: Application) {
         ClerkAuthGateway(checkNotNull(clerkSession) { "Clerk is not configured" }, appScope)
     }
 
-    val rootStateMachine = RootStateMachine(authSession, databases, PendingBootstrapRunner, appScope, clerkConfigured)
+    /** Offset to the server clock, learned from every sync response `Date` header. */
+    private val serverClock = ServerClock()
+
+    /** Stamps updatedAt/deletedAt of local writes (device now + server offset). */
+    val syncClock: SyncClock = ServerOffsetClock(serverClock)
+
+    private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
+    private val syncLocks = SyncLocks()
+    private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)
+
+    val syncRepository: SyncRepository = SyncRepositoryImpl(databases, syncApi, bootstrapRepository, syncLocks)
+    val syncUseCases: SyncUseCases = DefaultSyncUseCases(syncRepository)
+
+    private val bootstrapRunner = BootstrapRunner { userId, database, onProgress ->
+        bootstrapRepository.run(userId, database, onProgress)
+    }
+
+    val rootStateMachine = RootStateMachine(authSession, databases, bootstrapRunner, appScope, clerkConfigured)
         .also { it.start() }
 
     private companion object {
@@ -53,6 +81,3 @@ private object UnconfiguredAuthSession : AuthSessionProvider {
     override val state: StateFlow<AuthState> = MutableStateFlow(AuthState.SignedOut)
     override suspend fun accessToken(): String? = null
 }
-
-/** TODO(Task 7): replace with the real paged bootstrap (pull all pages, apply catalog, checkpoint). */
-private val PendingBootstrapRunner = BootstrapRunner { _, _, onProgress -> onProgress(1f) }

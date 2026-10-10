@@ -1,0 +1,221 @@
+package com.chrisgoac.gymlog.data.sync
+
+import androidx.room.withTransaction
+import com.chrisgoac.gymlog.database.GymLogDatabase
+import com.chrisgoac.gymlog.database.UserDatabaseManager
+import com.chrisgoac.gymlog.database.entity.OutboxMutationEntity
+import com.chrisgoac.gymlog.database.entity.OutboxStatus
+import com.chrisgoac.gymlog.database.entity.SyncCursorEntity
+import com.chrisgoac.gymlog.domain.SyncRepository
+import com.chrisgoac.gymlog.domain.SyncResult
+import com.chrisgoac.gymlog.domain.SyncStatus
+import com.chrisgoac.gymlog.model.ApiErrorCode
+import com.chrisgoac.gymlog.model.ContractJson
+import com.chrisgoac.gymlog.model.PushMutation
+import com.chrisgoac.gymlog.model.PushRequest
+import com.chrisgoac.gymlog.network.SyncApi
+import com.chrisgoac.gymlog.network.SyncApiException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.sync.withLock
+
+/**
+ * Push-then-pull convergence of the open account's database (spec 10, contracts/v1/README.md).
+ *
+ * Push: PENDING outbox rows in FIFO order, at most [MAX_BATCH_MUTATIONS] per request and well under
+ * the 2 MiB body limit, each resent byte-for-byte (the stored payload). Only ids listed in
+ * `acceptedMutationIds` are deleted. A non-retryable error naming a mutation (`details.mutationId`,
+ * or a `mutations.<i>…` field path) quarantines that one mutation and the rest are resent; an
+ * unattributable one falls back to one-mutation requests so the poison row identifies itself.
+ * Retryable and transport failures stop the run with [SyncResult.Retryable]; 401 stops it with
+ * [SyncResult.SessionRequired] without touching the outbox.
+ *
+ * Pull: from the stored cursor until `hasMore == false`, each page and its cursor in ONE Room
+ * transaction. `INVALID_CURSOR` triggers a replacement bootstrap; an unfinished bootstrap is
+ * resumed instead of pulling incrementally.
+ */
+class SyncRepositoryImpl(
+    private val databases: UserDatabaseManager,
+    private val api: SyncApi,
+    private val bootstrap: BootstrapRepository,
+    private val locks: SyncLocks,
+    private val applier: PullPageApplier = PullPageApplier(),
+    private val clock: () -> Long = System::currentTimeMillis,
+) : SyncRepository {
+    private val running = MutableStateFlow(false)
+    private val lastResult = MutableStateFlow<SyncResult?>(null)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeStatus(): Flow<SyncStatus> = databases.current.flatMapLatest { open ->
+        if (open == null) {
+            combine(running, lastResult) { isRunning, last -> SyncStatus(isRunning, 0, 0, restoreComplete = false, lastResult = last) }
+        } else {
+            val dao = open.database.syncDao()
+            combine(
+                running,
+                lastResult,
+                dao.observeOutboxCount(OutboxStatus.PENDING),
+                dao.observeOutboxCount(OutboxStatus.QUARANTINED),
+                dao.observeBootstrapCheckpoint(),
+            ) { isRunning, last, pending, quarantined, checkpoint ->
+                SyncStatus(isRunning, pending, quarantined, restoreComplete = checkpoint?.completed == true, lastResult = last)
+            }
+        }
+    }
+
+    override suspend fun syncOnce(): SyncResult {
+        val open = databases.current.value ?: return SyncResult.SessionRequired(quarantined = 0)
+        return locks.forUser(open.userId).withLock {
+            running.value = true
+            val run = RunCounters()
+            try {
+                val result = try {
+                    push(open.database, run)
+                    pull(open.database, run)
+                    SyncResult.Success(pushed = run.pushed, pulled = run.pulled, quarantined = run.quarantined)
+                } catch (e: SyncApiException) {
+                    e.toResult(run.quarantined)
+                }
+                lastResult.value = result
+                result
+            } finally {
+                running.value = false
+            }
+        }
+    }
+
+    private class RunCounters {
+        var pushed = 0
+        var pulled = 0
+        var quarantined = 0
+    }
+
+    // ---- Push ----
+
+    private suspend fun push(database: GymLogDatabase, run: RunCounters) {
+        val dao = database.syncDao()
+        var batchLimit = MAX_BATCH_MUTATIONS
+        while (true) {
+            val batch = fitBodyBudget(dao.pendingOutbox(batchLimit))
+            if (batch.isEmpty()) return
+            val mutations = batch.map { ContractJson.decodeFromString(PushMutation.serializer(), it.payloadJson) }
+            val response = try {
+                api.push(PushRequest(mutations))
+            } catch (e: SyncApiException.Api) {
+                if (e.retryable) {
+                    batch.forEach { dao.recordOutboxFailure(it.mutationId, e.errorCode()) }
+                    throw e
+                }
+                val culprit = culpritOf(e, batch)
+                when {
+                    culprit != null -> {
+                        dao.quarantineOutbox(culprit, e.errorCode())
+                        run.quarantined++
+                    }
+                    // Not a per-mutation problem (e.g. INVALID_JSON, 415): quarantining would empty the outbox.
+                    e.code !in PER_MUTATION_CODES -> throw e
+                    // Not attributable: isolate the poison row by sending one mutation per request.
+                    batch.size > 1 -> batchLimit = 1
+                    else -> {
+                        dao.quarantineOutbox(batch.single().mutationId, e.errorCode())
+                        run.quarantined++
+                    }
+                }
+                continue
+            } catch (e: SyncApiException.Transport) {
+                batch.forEach { dao.recordOutboxFailure(it.mutationId, TRANSPORT_ERROR) }
+                throw e
+            } catch (e: SyncApiException.Malformed) {
+                batch.forEach { dao.recordOutboxFailure(it.mutationId, MALFORMED_ERROR) }
+                throw e
+            }
+            val sent = batch.mapTo(HashSet()) { it.mutationId }
+            val accepted = response.acceptedMutationIds.map { it.value }.filter { it in sent }.distinct()
+            // Nothing accepted would resend the same batch forever: try again on the next run.
+            if (accepted.isEmpty()) throw SyncApiException.Malformed("Push accepted none of ${batch.size} mutations")
+            dao.deleteOutbox(accepted)
+            run.pushed += accepted.size
+        }
+    }
+
+    /** Keeps the FIFO prefix whose encoded request stays within [PUSH_BODY_BUDGET_BYTES] (at least one row). */
+    private fun fitBodyBudget(rows: List<OutboxMutationEntity>): List<OutboxMutationEntity> {
+        var size = REQUEST_ENVELOPE_BYTES
+        val fitted = mutableListOf<OutboxMutationEntity>()
+        for (row in rows) {
+            size += row.payloadJson.toByteArray(Charsets.UTF_8).size + 1
+            if (fitted.isNotEmpty() && size > PUSH_BODY_BUDGET_BYTES) break
+            fitted += row
+        }
+        return fitted
+    }
+
+    /** The batch row a non-retryable error points at: `details.mutationId`, or a `mutations.<i>…` field path. */
+    private fun culpritOf(e: SyncApiException.Api, batch: List<OutboxMutationEntity>): String? {
+        e.mutationId?.let { id -> if (batch.any { it.mutationId == id }) return id }
+        val index = e.details?.keys?.firstNotNullOfOrNull { key -> MUTATION_PATH.find(key)?.groupValues?.get(1)?.toIntOrNull() }
+        return index?.let { batch.getOrNull(it)?.mutationId }
+    }
+
+    // ---- Pull ----
+
+    private suspend fun pull(database: GymLogDatabase, run: RunCounters) {
+        val dao = database.syncDao()
+        if (dao.bootstrapCheckpoint()?.completed != true) {
+            run.pulled += bootstrap.resumeLocked(database)
+            return
+        }
+        var cursor = dao.cursor()?.cursor
+        do {
+            val page = try {
+                api.pull(cursor)
+            } catch (e: SyncApiException.Api) {
+                if (e.code != ApiErrorCode.INVALID_CURSOR) throw e
+                run.pulled += bootstrap.restartLocked(database)
+                return
+            }
+            database.withTransaction {
+                run.pulled += applier.apply(database, page)
+                dao.saveCursor(SyncCursorEntity(cursor = page.cursor, updatedAt = clock()))
+            }
+            cursor = page.cursor
+        } while (page.hasMore)
+    }
+
+    private fun SyncApiException.toResult(quarantined: Int): SyncResult = when (this) {
+        is SyncApiException.SessionRequired -> SyncResult.SessionRequired(quarantined)
+        is SyncApiException.Transport, is SyncApiException.Malformed -> SyncResult.Retryable(retryAfterMillis = null, quarantined = quarantined)
+        is SyncApiException.Api ->
+            if (retryable) SyncResult.Retryable(retryAfterSeconds?.let { it * 1000 }, quarantined)
+            else SyncResult.Failed(errorCode(), quarantined)
+    }
+
+    private fun SyncApiException.Api.errorCode(): String = rawCode.ifEmpty { "HTTP_$httpStatus" }
+
+    companion object {
+        /** contracts/v1/README.md recommends at most 20 mutations per request. */
+        const val MAX_BATCH_MUTATIONS = 20
+
+        /** Half of MAX_PUSH_BODY_BYTES (2 MiB): keeps every request well under the server limit. */
+        const val PUSH_BODY_BUDGET_BYTES = 1024 * 1024
+
+        private const val REQUEST_ENVELOPE_BYTES = 16 // {"mutations":[]}
+        private const val TRANSPORT_ERROR = "TRANSPORT"
+        private const val MALFORMED_ERROR = "MALFORMED_RESPONSE"
+        private val MUTATION_PATH = Regex("^mutations[.\\[](\\d+)")
+
+        /** Non-retryable codes caused by one mutation's content (README "Quarantine of poison mutations", plus 413). */
+        private val PER_MUTATION_CODES = setOf(
+            ApiErrorCode.INVALID_REQUEST,
+            ApiErrorCode.RECORD_ID_CONFLICT,
+            ApiErrorCode.INVALID_REFERENCE,
+            ApiErrorCode.FUTURE_TIMESTAMP,
+            ApiErrorCode.UNKNOWN_TABLE,
+            ApiErrorCode.PAYLOAD_TOO_LARGE,
+        )
+    }
+}

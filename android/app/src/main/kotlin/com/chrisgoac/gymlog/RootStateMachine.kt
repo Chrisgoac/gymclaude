@@ -127,7 +127,7 @@ class RootStateMachine(
                 throw cancelled // cancelBootstrap() already reset the bookkeeping.
             } catch (_: Exception) {
                 if (isCurrent()) {
-                    // TODO(Task 7): distinguish retryable (offline) failures and resume from the checkpoint.
+                    // TODO: offer a retry for retryable (offline) failures; the runner already resumes from its checkpoint.
                     bootstrapJob = null
                     bootstrappingUserId = null
                     mutableState.value = RootState.Fatal(BOOTSTRAP)
