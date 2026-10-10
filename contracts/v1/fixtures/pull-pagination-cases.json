@@ -1,0 +1,14 @@
+{
+  "cursorRoundTrips": ["0", "1", "9007199254740992", "9007199254740993", "9223372036854775807"],
+  "invalidCursors": [
+    {"name": "not base64url", "cursor": "!!!"},
+    {"name": "padded", "cursor": "MA=="},
+    {"name": "impossible length", "cursor": "M"},
+    {"name": "negative", "cursor": "LTE"},
+    {"name": "leading zero", "cursor": "MDE"},
+    {"name": "not a number", "cursor": "YWJj"},
+    {"name": "int64 max plus one", "cursor": "OTIyMzM3MjAzNjg1NDc3NTgwOA"},
+    {"name": "far beyond int64", "cursor": "OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk"}
+  ],
+  "pagination": {"totalChanges": 1001, "pageSize": 500, "expectedPageSizes": [500, 500, 1]}
+}

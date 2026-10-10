@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { z } from 'zod';
 import * as schema from '@/db/schema';
@@ -51,6 +51,8 @@ export interface SyncTableAdapter<T extends SyncTableName> {
   /** INSERT … ON CONFLICT DO NOTHING; false si otra transacción la creó antes. */
   insertIfAbsent(tx: PoolTx, values: RowWrite): Promise<boolean>;
   update(tx: PoolTx, userId: string, id: string, values: Partial<RowWrite>): Promise<Record<string, unknown>>;
+  /** Filas del usuario por id (una consulta). Incluye serverVersion; el llamador mapea con toColumns. */
+  fetchOwned(tx: PoolTx, userId: string, ids: string[]): Promise<Record<string, unknown>[]>;
 }
 
 type Reference = readonly [target: SyncPgTable, id: string | null | undefined];
@@ -111,6 +113,12 @@ function defineAdapter<T extends SyncTableName>(table: SyncPgTable, spec: Adapte
     async update(tx, userId, id, values) {
       const [row] = await tx.update(t).set(values as never).where(owned(userId, id)).returning();
       return row as Record<string, unknown>;
+    },
+
+    async fetchOwned(tx, userId, ids) {
+      if (ids.length === 0) return [];
+      const rows = await tx.select().from(t).where(and(eq(t.userId, userId), inArray(t.id, ids)));
+      return rows as Record<string, unknown>[];
     },
   };
 }
