@@ -120,12 +120,12 @@ class SyncRepositoryTest {
         val a = enqueue("ex-a")
         // The request reaches the server but the response is lost.
         api.onPush = { throw SyncApiException.Transport(IOException("timeout")) }
-        assertEquals(SyncResult.Retryable(null, 0), repository().syncOnce())
+        assertEquals(SyncResult.Retryable(null, 0), repository().syncOnce(USER))
         assertEquals(1, outboxStatus(a).attemptCount)
 
         // The retry is replayed by the server: the id comes back (here even twice) as accepted.
         api.onPush = { request -> PushResponse(request.mutations.map { it.mutationId } + request.mutations.map { it.mutationId }, emptyList()) }
-        val result = repository().syncOnce()
+        val result = repository().syncOnce(USER)
 
         assertEquals(SyncResult.Success(pushed = 1, pulled = 0, quarantined = 0), result)
         assertTrue(db.syncDao().allOutbox().isEmpty())
@@ -140,7 +140,7 @@ class SyncRepositoryTest {
         val b = enqueue("ex-b")
         api.onPush = { throw SyncApiException.SessionRequired("HTTP 401") }
 
-        assertEquals(SyncResult.SessionRequired(0), repository().syncOnce())
+        assertEquals(SyncResult.SessionRequired(0), repository().syncOnce(USER))
 
         val rows = db.syncDao().allOutbox()
         assertEquals(listOf(a, b), rows.map { it.mutationId })
@@ -153,10 +153,10 @@ class SyncRepositoryTest {
         markBootstrapped("c1")
         val a = enqueue("ex-a")
         api.onPush = { throw apiError("RATE_LIMITED", status = 429, retryable = true, retryAfterSeconds = 17) }
-        assertEquals(SyncResult.Retryable(retryAfterMillis = 17_000, quarantined = 0), repository().syncOnce())
+        assertEquals(SyncResult.Retryable(retryAfterMillis = 17_000, quarantined = 0), repository().syncOnce(USER))
 
         api.onPush = { throw apiError("WRITE_RACE", status = 409, retryable = true) }
-        assertEquals(SyncResult.Retryable(retryAfterMillis = null, quarantined = 0), repository().syncOnce())
+        assertEquals(SyncResult.Retryable(retryAfterMillis = null, quarantined = 0), repository().syncOnce(USER))
 
         val row = outboxStatus(a)
         assertEquals(OutboxStatus.PENDING, row.status)
@@ -176,7 +176,7 @@ class SyncRepositoryTest {
             accept(request)
         }
 
-        val result = repository().syncOnce()
+        val result = repository().syncOnce(USER)
 
         assertEquals(SyncResult.Success(pushed = 2, pulled = 0, quarantined = 1), result)
         assertEquals(listOf(listOf(a, b, c), listOf(a, c)), api.pushedIds())
@@ -187,7 +187,7 @@ class SyncRepositoryTest {
 
         // Quarantined rows are never resent.
         api.pushRequests.clear()
-        repository().syncOnce()
+        repository().syncOnce(USER)
         assertTrue(api.pushRequests.isEmpty())
     }
 
@@ -201,7 +201,7 @@ class SyncRepositoryTest {
             accept(request)
         }
 
-        assertEquals(SyncResult.Success(pushed = 1, pulled = 0, quarantined = 1), repository().syncOnce())
+        assertEquals(SyncResult.Success(pushed = 1, pulled = 0, quarantined = 1), repository().syncOnce(USER))
         assertEquals(listOf(listOf(a, b), listOf(a)), api.pushedIds())
         assertEquals(OutboxStatus.QUARANTINED, outboxStatus(b).status)
     }
@@ -218,7 +218,7 @@ class SyncRepositoryTest {
             accept(request)
         }
 
-        assertEquals(SyncResult.Success(pushed = 2, pulled = 0, quarantined = 1), repository().syncOnce())
+        assertEquals(SyncResult.Success(pushed = 2, pulled = 0, quarantined = 1), repository().syncOnce(USER))
         assertEquals(listOf(listOf(a, b, c), listOf(a), listOf(b), listOf(c)), api.pushedIds())
         assertEquals(OutboxStatus.QUARANTINED, outboxStatus(b).status)
     }
@@ -229,7 +229,7 @@ class SyncRepositoryTest {
         val a = enqueue("ex-a")
         api.onPush = { throw apiError("UNSUPPORTED_MEDIA_TYPE", status = 415) }
 
-        assertEquals(SyncResult.Failed("UNSUPPORTED_MEDIA_TYPE", 0), repository().syncOnce())
+        assertEquals(SyncResult.Failed("UNSUPPORTED_MEDIA_TYPE", 0), repository().syncOnce(USER))
         assertEquals(OutboxStatus.PENDING, outboxStatus(a).status)
     }
 
@@ -239,7 +239,7 @@ class SyncRepositoryTest {
         val ids = (1..25).map { enqueue("ex-$it") }
         api.onPush = ::accept
 
-        assertEquals(SyncResult.Success(pushed = 25, pulled = 0, quarantined = 0), repository().syncOnce())
+        assertEquals(SyncResult.Success(pushed = 25, pulled = 0, quarantined = 0), repository().syncOnce(USER))
         assertEquals(listOf(ids.take(20), ids.drop(20)), api.pushedIds())
     }
 
@@ -250,7 +250,7 @@ class SyncRepositoryTest {
         val ids = (1..4).map { enqueue("ex-$it", notas = big) }
         api.onPush = ::accept
 
-        repository().syncOnce()
+        repository().syncOnce(USER)
 
         assertEquals(listOf(ids.take(2), ids.drop(2)), api.pushedIds())
         api.pushRequests.forEach { request ->
@@ -272,7 +272,7 @@ class SyncRepositoryTest {
             }
         }
 
-        assertEquals(SyncResult.Success(pushed = 0, pulled = 2, quarantined = 0), repository().syncOnce())
+        assertEquals(SyncResult.Success(pushed = 0, pulled = 2, quarantined = 0), repository().syncOnce(USER))
         assertEquals(listOf<String?>("c1", "c2"), api.pullCursors)
         assertEquals("c3", db.syncDao().cursor()?.cursor)
         assertEquals(12L, stored("ex-2")?.serverVersion)
@@ -284,14 +284,14 @@ class SyncRepositoryTest {
         api.onPull = { page("c2", hasMore = false, change("ex-1", 11), change("ex-2", 12), change("ex-3", 13)) }
         val failing = PullPageApplier { index -> if (index == 1) throw IllegalStateException("crash mid-page") }
 
-        assertEquals("a local failure is reported, not thrown", SyncResult.Failed(SyncRepositoryImpl.LOCAL_ERROR, 0), repository(failing).syncOnce())
+        assertEquals("a local failure is reported, not thrown", SyncResult.Failed(SyncRepositoryImpl.LOCAL_ERROR, 0), repository(failing).syncOnce(USER))
 
         assertNull(stored("ex-1"))
         assertNull(stored("ex-2"))
         assertEquals("c1", db.syncDao().cursor()?.cursor)
 
         // The next run reapplies the same page from the same cursor.
-        assertEquals(SyncResult.Success(0, 3, 0), repository().syncOnce())
+        assertEquals(SyncResult.Success(0, 3, 0), repository().syncOnce(USER))
         assertEquals(listOf<String?>("c1", "c1"), api.pullCursors)
         assertNotNull(stored("ex-3"))
     }
@@ -313,7 +313,7 @@ class SyncRepositoryTest {
             }
         }
 
-        val result = repository().syncOnce()
+        val result = repository().syncOnce(USER)
 
         assertEquals(SyncResult.Success(0, 2, 0), result)
         assertEquals(listOf("stale", null, "p1"), api.pullCursors)
@@ -336,7 +336,7 @@ class SyncRepositoryTest {
             page("c2", hasMore = false, change("ex-1", 30, nombre = "server"), change("ex-2", 31))
         }
 
-        assertEquals(SyncResult.Success(pushed = 0, pulled = 1, quarantined = 0), repository().syncOnce())
+        assertEquals(SyncResult.Success(pushed = 0, pulled = 1, quarantined = 0), repository().syncOnce(USER))
 
         assertEquals("offline edit", stored("ex-1")?.nombre)
         assertNull("the pending row keeps its last known serverVersion", stored("ex-1")?.serverVersion)
@@ -370,7 +370,7 @@ class SyncRepositoryTest {
             page("c2", hasMore = false, change("ex-1", 30, nombre = "server", updatedAt = T + 100))
         }
 
-        repository().syncOnce()
+        repository().syncOnce(USER)
 
         assertEquals("server", stored("ex-1")?.nombre)
         assertEquals(T + 100, stored("ex-1")?.updatedAt)
@@ -383,7 +383,7 @@ class SyncRepositoryTest {
         markBootstrapped("c1")
         val v2 = T + 5_000
         api.onPull = { page("c2", hasMore = false, change("ex-1", 7, updatedAt = v2)) }
-        repository().syncOnce()
+        repository().syncOnce(USER)
 
         // Device clock far behind and no server offset learned yet.
         val skewed = ServerOffsetClock(ServerClock { 1_000L })
@@ -416,7 +416,7 @@ class SyncRepositoryTest {
         val good = enqueue("ex-good")
         api.onPush = ::accept
 
-        assertEquals(SyncResult.Success(pushed = 1, pulled = 0, quarantined = 1), repository().syncOnce())
+        assertEquals(SyncResult.Success(pushed = 1, pulled = 0, quarantined = 1), repository().syncOnce(USER))
         assertEquals(listOf(listOf(good)), api.pushedIds())
         val corrupt = outboxStatus(uuid(50))
         assertEquals(OutboxStatus.QUARANTINED, corrupt.status)
@@ -429,7 +429,7 @@ class SyncRepositoryTest {
         val a = enqueue("ex-a")
         api.onPush = { PushResponse(emptyList(), emptyList()) }
 
-        assertEquals(SyncResult.Retryable(null, 0), repository().syncOnce())
+        assertEquals(SyncResult.Retryable(null, 0), repository().syncOnce(USER))
         assertEquals(1, api.pushRequests.size)
         val row = outboxStatus(a)
         assertEquals(OutboxStatus.PENDING, row.status)
@@ -441,10 +441,10 @@ class SyncRepositoryTest {
     fun otherPullErrorsKeepTheCursor() = runTest {
         markBootstrapped("c1")
         api.onPull = { throw apiError("INVALID_REQUEST") }
-        assertEquals(SyncResult.Failed("INVALID_REQUEST", 0), repository().syncOnce())
+        assertEquals(SyncResult.Failed("INVALID_REQUEST", 0), repository().syncOnce(USER))
 
         api.onPull = { throw apiError("RATE_LIMITED", status = 429, retryable = true, retryAfterSeconds = 5) }
-        assertEquals(SyncResult.Retryable(5_000, 0), repository().syncOnce())
+        assertEquals(SyncResult.Retryable(5_000, 0), repository().syncOnce(USER))
 
         assertEquals("c1", db.syncDao().cursor()?.cursor)
         assertEquals(BootstrapState.COMPLETED, db.syncDao().bootstrapCheckpoint()?.state)
@@ -459,7 +459,7 @@ class SyncRepositoryTest {
             page("c2", hasMore = false, change("ex-5", 30), change("server-only", 31))
         }
 
-        assertEquals(SyncResult.Success(pushed = 0, pulled = 1, quarantined = 0), repository().syncOnce())
+        assertEquals(SyncResult.Success(pushed = 0, pulled = 1, quarantined = 0), repository().syncOnce(USER))
         assertEquals(1_100, db.syncDao().outboxCount(OutboxStatus.PENDING))
         assertEquals("local ex-5", stored("ex-5")?.nombre)
         assertNotNull(stored("server-only"))
@@ -482,11 +482,11 @@ class SyncRepositoryTest {
         }
         val repo = repository()
         try {
-            val runA = async(Dispatchers.Default) { repo.syncOnce() }
+            val runA = async(Dispatchers.Default) { repo.syncOnce(USER) }
             withContext(Dispatchers.Default) { entered.getValue("a").await() }
             current = "b"
             databases.state.value = OpenUserDatabase("user_b", other)
-            val runB = async(Dispatchers.Default) { repo.syncOnce() }
+            val runB = async(Dispatchers.Default) { repo.syncOnce("user_b") }
             withContext(Dispatchers.Default) { entered.getValue("b").await() }
 
             gates.getValue("a").complete(Unit)
@@ -505,7 +505,7 @@ class SyncRepositoryTest {
     fun statusIsPerUser() = runTest {
         markBootstrapped("c1")
         val repo = repository()
-        repo.syncOnce()
+        repo.syncOnce(USER)
         assertEquals(SyncResult.Success(0, 0, 0), repo.observeStatus().first().lastResult)
 
         val other = Room.inMemoryDatabaseBuilder(context, GymLogDatabase::class.java).build()
@@ -631,7 +631,7 @@ class SyncRepositoryTest {
         db.syncDao().saveBootstrapCheckpoint(BootstrapCheckpointEntity(state = BootstrapState.IN_PROGRESS, lastCursor = "p1", pagesApplied = 1, updatedAt = T))
         api.onPull = { page("p2", hasMore = false, change("ex-2", 2)) }
 
-        assertEquals(SyncResult.Success(0, 1, 0), repository().syncOnce())
+        assertEquals(SyncResult.Success(0, 1, 0), repository().syncOnce(USER))
         assertEquals(listOf<String?>("p1"), api.pullCursors)
         assertTrue(db.syncDao().bootstrapCheckpoint()!!.completed)
         assertEquals("p2", db.syncDao().cursor()?.cursor)
@@ -649,9 +649,9 @@ class SyncRepositoryTest {
             page(cursor!!, hasMore = false)
         }
         val repo = repository()
-        val first = async(Dispatchers.Default) { repo.syncOnce() }
+        val first = async(Dispatchers.Default) { repo.syncOnce(USER) }
         withContext(Dispatchers.Default) { entered[0].await() }
-        val second = async(Dispatchers.Default) { repo.syncOnce() }
+        val second = async(Dispatchers.Default) { repo.syncOnce(USER) }
 
         // Room runs on its own threads: give the second run real time to (wrongly) reach the server.
         val overlapped = withContext(Dispatchers.Default) { withTimeoutOrNull(500) { entered[1].await() } }
@@ -666,7 +666,40 @@ class SyncRepositoryTest {
     @Test
     fun noOpenDatabaseMeansNoSession() = runTest {
         databases.state.value = null
-        assertEquals(SyncResult.SessionRequired(0), repository().syncOnce())
+        assertEquals(SyncResult.SessionRequired(0), repository().syncOnce(USER))
+    }
+
+    @Test
+    fun aRunForAnotherAccountNeverTouchesTheOpenDatabaseOrTheNetwork() = runTest {
+        markBootstrapped("c1")
+        val pending = enqueue("ex-a")
+        val outboxBefore = db.syncDao().allOutbox()
+
+        val result = repository().syncOnce("user_a_signed_out")
+
+        assertEquals(SyncResult.Failed(SyncRepositoryImpl.ACCOUNT_MISMATCH, 0), result)
+        assertTrue("no request was made", api.callUsers.isEmpty())
+        assertEquals(outboxBefore, db.syncDao().allOutbox())
+        assertEquals(pending, db.syncDao().allOutbox().single().mutationId)
+        assertNull("the open account's status is not touched", repository().observeStatus().first().lastResult)
+    }
+
+    @Test
+    fun everyRequestOfARunIsMadeForThatRunsAccount() = runTest {
+        markBootstrapped("c1")
+        enqueue("ex-a")
+        api.onPush = { accept(it) }
+        repository().syncOnce(USER)
+        assertEquals(listOf(USER, USER), api.callUsers)
+    }
+
+    @Test
+    fun aSessionTheServerRejectsIsReportedAsSessionRejectedAndKeepsTheOutbox() = runTest {
+        markBootstrapped("c1")
+        val a = enqueue("ex-a")
+        api.onPush = { throw SyncApiException.SessionRejected("HTTP 401 with an active session") }
+        assertEquals(SyncResult.SessionRejected(0), repository().syncOnce(USER))
+        assertEquals(OutboxStatus.PENDING, outboxStatus(a).status)
     }
 
     // ---- Helpers ----
@@ -700,17 +733,21 @@ class SyncRepositoryTest {
     private class FakeSyncApi : SyncApi {
         val pushRequests = mutableListOf<PushRequest>()
         val pullCursors = mutableListOf<String?>()
+        /** The account every call was made for, in order. */
+        val callUsers = mutableListOf<String>()
         var onPush: suspend (PushRequest) -> PushResponse = { error("unexpected push") }
         var onPull: suspend (String?) -> PullResponse = { cursor -> PullResponse(emptyList(), cursor ?: "c0", hasMore = false) }
 
         fun pushedIds(): List<List<String>> = pushRequests.map { request -> request.mutations.map { it.mutationId.value } }
 
-        override suspend fun push(request: PushRequest): PushResponse {
+        override suspend fun push(expectedUserId: String, request: PushRequest): PushResponse {
+            callUsers += expectedUserId
             pushRequests += request
             return onPush(request)
         }
 
-        override suspend fun pull(cursor: String?, limit: Int): PullResponse {
+        override suspend fun pull(expectedUserId: String, cursor: String?, limit: Int): PullResponse {
+            callUsers += expectedUserId
             pullCursors += cursor
             return onPull(cursor)
         }

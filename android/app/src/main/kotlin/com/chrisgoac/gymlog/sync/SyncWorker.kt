@@ -11,31 +11,40 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
 /** Whether the process can sync the account a piece of work was scheduled for. */
-enum class SyncReadiness {
-    /** The account is signed in, bootstrapped and its database is open. */
-    Ready,
+sealed interface SyncReadiness {
+    /** The account ([userId], resolved from the matching ready state) is signed in, bootstrapped and its database is open. */
+    data class Ready(val userId: String) : SyncReadiness
 
     /** The app is still starting or bootstrapping (or bootstrap failed transiently): try again later. */
-    NotYet,
+    data object NotYet : SyncReadiness
 
     /** There is no usable session for that account: stop until it signs in again. */
-    SessionRequired,
+    data object SessionRequired : SyncReadiness
 
     /** Another account is active, or the app cannot run at all: this work is obsolete. */
-    Unavailable,
+    data object Unavailable : SyncReadiness
 }
 
 /** What [SyncWorker] needs from the app; implemented over [com.chrisgoac.gymlog.AppContainer]. */
 interface SyncEnvironment {
     val retryGate: RetryAfterGate
     suspend fun readiness(userHash: String): SyncReadiness
-    suspend fun syncOnce(): SyncResult
+
+    /** One run for [userId] only (see [com.chrisgoac.gymlog.domain.SyncRepository.syncOnce]). */
+    suspend fun syncOnce(userId: String): SyncResult
 
     /** Queues one run that starts when the server-requested wait of [userHash] is over. */
     suspend fun requeueAfterRetryWindow(userHash: String)
 
-    /** The session is gone: the periodic work must not keep waking the device until sign-in. */
+    /**
+     * No usable session: the periodic work must not keep waking the device until sign-in. Kept
+     * while the identity provider still holds an active session for that account (a failed token
+     * fetch is not a sign-out).
+     */
     suspend fun onSessionRequired(userHash: String)
+
+    /** The work belongs to an account that is not the active one (or the app cannot run): stop its periodic wake-ups. */
+    suspend fun onUnavailable(userHash: String)
 }
 
 /**
@@ -87,17 +96,20 @@ class SyncWorker(
             return Result.success()
         }
 
-        when (environment.readiness(userHash)) {
-            SyncReadiness.Ready -> Unit
+        val userId = when (val readiness = environment.readiness(userHash)) {
+            is SyncReadiness.Ready -> readiness.userId
             SyncReadiness.NotYet -> return Result.retry()
-            SyncReadiness.Unavailable -> return Result.failure()
+            SyncReadiness.Unavailable -> {
+                environment.onUnavailable(userHash)
+                return Result.failure()
+            }
             SyncReadiness.SessionRequired -> {
                 environment.onSessionRequired(userHash)
                 return Result.failure()
             }
         }
 
-        return when (val result = environment.syncOnce()) {
+        return when (val result = environment.syncOnce(userId)) {
             is SyncResult.Success -> Result.success()
             is SyncResult.Retryable -> {
                 result.retryAfterMillis?.let { environment.retryGate.defer(userHash, it) }
@@ -105,6 +117,11 @@ class SyncWorker(
             }
             is SyncResult.SessionRequired -> {
                 environment.onSessionRequired(userHash)
+                Result.failure()
+            }
+            // The session is still active: keep the periodic work, a later run may be accepted.
+            is SyncResult.SessionRejected -> {
+                Log.w(TAG, "Background sync stopped: the server rejected the session")
                 Result.failure()
             }
             is SyncResult.Failed -> {

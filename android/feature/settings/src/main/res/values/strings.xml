@@ -18,7 +18,9 @@
         <item quantity="one">El servidor ha rechazado %d cambio. Revísalo en los detalles.</item>
         <item quantity="other">El servidor ha rechazado %d cambios. Revísalos en los detalles.</item>
     </plurals>
+    <string name="sync_session_rejected">El servidor rechazó la sesión. Tus datos siguen guardados en este dispositivo; vuelve a intentarlo más tarde.</string>
     <string name="sync_now">Sincronizar ahora</string>
+    <string name="sync_retry">Reintentar</string>
     <string name="sync_details">Ver detalles</string>
 
     <string name="diag_title">Detalle de sincronización</string>

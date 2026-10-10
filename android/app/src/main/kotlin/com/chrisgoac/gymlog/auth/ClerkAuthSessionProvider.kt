@@ -4,6 +4,7 @@ import com.chrisgoac.gymlog.network.AuthSessionProvider
 import com.chrisgoac.gymlog.network.AuthState
 import com.clerk.api.Clerk
 import com.clerk.api.network.serialization.ClerkResult
+import com.clerk.api.session.GetTokenOptions
 import com.clerk.api.session.Session
 import com.clerk.api.session.fetchToken
 import kotlinx.coroutines.CoroutineScope
@@ -32,16 +33,25 @@ class ClerkAuthSessionProvider(scope: CoroutineScope) : AuthSessionProvider {
             )
         }.stateIn(scope, SharingStarted.Eagerly, AuthState.Loading)
 
-    /** A Clerk session JWT, only while the active session belongs to the signed-in user. */
-    override suspend fun accessToken(): String? {
-        val signedIn = state.value as? AuthState.SignedIn ?: return null
+    /**
+     * A Clerk session JWT, only while [expectedUserId] is the signed-in user and owns the active
+     * session, both before and after the fetch (an account switch during the fetch returns null).
+     * [forceRefresh] skips Clerk's token cache (`GetTokenOptions.skipCache`).
+     */
+    override suspend fun accessToken(expectedUserId: String, forceRefresh: Boolean): String? {
+        if (!isActiveFor(expectedUserId)) return null
         val session = Clerk.activeSession ?: return null
-        if ((session.user?.id ?: session.publicUserData?.userId) != signedIn.userId) return null
-        return when (val result = session.fetchToken()) {
+        if (session.ownerId() != expectedUserId) return null
+        val jwt = when (val result = session.fetchToken(GetTokenOptions(skipCache = forceRefresh))) {
             is ClerkResult.Success -> result.value.jwt
             is ClerkResult.Failure -> null
         }
+        return jwt?.takeIf { isActiveFor(expectedUserId) && Clerk.activeSession?.ownerId() == expectedUserId }
     }
+
+    private fun isActiveFor(userId: String) = state.value == AuthState.SignedIn(userId)
+
+    private fun Session.ownerId(): String? = user?.id ?: publicUserData?.userId
 
     /** Call right before a deliberate sign-out so the session disappearing is not read as expiry. */
     internal fun signOutRequested() = reducer.signOutRequested()

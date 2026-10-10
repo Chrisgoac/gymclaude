@@ -156,7 +156,7 @@ class SignOutUseCaseTest {
     @Test fun defaultUseCasesRouteSyncRequestsThroughTheScheduler() = runTest {
         val repository = object : SyncRepository {
             override fun observeStatus() = throw NotImplementedError()
-            override suspend fun syncOnce(): SyncResult = error("a manual sync must not bypass the scheduler")
+            override suspend fun syncOnce(userId: String): SyncResult = error("a manual sync must not bypass the scheduler")
             override fun observeDiagnostics() = throw NotImplementedError()
         }
         DefaultSyncUseCases(repository, scheduler) { "u" }.requestSync()

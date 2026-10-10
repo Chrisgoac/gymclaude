@@ -26,7 +26,7 @@ class AppSyncEnvironment(
             rootState.first { it is RootState.Ready || it is RootState.SignedOut || it is RootState.ReauthenticationRequired || it is RootState.Fatal }
         } ?: return SyncReadiness.NotYet
         return when (settled) {
-            is RootState.Ready -> if (matches(settled.userId, userHash)) SyncReadiness.Ready else SyncReadiness.Unavailable
+            is RootState.Ready -> if (matches(settled.userId, userHash)) SyncReadiness.Ready(settled.userId) else SyncReadiness.Unavailable
             is RootState.ReauthenticationRequired -> if (matches(settled.userId, userHash)) SyncReadiness.SessionRequired else SyncReadiness.Unavailable
             RootState.SignedOut -> SyncReadiness.SessionRequired
             is RootState.Fatal -> if (settled.canRetry) SyncReadiness.NotYet else SyncReadiness.Unavailable
@@ -34,13 +34,20 @@ class AppSyncEnvironment(
         }
     }
 
-    override suspend fun syncOnce(): SyncResult = repository.syncOnce()
+    override suspend fun syncOnce(userId: String): SyncResult = repository.syncOnce(userId)
 
     override suspend fun requeueAfterRetryWindow(userHash: String) {
         scheduler.requestSyncForHash(userHash)
     }
 
     override suspend fun onSessionRequired(userHash: String) {
+        // A token that could not be fetched while the account is still signed in is not a sign-out.
+        val current = rootState.value
+        if (current is RootState.Ready && matches(current.userId, userHash)) return
+        scheduler.cancelPeriodic(userHash)
+    }
+
+    override suspend fun onUnavailable(userHash: String) {
         scheduler.cancelPeriodic(userHash)
     }
 

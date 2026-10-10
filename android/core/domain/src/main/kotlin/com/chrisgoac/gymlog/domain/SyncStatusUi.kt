@@ -14,16 +14,20 @@ sealed interface SyncUiState {
     /** Sign in again to keep syncing; local data is kept. */
     data object SessionRequired : SyncUiState
 
+    /** The server rejected the (still active) session; local data is kept. Retrying later may work. */
+    data object SessionRejected : SyncUiState
+
     /** [count] changes were rejected by the server for good and need a decision. */
     data class NeedsAction(val count: Int) : SyncUiState
 }
 
 /**
- * Priority: expired session > rejected changes > offline (with pending changes) > pending > synced. Rejected changes
+ * Priority: expired or rejected session > rejected changes > offline (with pending changes) > pending > synced. Rejected changes
  * outrank connectivity because waiting never resolves them.
  */
 fun SyncStatus.toUiState(): SyncUiState = when {
     lastResult is SyncResult.SessionRequired -> SyncUiState.SessionRequired
+    lastResult is SyncResult.SessionRejected -> SyncUiState.SessionRejected
     quarantinedMutations > 0 -> SyncUiState.NeedsAction(quarantinedMutations)
     // Offline only when local changes are actually waiting: with nothing to send, a failed pull
     // puts none of the user's data at risk, so "0 changes saved here" would only alarm.

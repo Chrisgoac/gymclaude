@@ -15,7 +15,7 @@ const val SOCKET_TIMEOUT_MILLIS = 30_000L
  * Authorization headers and request/response bodies must never reach logs.
  * Retries are deliberately absent; backoff lives in the repository/WorkManager layer.
  */
-fun createGymLogHttpClient(engine: HttpClientEngine = OkHttp.create()): HttpClient =
+internal fun createGymLogHttpClient(engine: HttpClientEngine = OkHttp.create()): HttpClient =
     HttpClient(engine) { configureGymLog() }
 
 internal fun HttpClientConfig<*>.configureGymLog() {

@@ -6,6 +6,13 @@ sealed class SyncApiException(message: String, cause: Throwable? = null) : Excep
     /** 401/403, or no token available (no request was sent). */
     class SessionRequired(message: String = "Session required") : SyncApiException(message)
 
+    /**
+     * 401/403 even with a freshly refreshed token, while the identity provider still holds an
+     * active session for the account: the server does not accept this session (e.g. a backend
+     * configuration problem). Signing in again would not help; retrying later might.
+     */
+    class SessionRejected(message: String) : SyncApiException(message)
+
     class Api(
         val httpStatus: Int,
         val code: ApiErrorCode,

@@ -40,6 +40,7 @@ import com.chrisgoac.gymlog.sync.NotifyingLocalMutationRunner
 import com.chrisgoac.gymlog.sync.ReconcilingUserDatabaseManager
 import com.chrisgoac.gymlog.sync.RetryAfterGate
 import com.chrisgoac.gymlog.sync.RoomLocalAccountCleaner
+import com.chrisgoac.gymlog.sync.ServerClockStore
 import com.chrisgoac.gymlog.sync.SyncTriggers
 import com.chrisgoac.gymlog.sync.SyncWorkerFactory
 import com.chrisgoac.gymlog.sync.WorkManagerSyncScheduler
@@ -77,8 +78,13 @@ class AppContainer(private val application: Application) {
         ClerkAuthGateway(checkNotNull(clerkSession) { "Clerk is not configured" }, appScope)
     }
 
-    /** Offset to the server clock, learned from every sync response `Date` header. */
-    private val serverClock = ServerClock()
+    /**
+     * Offset to the server clock, learned from every sync response `Date` header and persisted, so
+     * writes made offline right after a restart are already stamped with the last known offset.
+     */
+    private val serverClock = ServerClockStore(application).let { store ->
+        ServerClock(initialOffsetMillis = store.seedOffset(), onObserved = store::save)
+    }
 
     /** Stamps updatedAt/deletedAt of local writes (device now + server offset). */
     val syncClock: SyncClock = ServerOffsetClock(serverClock)
@@ -187,5 +193,5 @@ class AppContainer(private val application: Application) {
 
 private object UnconfiguredAuthSession : AuthSessionProvider {
     override val state: StateFlow<AuthState> = MutableStateFlow(AuthState.SignedOut)
-    override suspend fun accessToken(): String? = null
+    override suspend fun accessToken(expectedUserId: String, forceRefresh: Boolean): String? = null
 }

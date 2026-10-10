@@ -24,9 +24,13 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
 
+/**
+ * The sync endpoints. Every call names the account it is made for: the request is sent only with a
+ * token of that account's session, so a run for one account can never carry another account's token.
+ */
 interface SyncApi {
-    suspend fun push(request: PushRequest): PushResponse
-    suspend fun pull(cursor: String?, limit: Int = 500): PullResponse
+    suspend fun push(expectedUserId: String, request: PushRequest): PushResponse
+    suspend fun pull(expectedUserId: String, cursor: String?, limit: Int = 500): PullResponse
 }
 
 class SyncApiImpl internal constructor(
@@ -38,9 +42,10 @@ class SyncApiImpl internal constructor(
 ) : SyncApi {
     private val root = baseUrl.trimEnd('/')
 
-    override suspend fun push(request: PushRequest): PushResponse {
+    override suspend fun push(expectedUserId: String, request: PushRequest): PushResponse {
         val body = ContractJson.encodeToString(PushRequest.serializer(), request)
         return execute(
+            expectedUserId,
             configure = {
                 method = HttpMethod.Post
                 url("$root/api/v1/sync/push")
@@ -50,7 +55,8 @@ class SyncApiImpl internal constructor(
         )
     }
 
-    override suspend fun pull(cursor: String?, limit: Int): PullResponse = execute(
+    override suspend fun pull(expectedUserId: String, cursor: String?, limit: Int): PullResponse = execute(
+        expectedUserId,
         configure = {
             method = HttpMethod.Get
             url("$root/api/v1/sync/pull")
@@ -60,12 +66,56 @@ class SyncApiImpl internal constructor(
         decode = { ResponseJson.decodeFromString(PullResponse.serializer(), it) },
     )
 
+    /**
+     * A 401 is retried once with a force-refreshed token (the cached one may have just expired).
+     * A 401/403 that persists is [SyncApiException.SessionRejected] while the identity provider still
+     * holds an active session for [expectedUserId], otherwise [SyncApiException.SessionRequired].
+     */
     private suspend fun <T> execute(
+        expectedUserId: String,
         configure: HttpRequestBuilder.() -> Unit,
         decode: (String) -> T,
     ): T {
+        var sent = send(expectedUserId, forceRefresh = false, configure)
+        if (sent.response.status.value == HTTP_UNAUTHORIZED) {
+            sent = send(expectedUserId, forceRefresh = true, configure)
+        }
+        val response = sent.response
+        val text = try {
+            response.bodyAsText()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw SyncApiException.Transport(e)
+        }
+        val status = response.status.value
+        if (status == HTTP_UNAUTHORIZED || status == HTTP_FORBIDDEN) {
+            throw if (auth.state.value == AuthState.SignedIn(expectedUserId)) {
+                SyncApiException.SessionRejected("HTTP $status with an active session")
+            } else {
+                SyncApiException.SessionRequired("HTTP $status")
+            }
+        }
+        if (status !in 200..299) {
+            throw NetworkErrorMapper.map(
+                status,
+                response.headers[HttpHeaders.RetryAfter],
+                text,
+                response.headers["x-request-id"] ?: sent.requestId,
+            )
+        }
+        return try {
+            decode(text)
+        } catch (e: SerializationException) {
+            throw SyncApiException.Malformed("Undecodable response body", e)
+        }
+    }
+
+    private class Sent(val response: HttpResponse, val requestId: String)
+
+    private suspend fun send(expectedUserId: String, forceRefresh: Boolean, configure: HttpRequestBuilder.() -> Unit): Sent {
         val token = try {
-            auth.accessToken()
+            auth.accessToken(expectedUserId, forceRefresh)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -84,29 +134,15 @@ class SyncApiImpl internal constructor(
         } catch (e: Exception) {
             throw SyncApiException.Transport(e)
         }
-        response.headers[HttpHeaders.Date]?.let { runCatching { ZonedDateTime.parse(it.trim(), DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() }.getOrNull() }
+        response.headers[HttpHeaders.Date]
+            ?.let { runCatching { ZonedDateTime.parse(it.trim(), DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() }.getOrNull() }
             ?.let(serverClock::observe)
-        val text = try {
-            response.bodyAsText()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            throw SyncApiException.Transport(e)
-        }
-        val status = response.status.value
-        if (status !in 200..299) {
-            throw NetworkErrorMapper.map(
-                status,
-                response.headers[HttpHeaders.RetryAfter],
-                text,
-                response.headers["x-request-id"] ?: requestId,
-            )
-        }
-        return try {
-            decode(text)
-        } catch (e: SerializationException) {
-            throw SyncApiException.Malformed("Undecodable response body", e)
-        }
+        return Sent(response, requestId)
+    }
+
+    private companion object {
+        const val HTTP_UNAUTHORIZED = 401
+        const val HTTP_FORBIDDEN = 403
     }
 }
 

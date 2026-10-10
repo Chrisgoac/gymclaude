@@ -54,6 +54,15 @@ class SyncStatusCardTest {
         rule.onAllNodesWithText("Sincronizar ahora").assertCountEquals(0)
     }
 
+    @Test fun sessionRejectedExplainsAndOffersRetry() {
+        var syncs = 0
+        card(SyncUiState.SessionRejected, onSync = { syncs++ })
+        rule.onNodeWithText("El servidor rechazó la sesión", substring = true).assertExists()
+        rule.onAllNodesWithText("Sincronizar ahora").assertCountEquals(0)
+        rule.onNodeWithText("Reintentar").performClick()
+        assertEquals(1, syncs)
+    }
+
     @Test fun needsActionLinksToDetails() {
         var opened = 0
         card(SyncUiState.NeedsAction(3), onDetails = { opened++ })

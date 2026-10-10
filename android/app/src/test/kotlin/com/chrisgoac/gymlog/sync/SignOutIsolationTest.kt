@@ -47,13 +47,13 @@ class SignOutIsolationTest {
     private class SuspendedPushApi : SyncApi {
         val entered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
-        override suspend fun push(request: PushRequest): PushResponse {
+        override suspend fun push(expectedUserId: String, request: PushRequest): PushResponse {
             entered.complete(Unit)
             release.await()
             return PushResponse(request.mutations.map { it.mutationId }, emptyList())
         }
 
-        override suspend fun pull(cursor: String?, limit: Int) = PullResponse(emptyList(), cursor ?: "c0", hasMore = false)
+        override suspend fun pull(expectedUserId: String, cursor: String?, limit: Int) = PullResponse(emptyList(), cursor ?: "c0", hasMore = false)
     }
 
     @After fun tearDown() = runBlocking { databases.close() }
@@ -77,7 +77,7 @@ class SignOutIsolationTest {
             },
         )
 
-        val sync = async(Dispatchers.Default) { repository.syncOnce() }
+        val sync = async(Dispatchers.Default) { repository.syncOnce("user_1") }
         api.entered.await()
         val delete = async(Dispatchers.Default) { cleaner.deleteLocalData("user_1") }
 
@@ -169,15 +169,15 @@ class SignOutIsolationTest {
         val repository = object : SyncRepository {
             override fun observeStatus() = error("unused")
             override fun observeDiagnostics() = error("unused")
-            override suspend fun syncOnce(): SyncResult = error("unused")
+            override suspend fun syncOnce(userId: String): SyncResult = error("unused")
         }
         val environment = AppSyncEnvironment(MutableStateFlow<RootState>(RootState.Ready("u")), repository, scheduler, RetryAfterGate())
         val hash = UserDatabaseManagerImpl.userHash("u")
 
-        assertEquals(SyncReadiness.Ready, environment.readiness(hash))
+        assertEquals(SyncReadiness.Ready("u"), environment.readiness(hash))
         scheduler.suspend("u")
         assertEquals(SyncReadiness.NotYet, environment.readiness(hash))
         scheduler.resume("u")
-        assertEquals(SyncReadiness.Ready, environment.readiness(hash))
+        assertEquals(SyncReadiness.Ready("u"), environment.readiness(hash))
     }
 }

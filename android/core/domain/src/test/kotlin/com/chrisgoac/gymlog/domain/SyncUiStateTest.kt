@@ -32,6 +32,10 @@ class SyncUiStateTest {
         assertEquals(SyncUiState.SessionRequired, status(pending = 2, quarantined = 1, last = SyncResult.SessionRequired(0)).toUiState())
     }
 
+    @Test fun rejectedSessionOutranksRejectedChanges() {
+        assertEquals(SyncUiState.SessionRejected, status(pending = 2, quarantined = 1, last = SyncResult.SessionRejected(0)).toUiState())
+    }
+
     @Test fun successfulRunWithNothingLeftIsSynced() {
         assertEquals(SyncUiState.Synced, status(last = SyncResult.Success(1, 0, 0)).toUiState())
     }

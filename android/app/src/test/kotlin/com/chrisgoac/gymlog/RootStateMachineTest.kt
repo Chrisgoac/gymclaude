@@ -270,7 +270,7 @@ class RootStateMachineTest {
 
 private class FakeAuthSessionProvider : AuthSessionProvider {
     override val state = MutableStateFlow<AuthState>(AuthState.Loading)
-    override suspend fun accessToken(): String? = null
+    override suspend fun accessToken(expectedUserId: String, forceRefresh: Boolean): String? = null
 }
 
 private class FakeBootstrapRunner : BootstrapRunner {

@@ -18,6 +18,13 @@ sealed interface SyncResult {
     /** No usable session (401/403 or no token): nothing was deleted or quarantined; sign in again. */
     data class SessionRequired(override val quarantined: Int) : SyncResult
 
+    /**
+     * The server refused the session (401/403 even after a forced token refresh) while the identity
+     * provider still considers it active: nothing was deleted or quarantined; signing in again would
+     * not help, so the user can only retry later.
+     */
+    data class SessionRejected(override val quarantined: Int) : SyncResult
+
     /** A non-retryable error that is not tied to one mutation (e.g. a pull rejected as invalid). */
     data class Failed(val code: String, override val quarantined: Int) : SyncResult
 }
@@ -38,8 +45,12 @@ data class SyncStatus(
 interface SyncRepository {
     fun observeStatus(): Flow<SyncStatus>
 
-    /** Push the outbox, then pull until up to date. At most one run per user at a time. */
-    suspend fun syncOnce(): SyncResult
+    /**
+     * Push the outbox, then pull until up to date, for [userId]. Runs only while [userId]'s database
+     * is the open one (otherwise nothing is touched) and only ever sends [userId]'s token. At most one
+     * run per user at a time.
+     */
+    suspend fun syncOnce(userId: String): SyncResult
 
     /** Unsynced local mutations of the open account (quarantined first), without payload values. */
     fun observeDiagnostics(): Flow<List<OutboxDiagnostic>>

@@ -28,17 +28,18 @@ class BootstrapRepository(
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     /**
-     * Finishes [userId]'s bootstrap (no-op if already completed). [onProgress] gets 0..1; the total
+     * Finishes [userId]'s bootstrap (no-op if already completed); every request is made with a
+     * token of [userId]'s session only. [onProgress] gets 0..1; the total
      * page count is unknown, so progress approaches 1 and reaches it on the last page.
      * Throws [com.chrisgoac.gymlog.network.SyncApiException] on network or server failure; the
      * checkpoint keeps every page applied so far.
      */
     suspend fun run(userId: String, database: GymLogDatabase, onProgress: (Float) -> Unit = {}) {
-        locks.forUser(userId).withLock { resumeLocked(database, onProgress) }
+        locks.forUser(userId).withLock { resumeLocked(userId, database, onProgress) }
     }
 
     /** Caller holds the user's sync lock. Returns the number of changes written. */
-    internal suspend fun resumeLocked(database: GymLogDatabase, onProgress: (Float) -> Unit = {}): Int {
+    internal suspend fun resumeLocked(userId: String, database: GymLogDatabase, onProgress: (Float) -> Unit = {}): Int {
         val dao = database.syncDao()
         var checkpoint = dao.bootstrapCheckpoint()
         if (checkpoint?.completed == true) {
@@ -56,7 +57,7 @@ class BootstrapRepository(
         onProgress(progress(pages))
         while (true) {
             val page = try {
-                api.pull(cursor)
+                api.pull(userId, cursor)
             } catch (e: SyncApiException.Api) {
                 // The checkpoint cursor is no longer valid: start the download over.
                 if (e.code != ApiErrorCode.INVALID_CURSOR || cursor == null) throw e
@@ -93,9 +94,9 @@ class BootstrapRepository(
      * are kept and overwritten page by page; the account counts as restored only after the new
      * download's last page. Caller holds the user's sync lock.
      */
-    internal suspend fun restartLocked(database: GymLogDatabase): Int {
+    internal suspend fun restartLocked(userId: String, database: GymLogDatabase): Int {
         resetCheckpoint(database.syncDao())
-        return resumeLocked(database)
+        return resumeLocked(userId, database)
     }
 
     private suspend fun resetCheckpoint(dao: SyncDao) {

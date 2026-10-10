@@ -34,6 +34,19 @@ class SyncWorkerTest {
         assertEquals(1, env.syncCalls)
     }
 
+    @Test fun theRunIsForTheUserResolvedFromTheMatchingReadyState() {
+        env.readiness = SyncReadiness.Ready("user_42")
+        run()
+        assertEquals(listOf("user_42"), env.syncedUsers)
+    }
+
+    @Test fun aRejectedSessionStopsTheRunButKeepsThePeriodicWork() {
+        env.result = SyncResult.SessionRejected(quarantined = 0)
+        assertEquals(Result.failure(), run())
+        assertTrue(env.sessionRequired.isEmpty())
+        assertTrue(env.unavailable.isEmpty())
+    }
+
     @Test fun quarantinedRowsDoNotMakeTheRunFail() {
         env.result = SyncResult.Success(pushed = 2, pulled = 0, quarantined = 1)
         assertEquals(Result.success(), run())
@@ -80,10 +93,11 @@ class SyncWorkerTest {
         assertEquals(0, env.syncCalls)
     }
 
-    @Test fun workOfAnotherAccountIsDropped() {
+    @Test fun workOfAnotherAccountIsDroppedAndItsPeriodicWorkCancelled() {
         env.readiness = SyncReadiness.Unavailable
         assertEquals(Result.failure(), run())
         assertEquals(0, env.syncCalls)
+        assertEquals(listOf(hash), env.unavailable)
     }
 
     @Test fun missingInputFails() {

@@ -177,7 +177,8 @@ class RootStateMachine(
     }
 
     private fun Exception.isTransientSyncFailure(): Boolean = when (this) {
-        is SyncApiException.Transport, is SyncApiException.Malformed -> true
+        // A rejected (still active) session may be accepted on a later attempt.
+        is SyncApiException.Transport, is SyncApiException.Malformed, is SyncApiException.SessionRejected -> true
         is SyncApiException.Api -> retryable
         else -> false
     }

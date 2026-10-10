@@ -14,6 +14,10 @@ sealed interface AuthState {
 interface AuthSessionProvider {
     val state: StateFlow<AuthState>
 
-    /** Current bearer token, or null when there is no usable session. */
-    suspend fun accessToken(): String?
+    /**
+     * Bearer token of [expectedUserId]'s active session, or null when there is none: no session,
+     * or the active session belongs to another account (a request for one account never carries
+     * another account's token). [forceRefresh] bypasses any cached token.
+     */
+    suspend fun accessToken(expectedUserId: String, forceRefresh: Boolean = false): String?
 }

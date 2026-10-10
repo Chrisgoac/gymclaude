@@ -37,7 +37,11 @@ import kotlinx.coroutines.sync.withLock
  * or a `mutations.<i>…` field path) quarantines that one mutation and the rest are resent; an
  * unattributable one falls back to one-mutation requests so the poison row identifies itself.
  * Retryable and transport failures stop the run with [SyncResult.Retryable]; 401 stops it with
- * [SyncResult.SessionRequired] without touching the outbox.
+ * [SyncResult.SessionRequired] (or [SyncResult.SessionRejected] while the session is still active)
+ * without touching the outbox.
+ *
+ * A run is bound to one account: it only starts when that account's database is the open one,
+ * and every request asks for a token of that account (see [SyncApi]).
  *
  * Pull: from the stored cursor until `hasMore == false`, each page and its cursor in ONE Room
  * transaction. `INVALID_CURSOR` triggers a replacement bootstrap; an unfinished bootstrap is
@@ -96,15 +100,17 @@ class SyncRepositoryImpl(
         rejected = row.status == OutboxStatus.QUARANTINED,
     )
 
-    override suspend fun syncOnce(): SyncResult {
+    override suspend fun syncOnce(userId: String): SyncResult {
         val open = databases.current.value ?: return SyncResult.SessionRequired(quarantined = 0)
+        // Another account is open now (switch after the run was scheduled): never touch its database.
+        if (open.userId != userId) return SyncResult.Failed(ACCOUNT_MISMATCH, quarantined = 0)
         return locks.forUser(open.userId).withLock {
             runningUsers.update { it + open.userId }
             val run = RunCounters()
             try {
                 val result = try {
-                    push(open.database, run)
-                    pull(open.database, run)
+                    push(open.userId, open.database, run)
+                    pull(open.userId, open.database, run)
                     SyncResult.Success(pushed = run.pushed, pulled = run.pulled, quarantined = run.quarantined)
                 } catch (e: SyncApiException) {
                     e.toResult(run.quarantined)
@@ -133,7 +139,7 @@ class SyncRepositoryImpl(
 
     // ---- Push ----
 
-    private suspend fun push(database: GymLogDatabase, run: RunCounters) {
+    private suspend fun push(userId: String, database: GymLogDatabase, run: RunCounters) {
         val dao = database.syncDao()
         var batchLimit = MAX_BATCH_MUTATIONS
         while (true) {
@@ -148,7 +154,7 @@ class SyncRepositoryImpl(
                 continue
             }
             val response = try {
-                api.push(PushRequest(mutations.filterNotNull()))
+                api.push(userId, PushRequest(mutations.filterNotNull()))
             } catch (e: SyncApiException.Api) {
                 if (e.retryable) {
                     batch.forEach { dao.recordOutboxFailure(it.mutationId, e.errorCode()) }
@@ -216,19 +222,19 @@ class SyncRepositoryImpl(
 
     // ---- Pull ----
 
-    private suspend fun pull(database: GymLogDatabase, run: RunCounters) {
+    private suspend fun pull(userId: String, database: GymLogDatabase, run: RunCounters) {
         val dao = database.syncDao()
         if (dao.bootstrapCheckpoint()?.completed != true) {
-            run.pulled += bootstrap.resumeLocked(database)
+            run.pulled += bootstrap.resumeLocked(userId, database)
             return
         }
         var cursor = dao.cursor()?.cursor
         do {
             val page = try {
-                api.pull(cursor)
+                api.pull(userId, cursor)
             } catch (e: SyncApiException.Api) {
                 if (e.code != ApiErrorCode.INVALID_CURSOR) throw e
-                run.pulled += bootstrap.restartLocked(database)
+                run.pulled += bootstrap.restartLocked(userId, database)
                 return
             }
             database.withTransaction {
@@ -241,6 +247,7 @@ class SyncRepositoryImpl(
 
     private fun SyncApiException.toResult(quarantined: Int): SyncResult = when (this) {
         is SyncApiException.SessionRequired -> SyncResult.SessionRequired(quarantined)
+        is SyncApiException.SessionRejected -> SyncResult.SessionRejected(quarantined)
         is SyncApiException.Transport, is SyncApiException.Malformed -> SyncResult.Retryable(retryAfterMillis = null, quarantined = quarantined)
         is SyncApiException.Api ->
             if (retryable) SyncResult.Retryable(retryAfterSeconds?.let { it * 1000 }, quarantined)
@@ -267,6 +274,9 @@ class SyncRepositoryImpl(
 
         /** [SyncResult.Failed] code for an unexpected local (database) failure. */
         const val LOCAL_ERROR = "LOCAL_ERROR"
+
+        /** [SyncResult.Failed] code for a run asked for an account whose database is not the open one. */
+        const val ACCOUNT_MISMATCH = "ACCOUNT_MISMATCH"
         private const val TAG = "GymLogSync"
         private val MUTATION_PATH = Regex("^mutations[.\\[](\\d+)")
 
