@@ -10,6 +10,18 @@ export function jsonResponse(body: unknown, requestId: string, status = 200, hea
   return new Response(JSON.stringify(body), { status, headers: h });
 }
 
+// Deadlock y fallo de serialización de PostgreSQL: el cliente puede reintentar tal cual.
+const RETRYABLE_PG_CODES = new Set(['40P01', '40001']);
+
+/** Busca el SQLSTATE en la cadena de `cause` (Drizzle envuelve el error de `pg`). */
+function isRetryablePgError(error: unknown): boolean {
+  for (let e: unknown = error, depth = 0; e instanceof Error && depth < 5; e = e.cause, depth++) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === 'string' && RETRYABLE_PG_CODES.has(code)) return true;
+  }
+  return false;
+}
+
 export function errorResponse(error: unknown, requestId: string): Response {
   if (error instanceof ApiError) {
     const body: ApiErrorBody = {
@@ -32,6 +44,13 @@ export function errorResponse(error: unknown, requestId: string): Response {
       { error: { code: 'INVALID_REQUEST', message: 'Invalid request', retryable: false, details } } satisfies ApiErrorBody,
       requestId,
       400,
+    );
+  }
+  if (isRetryablePgError(error)) {
+    return jsonResponse(
+      { error: { code: 'RETRY_LATER', message: 'Temporary conflict, retry', retryable: true } } satisfies ApiErrorBody,
+      requestId,
+      503,
     );
   }
   console.error(`[api/v1] unhandled error requestId=${requestId}`, error);

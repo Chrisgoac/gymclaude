@@ -1,36 +1,24 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
-import { db } from '@/db/client';
-import { SERVER_TABLES, withoutServerMeta } from '@/lib/sync/server-tables';
-import { resolveServerWrite } from '@/lib/sync/server-merge';
+import { getPoolDb } from '@/db/pool';
+import { applyLegacyPush } from '@/lib/api/v1/sync/legacy';
+import { lockUserSync } from '@/lib/api/v1/sync/lock';
 import type { TableChanges } from '@/lib/sync/types';
 
+// Push legacy de la PWA: mismo request/response de siempre, pero escribe en el diario de la sync v1
+// (serverVersion + sync_changes) dentro de una transacción con el lock de sync del usuario.
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return new NextResponse('Unauthorized', { status: 401 });
 
   const changes = (await req.json()) as TableChanges[];
-  const serverUpdatedAt = Date.now();
+  const now = Date.now();
+  // Un id de mutación por request: identifica en lastMutationId todo lo escrito por este push.
+  const mutationId = crypto.randomUUID();
 
-  for (const { table: name, records } of changes) {
-    const table = SERVER_TABLES[name] as any;
-    if (!table) continue;
-    for (const rec of records as any[]) {
-      // El filtro por (id, userId) localiza la fila correcta también para user_settings (PK compuesta).
-      const existing = await db
-        .select({ updatedAt: table.updatedAt })
-        .from(table)
-        .where(and(eq(table.id, rec.id), eq(table.userId, userId)))
-        .limit(1);
-      if (!resolveServerWrite(existing[0]?.updatedAt, rec.updatedAt)) continue;
-      // El cliente no puede fijar metadatos de servidor (serverVersion, lastDeviceId…).
-      const values = { ...withoutServerMeta(rec), userId, serverUpdatedAt };
-      // user_settings tiene PK compuesta (user_id, id); las demás tablas, id simple.
-      const conflictTarget = name === 'userSettings' ? [table.userId, table.id] : table.id;
-      await db.insert(table).values(values).onConflictDoUpdate({ target: conflictTarget, set: values });
-    }
-  }
+  await getPoolDb().transaction(async (tx) => {
+    await lockUserSync(tx, userId);
+    await applyLegacyPush(tx, userId, changes, { now, mutationId });
+  });
   return NextResponse.json({ ok: true });
 }
