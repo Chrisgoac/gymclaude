@@ -32,11 +32,31 @@ Both responses carry `cache-control: no-store`.
 - Record `id`: 1..128 chars, `^[A-Za-z0-9._:-]+$`. `mutationId`: UUID. `deviceId`: 1..128 chars.
 - Optional columns are `nullish`: the client may omit them or send `null`; the server always
   emits them as `null` in pull responses.
+- **Full-record replace.** Every applied write replaces the whole stored record: an omitted
+  nullable field is stored as `null`, not left unchanged. Clients must always send complete
+  records. Adding a field to a record is a contract change and requires a contract version bump.
+- Integer columns (`orden`, `seriesObjetivo`, `semanas`, `reps`, …) are int32:
+  `-2147483648..2147483647`. Values outside that range give `400 INVALID_REQUEST`.
+- No string field (record fields, `deviceId`) and no string or key inside a JSON value
+  (`mesocycles.progresion`) may contain U+0000; it gives `400 INVALID_REQUEST`.
+- **Never push catalog exercises** (`seed-*` ids). They share ids across users, so the first user
+  to write one owns it and every other user gets a permanent `409 RECORD_ID_CONFLICT`. Only push
+  records the user created.
+- **References are not enforced.** `INVALID_REFERENCE` is returned only when a record references
+  an id owned by another user; references to ids the server does not know yet are accepted. The
+  client must therefore tolerate dangling references (e.g. a `loggedSets` row whose
+  `loggedExerciseId` has not arrived yet): do not declare Room foreign-key constraints between
+  synced tables.
 
 ### Timestamps
 
 All timestamps (`updatedAt`, `deletedAt`, `fecha`, `createdAt`, `fechaInicio`, `fechaDesbloqueo`)
 are integer **epoch milliseconds** in `0..Number.MAX_SAFE_INTEGER` (2^53 - 1). Floats are rejected.
+
+**Clock.** The device clock may be wrong. The client derives its offset to the server from the
+HTTP `Date` header of every response (`offset = serverDate - localNowAtResponse`) and stamps
+`updatedAt`/`deletedAt` with `localNow + offset`. The server tolerates 5 minutes in the future
+(see Limits); anything later rejects the whole request with `FUTURE_TIMESTAMP`.
 
 ### serverVersion
 
@@ -49,8 +69,9 @@ reported as `"0"` in conflicts.
 ### Cursor
 
 Opaque to clients: store it and send it back unchanged. (Internally it is base64url, no padding,
-of the decimal text of the journal sequence; only the server decodes it.) Omitted or empty =
-from the beginning. Malformed, negative, non-canonical or > 2^63-1 gives `400 INVALID_CURSOR`.
+of the decimal text of the journal sequence; only the server decodes it.) Omitted = from the
+beginning. An empty `cursor=` is also treated as the beginning, but on an empty page it is echoed
+back as `""`: clients send no `cursor` parameter instead of an empty one. Malformed, negative, non-canonical or > 2^63-1 gives `400 INVALID_CURSOR`.
 The response `cursor` is the last journal entry examined, even if the page has fewer changes than
 `limit` (superseded entries are skipped but advance the cursor). On an empty page the request
 cursor is returned (or the encoding of `0` if none was sent). Persist the new cursor only after
@@ -60,10 +81,11 @@ the page has been applied locally. Keep pulling while `hasMore` is `true`.
 
 | Limit | Value |
 |-------|-------|
-| Mutations per push request | 1..50 |
-| Operations per mutation | 1..200 |
+| Mutations per push request | 1..50, unique `mutationId`s (duplicates give `400 INVALID_REQUEST`) |
+| Operations per mutation | 1..50, unique `(table, record.id)` (duplicates give `400 INVALID_REQUEST`) |
+| Recommended batch size | at most 20 mutations and 50 operations per request |
 | Push body size (`MAX_PUSH_BODY_BYTES`) | 2 MiB (2 * 1024 * 1024); larger gives `413 PAYLOAD_TOO_LARGE` |
-| Pull `limit` | default 500, maximum 500; larger values are clamped, `< 1` or non-integer gives `400 INVALID_REQUEST` |
+| Pull `limit` | default 500, maximum 500. Integers above 500 (up to 2^53 - 1) are clamped to 500; `< 1`, non-integer or not a safe integer gives `400 INVALID_REQUEST` |
 | Rate limit (`sync` policy, per user, push and pull share it) | 120 requests per fixed 60 s window |
 | Future clock tolerance (`FUTURE_CLOCK_TOLERANCE_MS`) | 300000 ms (5 min) |
 
@@ -71,7 +93,8 @@ Future clock: if any record in a push has `updatedAt` or non-null `deletedAt` gr
 server `now + 5 min`, the **whole request** is rejected with `400 FUTURE_TIMESTAMP`
 (`details.mutationId` names the mutation) and nothing is written.
 
-Push requires `Content-Type: application/json` (`415 UNSUPPORTED_MEDIA_TYPE` otherwise).
+Push requires `Content-Type: application/json` (`415 UNSUPPORTED_MEDIA_TYPE` otherwise) and a
+UTF-8 body: invalid UTF-8 gives `400 INVALID_JSON`.
 
 ## Push semantics
 
@@ -86,6 +109,8 @@ Response: `{ "acceptedMutationIds": [...], "conflicts": [...] }`.
   conflicts, without writing anything. Clients must retry the exact same bytes/ids after timeouts
   or retryable errors, and may drop a local mutation only once its id appears in
   `acceptedMutationIds`.
+- **Replay is keyed by `mutationId` only.** A known `mutationId` returns its stored response even
+  if the body now differs: the new payload is ignored. A changed write needs a new `mutationId`.
 - A conflict is informational: it never rejects the mutation. `acceptedMutationIds` includes
   mutations whose operations produced conflicts.
 
@@ -120,7 +145,10 @@ lost).
 
 Response: `{ "changes": [{ table, serverVersion, record }], "cursor": "...", "hasMore": bool }`.
 A record emits one change, carrying its latest state (tombstones included); older journal entries
-of the same record are skipped. `changes` are in increasing `serverVersion` order. A bootstrap
+of the same record are skipped. `changes` are in increasing `serverVersion` order.
+There is **no parent-before-child ordering**, neither within a page nor across pages: a child
+(e.g. `loggedSets`) may arrive before its parent. Apply every change regardless of whether its
+references resolve yet (see "References are not enforced"). A bootstrap
 download is a pull from an empty cursor (`fixtures/bootstrap-all-entities.json`).
 
 ## Errors
@@ -152,6 +180,20 @@ of messages. Retry only when `retryable` is `true`, with backoff.
 the current fixed window ends; at least 1) and repeats it in `error.details.retryAfterSeconds[0]`.
 Wait at least that long. Other retryable errors have no `Retry-After`: use exponential backoff
 with jitter and resend the identical request (safe thanks to mutation replay).
+
+### Quarantine of poison mutations
+
+A non-retryable error that names a mutation (`details.mutationId`) fails the whole request, so
+resending the same batch would fail forever. This applies to `RECORD_ID_CONFLICT`,
+`INVALID_REFERENCE`, `FUTURE_TIMESTAMP` and `INVALID_REQUEST`. The client then:
+
+1. removes that mutation from the outbox batch;
+2. keeps it locally, flagged for the user (it was not synced);
+3. resends the remaining mutations (they were rolled back and are safe to resend as is).
+
+`INVALID_REQUEST` from schema validation reports field paths (`details.mutations`), not
+`details.mutationId`; validate each mutation locally with these rules before enqueueing it, so a
+schema error points at a client bug rather than at one specific queued mutation.
 
 ## Fixtures
 
