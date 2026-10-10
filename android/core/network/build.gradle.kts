@@ -5,7 +5,7 @@ plugins {
 dependencies {
     api(project(":core:model"))
     api(libs.kotlinx.coroutines.core)
-    api(libs.ktor.client.core)
+    implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
 
     testImplementation(libs.junit)

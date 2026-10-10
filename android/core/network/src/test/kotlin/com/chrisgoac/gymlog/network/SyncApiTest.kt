@@ -84,6 +84,7 @@ class SyncApiTest {
         assertTrue(first.hasMore)
         val second = f.api.pull(first.cursor, limit = 100)
         assertFalse(second.hasMore)
+        f.requests.forEach { assertEquals("Bearer tok-123", it.headers[HttpHeaders.Authorization]) }
         val u1 = f.requests[0].url
         assertFalse(u1.parameters.contains("cursor"))
         assertEquals("500", u1.parameters["limit"])
@@ -98,6 +99,17 @@ class SyncApiTest {
         val e = runCatching { f.api.pull(null) }.exceptionOrNull()
         assertTrue(e is SyncApiException.SessionRequired)
         assertTrue(f.requests.isEmpty())
+    }
+
+    @Test
+    fun throwingTokenProviderMapsToSessionRequired() = runTest {
+        val engine = MockEngine { error("must not be called") }
+        val auth = object : AuthSessionProvider {
+            override val state: StateFlow<AuthState> = MutableStateFlow(AuthState.Loading)
+            override suspend fun accessToken(): String = throw IllegalStateException("clerk down")
+        }
+        val api = SyncApiImpl(createGymLogHttpClient(engine), "https://example.test", auth, ServerClock())
+        assertTrue(runCatching { api.pull(null) }.exceptionOrNull() is SyncApiException.SessionRequired)
     }
 
     @Test

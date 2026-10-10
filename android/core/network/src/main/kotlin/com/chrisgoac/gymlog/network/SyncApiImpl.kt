@@ -29,11 +29,11 @@ interface SyncApi {
     suspend fun pull(cursor: String?, limit: Int = 500): PullResponse
 }
 
-class SyncApiImpl(
+class SyncApiImpl internal constructor(
     private val client: HttpClient,
-    private val baseUrl: String,
+    baseUrl: String,
     private val auth: AuthSessionProvider,
-    private val serverClock: ServerClock = ServerClock(),
+    private val serverClock: ServerClock,
     private val requestIdFactory: () -> String = { UUID.randomUUID().toString() },
 ) : SyncApi {
     private val root = baseUrl.trimEnd('/')
@@ -64,7 +64,13 @@ class SyncApiImpl(
         configure: HttpRequestBuilder.() -> Unit,
         decode: (String) -> T,
     ): T {
-        val token = auth.accessToken() ?: throw SyncApiException.SessionRequired("No access token")
+        val token = try {
+            auth.accessToken()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw SyncApiException.SessionRequired("Access token unavailable: ${e.message}")
+        } ?: throw SyncApiException.SessionRequired("No access token")
         val requestId = requestIdFactory()
         val response = try {
             client.request {
@@ -100,8 +106,13 @@ class SyncApiImpl(
             decode(text)
         } catch (e: SerializationException) {
             throw SyncApiException.Malformed("Undecodable response body", e)
-        } catch (e: IllegalArgumentException) {
-            throw SyncApiException.Malformed("Undecodable response body", e)
         }
     }
 }
+
+/**
+ * Production factory (OkHttp engine). Pass the same [serverClock] the rest of the app uses to stamp
+ * updatedAt, so the offset learned from response `Date` headers is shared.
+ */
+fun createSyncApi(baseUrl: String, auth: AuthSessionProvider, serverClock: ServerClock): SyncApi =
+    SyncApiImpl(createGymLogHttpClient(), baseUrl, auth, serverClock)
