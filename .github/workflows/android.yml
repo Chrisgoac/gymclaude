@@ -22,8 +22,9 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
       - uses: android-actions/setup-android@v3
+      - run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew verifyModuleGraph testDebugUnitTest :core:model:test :core:domain:test :core:testing:test
 
@@ -34,8 +35,9 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
       - uses: android-actions/setup-android@v3
+      - run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew lintDebug
 
@@ -46,7 +48,8 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
       - uses: android-actions/setup-android@v3
+      - run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew assembleDebug
