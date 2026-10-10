@@ -1,0 +1,34 @@
+{
+  "changes": [
+    {
+      "table": "gyms",
+      "serverVersion": "101",
+      "record": {
+        "id": "gym-1",
+        "updatedAt": 1767225600000,
+        "deletedAt": null,
+        "nombre": "Gym",
+        "orden": 0,
+        "archivada": false
+      }
+    },
+    {
+      "table": "mesocycles",
+      "serverVersion": "102",
+      "record": {
+        "id": "meso-1",
+        "updatedAt": 1767225600010,
+        "deletedAt": 1767225700000,
+        "nombre": "Bloque 1",
+        "objetivo": "hipertrofia",
+        "semanas": 6,
+        "diasPorSemana": 4,
+        "notas": null,
+        "progresion": {"tipo": "lineal", "pasos": [1, 2, 3]},
+        "fechaInicio": 1767225600000
+      }
+    }
+  ],
+  "cursor": "eyJ2IjoxMDJ9",
+  "hasMore": true
+}

@@ -1,0 +1,56 @@
+{
+  "mutations": [
+    {
+      "mutationId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
+      "deviceId": "android-pixel-8-0001",
+      "operations": [
+        {
+          "table": "exercises",
+          "baseServerVersion": null,
+          "record": {
+            "id": "ex-custom-1",
+            "updatedAt": 1767225600000,
+            "deletedAt": null,
+            "nombre": "Press banca",
+            "grupoMuscular": "pecho",
+            "equipamiento": "barra",
+            "tipo": "compuesto",
+            "videoUrl": null,
+            "notas": "Pausa en el pecho",
+            "descripcion": "Tumbado en el banco",
+            "execution": "Baja controlado y empuja",
+            "incrementoKg": 2.5,
+            "esPersonalizado": true
+          }
+        },
+        {
+          "table": "routineExercises",
+          "baseServerVersion": "42",
+          "record": {
+            "id": "re-1",
+            "updatedAt": 1767225600001,
+            "deletedAt": null,
+            "routineId": "routine-1",
+            "exerciseId": "seed-press-banca",
+            "orden": 0,
+            "seriesObjetivo": 4,
+            "repsObjetivo": 10,
+            "repsObjetivoMin": 6,
+            "descansoSegundos": 120,
+            "notas": null
+          }
+        },
+        {
+          "table": "userSettings",
+          "baseServerVersion": null,
+          "record": {
+            "id": "restSeconds",
+            "updatedAt": 1767225600002,
+            "deletedAt": 1767225600003,
+            "valor": "90"
+          }
+        }
+      ]
+    }
+  ]
+}
