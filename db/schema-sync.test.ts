@@ -38,6 +38,8 @@ describe('synced table metadata', () => {
     expect(column(table, 'deleted_at').notNull).toBe(false);
     const sv = column(table, 'server_version');
     expect(sv.getSQLType()).toBe('bigint');
+    // int64 exact: never a JS number (precision loss above 2^53).
+    expect(sv.columnType).toBe('PgBigInt64');
     // Nullable so legacy writers keep working; the migration backfills every row.
     expect(sv.notNull).toBe(false);
     expect(column(table, 'last_device_id').getSQLType()).toBe('text');
@@ -73,6 +75,7 @@ describe('sync infrastructure tables', () => {
     const seq = column(schema.syncChanges, 'sequence');
     expect(seq.getSQLType()).toBe('bigserial');
     expect(seq.primary).toBe(true);
+    expect(seq.columnType).toBe('PgBigSerial64');
     for (const n of ['user_id', 'table_name', 'record_id', 'changed_at']) {
       expect(column(schema.syncChanges, n).notNull).toBe(true);
     }

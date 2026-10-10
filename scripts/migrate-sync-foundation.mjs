@@ -27,16 +27,21 @@ function loadEnvLocal() {
 }
 
 function resolveUrl() {
-  if (process.env.MIGRATION_DATABASE_URL) return process.env.MIGRATION_DATABASE_URL;
+  if (process.env.MIGRATION_DATABASE_URL) return { url: process.env.MIGRATION_DATABASE_URL, fromEnvLocal: false };
   const env = loadEnvLocal();
   const url = env.DATABASE_URL_UNPOOLED || env.DATABASE_URL;
   if (!url) throw new Error('No MIGRATION_DATABASE_URL ni DATABASE_URL(_UNPOOLED) en .env.local');
-  return url;
+  return { url, fromEnvLocal: true };
 }
 
-const url = resolveUrl();
+const { url, fromEnvLocal } = resolveUrl();
 const target = new URL(url);
 console.log(`Destino: ${target.hostname}:${target.port || 5432}${target.pathname}`);
+// .env.local es PRODUCCIÓN: exige confirmar el host explícitamente.
+if (fromEnvLocal && process.env.CONFIRM_TARGET !== target.hostname) {
+  console.error(`URL tomada de .env.local (producción). Repite con CONFIRM_TARGET=${target.hostname} para continuar.`);
+  process.exit(1);
+}
 
 const sql = readFileSync(new URL('../drizzle/0001_android_sync_foundation.sql', import.meta.url), 'utf8');
 const client = new pg.Client({ connectionString: url });
@@ -63,7 +68,7 @@ try {
   await client.query('COMMIT');
   console.log(`sync_changes: ${journalBefore} -> ${journalAfter} (+${journalAfter - journalBefore}). OK`);
 } catch (err) {
-  await client.query('ROLLBACK');
+  await client.query('ROLLBACK').catch(() => {});
   throw err;
 } finally {
   await client.end();

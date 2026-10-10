@@ -5,7 +5,7 @@ import { pgTable, text, doublePrecision, integer, bigint, bigserial, boolean, js
 // escritores legacy; la migración 0001 rellena todas las filas existentes).
 function serverMeta() {
   return {
-    serverVersion: bigint('server_version', { mode: 'number' }),
+    serverVersion: bigint('server_version', { mode: 'bigint' }),
     lastDeviceId: text('last_device_id'),
     lastMutationId: text('last_mutation_id'),
   };
@@ -160,7 +160,7 @@ export const syncMutations = pgTable('sync_mutations', {
 
 // Diario global de cambios: `sequence` es la única fuente de orden del pull.
 export const syncChanges = pgTable('sync_changes', {
-  sequence: bigserial('sequence', { mode: 'number' }).primaryKey(),
+  sequence: bigserial('sequence', { mode: 'bigint' }).primaryKey(),
   userId: text('user_id').notNull(),
   tableName: text('table_name').notNull(),
   recordId: text('record_id').notNull(),

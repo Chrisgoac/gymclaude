@@ -10,7 +10,8 @@ export function getPoolDb(): NodePgDatabase<typeof schema> {
   if (!db) {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) throw new Error('DATABASE_URL is not set');
-    db = drizzle(new Pool({ connectionString }), { schema });
+    // Pool pequeño: cada instancia serverless abre pocas conexiones y las suelta al quedar ociosa.
+    db = drizzle(new Pool({ connectionString, max: 3, idleTimeoutMillis: 10_000 }), { schema });
   }
   return db;
 }
