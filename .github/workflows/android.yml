@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -62,3 +62,40 @@ jobs:
       - run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew assembleDebug
+
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # Signing happens only when every secret exists (never on forks); otherwise the bundle is unsigned.
+      KEYSTORE_BASE64: ${{ secrets.GYMLOG_KEYSTORE_BASE64 }}
+      GYMLOG_KEYSTORE_PASSWORD: ${{ secrets.GYMLOG_KEYSTORE_PASSWORD }}
+      GYMLOG_KEY_ALIAS: ${{ secrets.GYMLOG_KEY_ALIAS }}
+      GYMLOG_KEY_PASSWORD: ${{ secrets.GYMLOG_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+        with:
+          # ponytail: default packages include the removed 'tools' package, which fails sdkmanager
+          packages: 'platform-tools'
+      - run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Decode upload keystore
+        if: ${{ github.event_name == 'push' && env.KEYSTORE_BASE64 != '' && env.GYMLOG_KEYSTORE_PASSWORD != '' && env.GYMLOG_KEY_ALIAS != '' && env.GYMLOG_KEY_PASSWORD != '' }}
+        run: |
+          keystore="$RUNNER_TEMP/gymlog-upload.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          echo "GYMLOG_KEYSTORE_FILE=$keystore" >> "$GITHUB_ENV"
+      - run: ./gradlew testReleaseUnitTest lintRelease bundleRelease -Pgymlog.versionCode=${{ github.run_number }}
+      - name: Remove keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gymlog-upload.jks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gymlog-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab
+          retention-days: 7
+          if-no-files-found: error

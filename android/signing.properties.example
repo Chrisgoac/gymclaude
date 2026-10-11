@@ -1,0 +1,8 @@
+# Copy to android/signing.properties (gitignored) to sign release builds locally.
+# Keep the keystore OUTSIDE the repository; a relative storeFile is resolved from android/.
+# CI uses the GYMLOG_KEYSTORE_FILE / GYMLOG_KEYSTORE_PASSWORD / GYMLOG_KEY_ALIAS / GYMLOG_KEY_PASSWORD
+# environment variables instead. With any value missing, bundleRelease produces an unsigned bundle.
+storeFile=/absolute/path/outside/the/repo/gymlog-upload.jks
+storePassword=<store-password>
+keyAlias=<key-alias>
+keyPassword=<key-password>

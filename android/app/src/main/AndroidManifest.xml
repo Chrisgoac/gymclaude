@@ -8,16 +8,19 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Photos: system Photo Picker and ACTION_IMAGE_CAPTURE into a private FileProvider URI. No
          READ_MEDIA_*, READ/WRITE_EXTERNAL_STORAGE or CAMERA permission is requested on purpose
-         (declaring CAMERA would make ACTION_IMAGE_CAPTURE require it). MediaManifestTest guards this. -->
+         (declaring CAMERA would make ACTION_IMAGE_CAPTURE require it). MediaUploadWorkerTest guards this. -->
 
     <application
         android:name=".GymLogApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.GymLog">
+        android:theme="@style/Theme.GymLog"
+        android:usesCleartextTraffic="false">
 
         <!-- WorkManager starts on demand through GymLogApplication (Configuration.Provider): its worker
              factory needs the AppContainer, which does not exist when the default initializer runs. -->

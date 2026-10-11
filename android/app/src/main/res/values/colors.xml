@@ -2,4 +2,6 @@
 <resources>
     <!-- Matches HierroLightColors.background; avoids a white flash before Compose draws. -->
     <color name="window_background">#FFD4D1CD</color>
+    <!-- Launcher icon plate: the dark Hierro background (same in both themes). -->
+    <color name="ic_launcher_background">#FF120F0C</color>
 </resources>

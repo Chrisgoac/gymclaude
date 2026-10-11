@@ -1,3 +1,5 @@
+import com.android.build.api.variant.HasHostTestsBuilder
+import com.android.build.api.variant.HostTestBuilder
 import java.util.Properties
 
 plugins {
@@ -15,6 +17,25 @@ fun quoted(value: String): String = "\"" + value.replace("\\", "\\\\").replace("
 
 fun buildConfigString(key: String, default: String): String = quoted(localProps.getProperty(key, default).trim())
 
+// Release signing: android/signing.properties (gitignored, see signing.properties.example) or, in CI, the
+// GYMLOG_KEYSTORE_* environment variables. Without all four values the release is built unsigned.
+val signingProps = Properties().apply {
+    rootProject.file("signing.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
+}
+
+fun signingValue(property: String, env: String): String? =
+    (signingProps.getProperty(property) ?: System.getenv(env))?.trim()?.takeIf { it.isNotEmpty() }
+
+val releaseKeystore = signingValue("storeFile", "GYMLOG_KEYSTORE_FILE")
+val releaseStorePassword = signingValue("storePassword", "GYMLOG_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "GYMLOG_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "GYMLOG_KEY_PASSWORD")
+val canSignRelease = listOf(releaseKeystore, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { it != null }
+
+// Overridable from CI: ./gradlew -Pgymlog.versionCode=42 -Pgymlog.versionName=1.2.0 bundleRelease
+val appVersionCode: Int = providers.gradleProperty("gymlog.versionCode").orElse("1").get().toInt()
+val appVersionName: String = providers.gradleProperty("gymlog.versionName").orElse("1.0.0").get()
+
 // Public web pages the app links to (privacy policy, account deletion): the web app, same host as the API by default.
 val webBaseUrl: String = localProps.getProperty("gymlog.webBaseUrl", localProps.getProperty("gymlog.apiBaseUrl", "https://gym.chrisgoac.dev"))
     .trim().trimEnd('/')
@@ -27,8 +48,8 @@ android {
         applicationId = "com.chrisgoac.gymlog"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "API_BASE_URL", buildConfigString("gymlog.apiBaseUrl", "https://gym.chrisgoac.dev"))
@@ -37,12 +58,26 @@ android {
         buildConfigField("String", "ACCOUNT_DELETION_URL", quoted("$webBaseUrl/delete-account"))
     }
 
+    signingConfigs {
+        if (canSignRelease) {
+            create("release") {
+                storeFile = rootProject.file(releaseKeystore!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             versionNameSuffix = "-debug"
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (canSignRelease) signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -61,6 +96,16 @@ android {
     sourceSets {
         getByName("test").kotlin.directories.add("src/sharedTest/kotlin")
         getByName("androidTest").kotlin.directories.add("src/sharedTest/kotlin")
+    }
+}
+
+// AGP only creates unit tests for the tested (debug) build type. The app adds `testReleaseUnitTest` for
+// ReleaseConfigTest (release BuildConfig, merged manifest, packaged resources). The behaviour suite stays on
+// debug: Robolectric resolves Compose test activities from the app manifest, and ui-test-manifest's
+// ComponentActivity must never ship in the release one.
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { variant ->
+        (variant as HasHostTestsBuilder).hostTests[HostTestBuilder.UNIT_TEST_TYPE]?.enable = true
     }
 }
 
@@ -111,4 +156,5 @@ dependencies {
 // Robolectric's SDK 36 shadows reach into JDK internals on JDK 17+.
 tasks.withType<Test>().configureEach {
     jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+    if (name == "testReleaseUnitTest") filter.includeTestsMatching("com.chrisgoac.gymlog.ReleaseConfigTest")
 }
