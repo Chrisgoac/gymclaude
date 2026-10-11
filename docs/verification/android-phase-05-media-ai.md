@@ -60,20 +60,57 @@ cd android && ./gradlew :core:data:testDebugUnitTest --tests '*MediaRepositoryTe
 |---|---|
 | `SYNC_TEST_DATABASE_URL=<BD desechable> npx vitest run` | 104 ficheros, 1073 tests passed |
 | `npm run lint` | sin avisos |
-| `npx tsc --noEmit` | un único error preexistente y ajeno a esta fase: `scripts/export-android-catalog.test.ts(6,1) TS2578 Unused '@ts-expect-error'` (commit b6cd2ee); no afecta a `npm run build` |
+| `npx tsc --noEmit` | limpio tras la ola de correcciones (antes: TS2578 preexistente en `scripts/export-android-catalog.test.ts`) |
 | `NODE_OPTIONS=--max-old-space-size=4096 npm run build` | BUILD OK |
 | `cd android && ./gradlew testDebugUnitTest test lintDebug assembleDebug verifyModuleGraph` | BUILD SUCCESSFUL; 1007 tests, 0 failures, 0 errors, 0 skipped |
 | `./gradlew :app:connectedDebugAndroidTest` (AVD `gymlog_api36`, API 36) | 11 tests, 0 failures; emulador apagado (`adb emu kill`) |
 
-## 5. Comprobaciones manuales pendientes (no automatizables esta noche)
+## 5. Orden de despliegue (obligatorio)
 
-- [ ] Bucket R2 privado real: subida, URL firmada de 300 s, borrado diferido; CORS/CSP del bucket y de la PWA (hoy `next.config` no define CSP).
+La PWA y la sync ya seleccionan las columnas nuevas (`key`/`mime`/`bytes`/`width`/`height`, tablas de IA): si el
+código llega a producción antes que las migraciones, el pull de la PWA falla. Orden:
+
+1. **Migraciones primero**, contra la BD de producción y antes de que el código llegue a `main`/producción:
+   `npm run db:migrate:media` y después `npm run db:migrate:ai` (0003 se editó en sitio antes de publicarse:
+   una sola ejecución). Son idempotentes.
+2. **Bucket R2 privado** nuevo (sin acceso público ni dominio público) y env `R2_PRIVATE_BUCKET` en Vercel (las
+   credenciales `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` deben poder escribir en él). Sin esa env
+   las rutas v1 de medios responden `503 MEDIA_UNAVAILABLE` (fallan cerradas; nunca escriben en el bucket público
+   `R2_BUCKET`, que sigue sirviendo las fotos legacy de la PWA).
+3. **`CRON_SECRET`** en Vercel (valor aleatorio largo). Vercel lo manda como `Authorization: Bearer …` al cron.
+4. **Cron**: `vercel.json` declara `/api/internal/media/process-deletions` a diario (`0 4 * * *`). Tras desplegar,
+   comprobar en Vercel → Settings → Cron Jobs que aparece y lanzar una ejecución manual: debe responder `200`
+   (`401` = falta o no coincide `CRON_SECRET`; `503 MEDIA_UNAVAILABLE` = falta `R2_PRIVATE_BUCKET`).
+5. Desplegar el código.
+
+Borrado de objetos: el tombstone (ruta v1 DELETE, push v1 o push legacy de una foto v1, o el DELETE legacy de la
+PWA con una clave v1) encola `media_deletions` en la misma transacción; el cron borra tras 24 h las claves
+`users/…` del bucket privado y las legacy del público, y cancela el borrado si la fila del dueño vuelve a estar viva.
+
+## 6. Comprobaciones manuales pendientes (no automatizables esta noche)
+
+- [ ] Bucket R2 privado real: subida, URL firmada de 300 s, borrado diferido por el cron; CORS/CSP del bucket y de la PWA (hoy `next.config` no define CSP).
 - [ ] Stream real de DeepSeek: `fullStream`, desconexión del cliente (`request.signal`) y tiempos con la clave real (smoke tras desplegar).
 - [ ] Photo Picker y cámara reales en dispositivos físicos (Pixel/Samsung), rotación EXIF real, permisos.
 - [ ] Ejecución en API 26 (emulador o dispositivo) de las pruebas instrumentadas y del flujo de fotos.
 - [ ] Derechos Pro reales de Google Play (Plan 6): hoy solo existe el seed `source='test'`.
-- [ ] Despliegue: ejecutar `npm run db:migrate:media` y `npm run db:migrate:ai` en producción (0003 se editó en sitio antes de publicarse: una sola ejecución); conectar `processDeletions` a un cron (hoy no hay disparador: los objetos borrados no se eliminan de R2 hasta entonces); los tombstones entregados por sync no encolan borrado de objeto.
+- [ ] Despliegue en el orden de la sección 5 (migraciones → bucket privado + `R2_PRIVATE_BUCKET` → `CRON_SECRET` → cron verificado → código).
 - [ ] Decisión de producto: las rutas PWA heredadas `/api/coach` siguen sin guard Pro (solo `/api/v1/ai/*` lo exige); decidir si se cierran.
-- [ ] Decisión de despliegue: pasar el bucket a privado y migrar las URLs públicas antiguas de la PWA (coste: una redirección extra por imagen).
-- [ ] Service worker Serwist (`app/sw.ts`): confirmar que no cachea `/api/media/read/*` ni URLs firmadas de R2.
-- [ ] Pendientes menores registrados en el ledger de fase (informes sin lease multi-dispositivo, la caché consume token de rate limit, etc.).
+- [ ] Decisión de despliegue: migrar las fotos públicas antiguas de la PWA al bucket privado (coste: una redirección extra por imagen).
+- [ ] Pendientes menores registrados en el ledger de fase (informes sin lease multi-dispositivo, descartes de Coach solo en memoria, etc.).
+
+## 7. Ola de correcciones de la revisión final
+
+Detalle y evidencia en `.superpowers/sdd/2026-08-31-gymlog-android-05-media-ai/final-fixes-report.md`. Resumen:
+
+- Service worker: `/api/media/read/*` y `/api/v1/*` (same-origin) van siempre a red (`NetworkOnly` antes de `defaultCache`).
+- `npx tsc --noEmit` limpio (TS2578 de `scripts/export-android-catalog.test.ts` resuelto).
+- Medios v1 en bucket privado propio (`R2_PRIVATE_BUCKET`), 503 `MEDIA_UNAVAILABLE` sin él.
+- Borrado diferido conectado: ruta interna autenticada por `CRON_SECRET` + cron de Vercel; tombstones de sync y DELETE legacy encolan.
+- Android: una foto por ejercicio (cambiarla guarda la nueva y luego borra la anterior); caché de imagen por `mediaId` + `objectKey`.
+- Android Coach: snapshot de la BD abierta del turno, PRs semanales ≤ 100, `Retry-After` ≤ 15 s, una caída de conexión tras `complete` no duplica el turno.
+- IA: presupuesto diario de 200 llamadas por usuario (`aiDaily`, 429 con `Retry-After`); el informe en caché se sirve antes de comprobar DeepSeek o gastar cupo.
+
+Suites tras la ola: `vitest` 108 ficheros / 1100 tests (con BD desechable), `npm run lint` limpio, `npx tsc --noEmit`
+limpio, `npm run build` OK; Android `testDebugUnitTest test lintDebug assembleDebug verifyModuleGraph` BUILD SUCCESSFUL,
+1016 tests, 0 fallos. No se relanzaron las pruebas instrumentadas.

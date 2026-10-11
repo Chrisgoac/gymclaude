@@ -185,7 +185,9 @@ Status: **automated evidence complete; device and real-service checks pending.**
 - [x] A second user cannot read or delete another user's media (404) nor see the first user's local cache.
 - [x] The server returns `PRO_REQUIRED` for Coach, mesocycles and reports regardless of client state or payload; a seeded test entitlement unlocks Coach streaming/interruption/retry/replay, mesocycle drafts and fingerprint-cached reports with invalidation.
 - [x] Backend `vitest` 1073/1073, lint, build; Android `testDebugUnitTest test lintDebug assembleDebug verifyModuleGraph` green (1007 tests); `:app:connectedDebugAndroidTest` 11/11 on API 36.
-- [ ] Real R2 private bucket (+ CORS/CSP), real DeepSeek stream, Photo Picker/camera on devices, API 26 run, Play entitlements (Plan 6), production `db:migrate:media` + `db:migrate:ai`, `processDeletions` cron, legacy PWA `/api/coach` gating decision, Serwist must not cache `/api/media/read`.
+- [x] Final-review fixes: Serwist sends `/api/media/read/*` and `/api/v1/*` to the network only; v1 media in a separate private bucket (`R2_PRIVATE_BUCKET`, 503 `MEDIA_UNAVAILABLE` without it); `processDeletions` wired to `/api/internal/media/process-deletions` (`CRON_SECRET` bearer) + Vercel cron, with sync/legacy tombstones enqueuing; one photo per exercise on Android and an image cache keyed by object key; daily AI budget (200/user/day).
+- [ ] **Deploy order (binding):** 1) run `npm run db:migrate:media` then `npm run db:migrate:ai` against production BEFORE the code reaches production (the PWA pull already selects the new columns); 2) create the private R2 bucket and set `R2_PRIVATE_BUCKET`; 3) set `CRON_SECRET`; 4) verify the `vercel.json` cron (`/api/internal/media/process-deletions`, daily) appears in Vercel and a manual run returns 200; 5) deploy.
+- [ ] Real R2 private bucket (+ CORS/CSP), real DeepSeek stream, Photo Picker/camera on devices, API 26 run, Play entitlements (Plan 6), legacy PWA `/api/coach` gating decision.
 
 Evidence: [android-phase-05-media-ai.md](../../verification/android-phase-05-media-ai.md).
 
