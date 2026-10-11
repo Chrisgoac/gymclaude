@@ -127,6 +127,10 @@ class OfflineAchievementRepositoryTest {
             val repo = OfflineAchievementRepository(Manager(db)) { RoomLocalMutationRunner(db, DeviceId("test-device"), clock = { 1_000L }) }
 
             for (step in scenario.getValue("steps").objects()) {
+                step.getValue("inject").objects().forEach {
+                    db.achievementDao().upsert(AchievementEntity(it.str("id"), 1, if (it.str("state") == "tombstoned") 1 else null, it.str("key"), 1, null))
+                }
+                val allowTombstone = step.str("trigger") == "edit"
                 val label = "${scenario.str("name")}: ${step.str("label")}"
                 val expected = step.getValue("expected").jsonObject
                 nowMillis = step.getValue("now").jsonPrimitive.long
@@ -150,7 +154,7 @@ class OfflineAchievementRepositoryTest {
                 )
 
                 val outboxBefore = outboxCount(db)
-                val result = reconcile()
+                val result = reconcile(allowTombstone)
                 val expectedDecisions = expected.getValue("decisions").jsonObject.mapValues { it.value.jsonPrimitive.content }
                 assertEquals(label, expectedDecisions, result.decisions.mapValues { it.value.wire })
                 val expectedWrite = expectedDecisions.values.any { it == "unlock" || it == "tombstone" }
@@ -166,7 +170,7 @@ class OfflineAchievementRepositoryTest {
 
                 // Idempotent: same evidence, nothing to write, nothing queued.
                 val outboxAfter = outboxCount(db)
-                val again = reconcile()
+                val again = reconcile(allowTombstone)
                 assertTrue("$label second run", !again.wrote)
                 assertEquals("$label second run outbox", outboxAfter, outboxCount(db))
                 assertEquals("$label second run rows", expectedRows, rows(db))
@@ -175,7 +179,7 @@ class OfflineAchievementRepositoryTest {
         }
     }
 
-    @Test fun `a revived row keeps its id and moves to the new unlock date`() = runBlocking {
+    @Test fun `a revived row keeps its id and keeps its original unlock date`() = runBlocking {
         val db = database()
         db.userSettingDao().upsert(UserSettingEntity("objetivoSemanal", 1, null, "3", null))
         val repo = OfflineAchievementRepository(Manager(db)) { RoomLocalMutationRunner(db, DeviceId("d"), clock = { 5_000L }) }
@@ -191,7 +195,7 @@ class OfflineAchievementRepositoryTest {
         // A history edit removes a session -> tombstone; restoring it -> same row alive again, newer version and date.
         db.workoutSessionDao().upsert(WorkoutSessionEntity("s9", 2, 2, null, null, null, 1_009L, 3600, null, null))
         clock = 20_000L
-        assertEquals(listOf("sesiones-10"), reconcile().tombstoned)
+        assertEquals(listOf("sesiones-10"), reconcile(allowTombstone = true).tombstoned)
         val tombstoned = db.achievementDao().getAll().single()
         assertTrue(tombstoned.deletedAt != null && tombstoned.updatedAt > first.updatedAt)
 
@@ -201,7 +205,7 @@ class OfflineAchievementRepositoryTest {
         val revived = db.achievementDao().getAll().single()
         assertEquals(first.id, revived.id)
         assertEquals(null, revived.deletedAt)
-        assertEquals(30_000L, revived.fechaDesbloqueo)
+        assertEquals("original unlock date is kept", 10_000L, revived.fechaDesbloqueo)
         assertTrue(revived.updatedAt > tombstoned.updatedAt)
         db.close()
     }

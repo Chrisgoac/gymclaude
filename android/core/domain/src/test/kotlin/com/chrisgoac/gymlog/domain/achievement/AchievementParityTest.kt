@@ -1,5 +1,6 @@
 package com.chrisgoac.gymlog.domain.achievement
 
+import com.chrisgoac.gymlog.domain.stats.WorkoutStats
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -13,6 +14,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * Runs contracts/domain/achievement-cases.json (generated from the PWA's lib/logros.ts and
@@ -61,10 +64,13 @@ class AchievementParityTest {
         val cases = fixture.getValue("streak").jsonArray.map { it.jsonObject }
         assertTrue(cases.isNotEmpty())
         for (c in cases) {
-            val weeks = c.getValue("weeks").jsonArray.map { it.jsonObject }.map {
-                WeekSessions(it.getValue("inicioTs").jsonPrimitive.long, it.getValue("sesiones").jsonPrimitive.int)
+            // The single streak reducer (WorkoutStats): each week's start repeated once per session.
+            val starts = c.getValue("weeks").jsonArray.map { it.jsonObject }.flatMap {
+                List(it.getValue("sesiones").jsonPrimitive.int) { _ -> it.getValue("inicioTs").jsonPrimitive.long }
             }
-            val streak = AchievementRules.streak(weeks, c.getValue("target").jsonPrimitive.int, c.getValue("currentWeekStart").jsonPrimitive.long)
+            val zone = ZoneId.of(c["zone"]?.jsonPrimitive?.content ?: "UTC")
+            val current = Instant.ofEpochMilli(c.getValue("currentWeekStart").jsonPrimitive.long)
+            val streak = WorkoutStats.weeklyStreak(starts, c.getValue("target").jsonPrimitive.int, current, zone)
             val expected = c.getValue("expected").jsonObject
             assertEquals(c.str("name"), expected.getValue("actual").jsonPrimitive.int to expected.getValue("mejor").jsonPrimitive.int, streak.current to streak.best)
         }
@@ -92,18 +98,19 @@ class AchievementParityTest {
         for (scenario in scenarios) {
             var stored = rowsOf(scenario.getValue("initialStored"))
             for (step in scenario.getValue("steps").jsonArray.map { it.jsonObject }) {
+                stored = (stored + rowsOf(step.getValue("inject"))).sortedBy { it.id }
                 val label = "${scenario.str("name")}: ${step.str("label")}"
                 val expected = step.getValue("expected").jsonObject
                 val metrics = metricsOf(expected.getValue("metrics").jsonObject)
                 assertEquals(label, expected.getValue("met").keys(), AchievementRules.evaluate(metrics))
 
-                val plan = AchievementRules.plan(metrics, stored)
+                val plan = AchievementRules.plan(metrics, stored, allowTombstone = step.str("trigger") == "edit")
                 assertEquals(label, expected.getValue("decisions").jsonObject.mapValues { it.value.jsonPrimitive.content }, plan.decisions.mapValues { it.value.wire })
                 stored = apply(stored, plan)
                 assertEquals(label, rowsOf(expected.getValue("storedAfter")).map { Triple(it.id, it.key, it.deleted) }, stored.map { Triple(it.id, it.key, it.deleted) })
 
                 // Idempotent: the same evidence over the new state decides nothing to write.
-                assertTrue("$label: second run must be a no-op", AchievementRules.plan(metrics, stored).isNoOp)
+                assertTrue("$label: second run must be a no-op", AchievementRules.plan(metrics, stored, allowTombstone = step.str("trigger") == "edit").isNoOp)
             }
         }
     }
@@ -111,7 +118,7 @@ class AchievementParityTest {
     @Test
     fun unknownKeysAreNeverTouched() {
         val future = StoredAchievement("f1", "logro-del-futuro", 0, deleted = false)
-        val plan = AchievementRules.plan(AchievementMetrics.NONE, listOf(future))
+        val plan = AchievementRules.plan(AchievementMetrics.NONE, listOf(future), allowTombstone = true)
         assertTrue(plan.isNoOp)
     }
 }

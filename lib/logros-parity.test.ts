@@ -78,5 +78,6 @@ function scenarioLiveBefore(
 ): string[] {
   const index = scenario.steps.indexOf(step as never);
   const rows = index === 0 ? scenario.initialStored : scenario.steps[index - 1].expected.storedAfter;
-  return [...new Set(rows.filter((r) => r.state === 'live').map((r) => r.key))];
+  const injected = (step as { inject: { key: string; state: string }[] }).inject;
+  return [...new Set([...rows, ...injected].filter((r) => r.state === 'live').map((r) => r.key))];
 }

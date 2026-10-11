@@ -1,8 +1,5 @@
 package com.chrisgoac.gymlog.domain.achievement
 
-import com.chrisgoac.gymlog.domain.math.Numbers
-import com.chrisgoac.gymlog.domain.stats.WeeklyStreak
-
 /** Aggregates the milestones are judged on (`LogroMetricas`). Warm-up sets count, as in the PWA. */
 data class AchievementMetrics(
     val sessions: Int,
@@ -33,7 +30,7 @@ enum class AchievementDecision(val wire: String) {
     /** Earned and already live: nothing to write. */
     RETAIN("retain"),
 
-    /** No longer earned (a history edit removed the evidence) and live: tombstone every live row. */
+    /** No longer earned after a local history edit and live: tombstone every live row. */
     TOMBSTONE("tombstone"),
 
     /** Not earned and nothing live: nothing to write. */
@@ -57,11 +54,8 @@ data class AchievementPlan(
     val isNoOp: Boolean get() = unlocks.isEmpty() && tombstones.isEmpty()
 }
 
-/** A week with its session count; [startMillis] is the local Monday 00:00 of the week. */
-data class WeekSessions(val startMillis: Long, val sessions: Int)
-
 /**
- * Pure port of `lib/logros.ts` (catalog, `evaluarLogros`, `calcularRacha`) plus the Android
+ * Pure port of `lib/logros.ts` (catalog, `evaluarLogros`) plus the Android
  * reconciliation rule. Shared fixture: contracts/domain/achievement-cases.json.
  *
  * Identity. The PWA identifies an achievement by its `clave` (it looks for an active row with that
@@ -100,37 +94,14 @@ object AchievementRules {
     fun evaluate(metrics: AchievementMetrics): List<String> = catalog.filter { it.isEarned(metrics) }.map { it.key }
 
     /**
-     * Consecutive-week streak against [target] sessions (`calcularRacha`). A week counts when its
-     * sessions reach [target]; the week index is `round(startMillis / 7 days)` so a DST hour never
-     * splits a run. The current week still in progress below target does not break the streak.
-     */
-    fun streak(weeks: Collection<WeekSessions>, target: Int, currentWeekStartMillis: Long): WeeklyStreak {
-        fun index(startMillis: Long) = Numbers.jsRound(startMillis.toDouble() / WEEK_MILLIS).toLong()
-        val met = weeks.filter { it.sessions >= target }.mapTo(HashSet()) { index(it.startMillis) }
-        var best = 0
-        var run = 0
-        var previous: Long? = null
-        met.sorted().forEach { i ->
-            run = if (previous == i - 1) run + 1 else 1
-            if (run > best) best = run
-            previous = i
-        }
-        val thisWeek = index(currentWeekStartMillis)
-        var cursor = if (thisWeek in met) thisWeek else thisWeek - 1
-        var current = 0
-        while (cursor in met) {
-            current++
-            cursor--
-        }
-        return WeeklyStreak(current, best)
-    }
-
-    /**
      * What to do with [stored] given the evidence in [metrics]. Only catalog milestones are judged:
      * rows with an unknown `clave` (a newer client's milestone) are never touched. Live duplicates
-     * (two devices) are all kept while earned and all tombstoned once not.
+     * (two devices) are all kept while earned and, once not earned, tombstoned ONLY when
+     * [allowTombstone] (the run was caused by a local history edit or workout delete). Any other trigger
+     * (pull, account ready, finishing a workout) is unlock/retain only: evidence that is merely missing
+     * locally (not pulled yet) must never revoke, and a tombstone the PWA would re-insert past would loop.
      */
-    fun plan(metrics: AchievementMetrics, stored: Collection<StoredAchievement>): AchievementPlan {
+    fun plan(metrics: AchievementMetrics, stored: Collection<StoredAchievement>, allowTombstone: Boolean): AchievementPlan {
         val earned = evaluate(metrics).toSet()
         val rowsByKey = stored.groupBy { it.key }
         val decisions = LinkedHashMap<String, AchievementDecision>()
@@ -146,6 +117,7 @@ object AchievementRules {
                     unlocks += AchievementUnlock(def.key, target?.id ?: canonicalId(def.key), revive = target != null)
                     AchievementDecision.UNLOCK
                 }
+                live.isNotEmpty() && !allowTombstone -> AchievementDecision.RETAIN
                 live.isNotEmpty() -> {
                     tombstones += live.sortedBy { it.id }
                     AchievementDecision.TOMBSTONE
@@ -155,6 +127,4 @@ object AchievementRules {
         }
         return AchievementPlan(decisions, unlocks, tombstones)
     }
-
-    private const val WEEK_MILLIS = 7L * 86_400_000L
 }

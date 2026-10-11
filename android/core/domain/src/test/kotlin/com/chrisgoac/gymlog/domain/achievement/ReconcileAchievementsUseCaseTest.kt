@@ -11,6 +11,7 @@ import java.time.ZoneId
 class ReconcileAchievementsUseCaseTest {
     private class FakeStore(var metrics: AchievementMetrics, var rows: List<StoredAchievement> = emptyList()) : AchievementStore {
         var writes = 0
+        var writeResult: Boolean? = null
         var unlockedAt = -1L
         var seenNow: Instant? = null
         var seenZone: ZoneId? = null
@@ -24,13 +25,15 @@ class ReconcileAchievementsUseCaseTest {
 
             override suspend fun stored() = rows
 
-            override suspend fun write(plan: AchievementPlan, unlockedAt: Long) {
+            override suspend fun write(plan: AchievementPlan, unlockedAt: Long): Boolean {
+                if (writeResult != null) return writeResult!!
                 writes++
                 this@FakeStore.unlockedAt = unlockedAt
                 val byId = rows.associateBy { it.id }.toMutableMap()
                 plan.unlocks.forEach { byId[it.id] = StoredAchievement(it.id, it.key, unlockedAt, deleted = false) }
                 plan.tombstones.forEach { byId[it.id] = it.copy(deleted = true) }
                 rows = byId.values.sortedBy { it.id }
+                return true
             }
         }.block()
     }
@@ -67,6 +70,24 @@ class ReconcileAchievementsUseCaseTest {
         assertEquals(0, store.writes)
     }
 
+    @Test fun `without a local edit lost evidence is retained, never tombstoned`() = runTest {
+        val store = FakeStore(ten)
+        val reconcile = useCase(store)
+        reconcile()
+        store.metrics = ten.copy(sessions = 9)
+
+        val result = reconcile()
+
+        assertFalse(result.wrote)
+        assertEquals(AchievementDecision.RETAIN, result.decisions.getValue("sesiones-10"))
+        assertFalse(store.rows.single().deleted)
+    }
+
+    @Test fun `wrote is false when the store wrote nothing`() = runTest {
+        val store = FakeStore(ten).apply { writeResult = false }
+        assertFalse(useCase(store).invoke().wrote)
+    }
+
     @Test fun `lost evidence tombstones and regained evidence revives the same row`() = runTest {
         val store = FakeStore(ten)
         val reconcile = useCase(store)
@@ -74,7 +95,7 @@ class ReconcileAchievementsUseCaseTest {
         val id = store.rows.single().id
 
         store.metrics = ten.copy(sessions = 9)
-        assertEquals(listOf("sesiones-10"), reconcile().tombstoned)
+        assertEquals(listOf("sesiones-10"), reconcile(allowTombstone = true).tombstoned)
         assertTrue(store.rows.single().deleted)
 
         store.metrics = ten

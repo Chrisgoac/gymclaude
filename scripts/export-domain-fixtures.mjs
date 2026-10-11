@@ -420,10 +420,13 @@ const CANONICAL_PREFIX = 'ach:';
  * - earned and a live row exists -> retain (no write; duplicates from other devices are all kept);
  * - earned, no live row -> unlock: revive the row with the canonical id `ach:<clave>` if present, else the
  *   tombstoned row with the lowest id, else create `ach:<clave>` (stable logical identity per clave, so devices converge);
- * - not earned, live rows -> tombstone every live row; not earned and none live -> none.
+ * - not earned, live rows -> tombstone every live row, but ONLY when allowTombstone (the reconcile was triggered by a LOCAL history edit
+ *   or workout delete; step.trigger === 'edit'). Triggers 'finish', 'pull' and 'ready' never revoke: such a row is retained. This breaks the
+ *   loop "Android tombstones -> PWA re-inserts a random-id row -> pull -> Android tombstones it again". Not earned and none live -> none.
+ * - a revived row keeps its original fechaDesbloqueo.
  * Keys outside the catalog are never touched.
  */
-function androidReconcile(met, stored) {
+function androidReconcile(met, stored, allowTombstone) {
   const decisions = {};
   const after = stored.map((row) => ({ ...row }));
   for (const def of LOGROS_DEF) {
@@ -436,6 +439,8 @@ function androidReconcile(met, stored) {
       const target = rows.find((row) => row.id === canonicalId) ?? [...rows].sort((a, b) => (a.id < b.id ? -1 : 1))[0];
       if (target) target.state = 'live';
       else after.push({ id: canonicalId, key: def.clave, state: 'live' });
+    } else if (live.length > 0 && !allowTombstone) {
+      decisions[def.clave] = 'retain';
     } else if (live.length > 0) {
       decisions[def.clave] = 'tombstone';
       live.forEach((row) => { row.state = 'tombstoned'; });
@@ -500,7 +505,7 @@ async function achievementScenarios() {
     {
       name: 'sessions: edit removes then restores a session', zone: 'Europe/Madrid', objetivo: 3, initialStored: [],
       steps: [
-        { label: '10 sessions earns sessions-10', now: NOW, data: merge(tenSessions) },
+        { label: '10 sessions earns sessions-10', trigger: 'finish', now: NOW, data: merge(tenSessions) },
         { label: 'unchanged: nothing to write', now: NOW, data: merge(tenSessions) },
         { label: 'history edit deletes one session: sessions-10 is tombstoned', now: NOW, data: merge(nineSessions) },
         { label: 'still 9: nothing to write', now: NOW, data: merge(nineSessions) },
@@ -510,7 +515,7 @@ async function achievementScenarios() {
     {
       name: 'streak: a missing week breaks the run, restoring it re-earns', zone: 'Europe/Madrid', objetivo: 1, initialStored: [],
       steps: [
-        { label: '12 weeks in a row earn every streak and 10 sessions', now: NOW, data: merge(weekly12) },
+        { label: '12 weeks in a row earn every streak and 10 sessions', trigger: 'finish', now: NOW, data: merge(weekly12) },
         { label: 'middle week emptied: best run is 6, racha-8 and racha-12 go', now: NOW, data: merge(weekly12WithoutMiddle) },
         { label: 'week back: all earned again', now: NOW, data: merge(weekly12) },
       ],
@@ -518,17 +523,31 @@ async function achievementScenarios() {
     {
       name: 'volume boundaries are inclusive', zone: 'UTC', objetivo: 3, initialStored: [],
       steps: [
-        { label: '500000 exactly earns 100k and 500k', now: NOW, data: merge(heavy(100000)) },
+        { label: '500000 exactly earns 100k and 500k', trigger: 'finish', now: NOW, data: merge(heavy(100000)) },
         { label: 'one kg less than 100k tombstones 100k and 500k', now: NOW, data: merge(trainingBlock('h', 1, '2026-05-01T08:00:00Z', 2, 'ex-squat', 99999, 1)) },
         { label: '1,000,000 earns all three volume milestones', now: NOW, data: merge(heavy(200000)) },
       ],
     },
     {
-      name: 'mesocycle: completion is strict and tombstones follow deletion', zone: 'Europe/Madrid', objetivo: 3, initialStored: [],
+      name: 'mesocycle: completion is strict, deleting it does not revoke', zone: 'Europe/Madrid', objetivo: 3, initialStored: [],
       steps: [
         { label: 'ends exactly now: not completed', now: NOW, data: merge({ mesocycles: [{ id: 'm1', semanas: 4, fechaInicio: NOW - 4 * WEEK }] }) },
         { label: 'one ms later: completed', now: NOW + 1, data: merge({ mesocycles: [{ id: 'm1', semanas: 4, fechaInicio: NOW - 4 * WEEK }] }) },
-        { label: 'mesocycle deleted: planner achievement is tombstoned', now: NOW + 1, data: merge({ mesocycles: [{ id: 'm1', semanas: 4, fechaInicio: NOW - 4 * WEEK, deleted: true }] }) },
+        { label: 'mesocycle deleted is not a workout edit: the achievement is retained', trigger: 'pull', now: NOW + 1, data: merge({ mesocycles: [{ id: 'm1', semanas: 4, fechaInicio: NOW - 4 * WEEK, deleted: true }] }) },
+      ],
+    },
+    {
+      name: 'no revoke loop: only a local edit tombstones, a PWA re-insert survives pulls', zone: 'Europe/Madrid', objetivo: 3, initialStored: [],
+      steps: [
+        { label: '10 sessions earn sessions-10', trigger: 'finish', now: NOW, data: merge(tenSessions) },
+        { label: 'pull with the evidence missing (other device not pulled yet): retained, never tombstoned', trigger: 'pull', now: NOW, data: merge(nineSessions) },
+        { label: 'account ready with the evidence missing: retained', trigger: 'ready', now: NOW, data: merge(nineSessions) },
+        { label: 'local history edit confirms the loss: tombstoned', trigger: 'edit', now: NOW, data: merge(nineSessions) },
+        {
+          label: 'the PWA re-inserts its own random-id row and it is pulled: a pull-triggered reconcile keeps it (no loop)', trigger: 'pull', now: NOW, data: merge(nineSessions),
+          inject: [{ id: 'pwa-random-uuid', key: 'sesiones-10', state: 'live' }],
+        },
+        { label: 'a second pull changes nothing', trigger: 'pull', now: NOW, data: merge(nineSessions) },
       ],
     },
     {
@@ -545,7 +564,7 @@ async function achievementScenarios() {
       ],
       steps: [
         {
-          label: 'duplicate live rows are retained; tombstoned rows are revived (canonical id first, else lowest id)', now: NOW + 1,
+          label: 'duplicate live rows are retained; tombstoned rows are revived (canonical id first, else lowest id)', trigger: 'pull', now: NOW + 1,
           data: merge(trainingBlock('p', 120, '2026-01-01T08:00:00Z', 1, press, 60, 8), { mesocycles: [{ id: 'm1', semanas: 1, fechaInicio: NOW - 2 * WEEK }] }),
         },
         {
@@ -561,11 +580,13 @@ async function achievementScenarios() {
     const steps = [];
     for (const step of spec.steps) {
       const data = { ...step.data, exercises: EXERCISES };
+      const trigger = step.trigger ?? 'edit';
+      stored = [...stored, ...(step.inject ?? [])];
       const record = await inZoneAsync(spec.zone, async () => {
         await seedAchievementData(data);
         const metrics = await getLogroMetricas(spec.objetivo, step.now);
         const met = evaluarLogros(metrics);
-        const outcome = androidReconcile(met, stored);
+        const outcome = androidReconcile(met, stored, trigger === 'edit');
         // What the PWA would do with the same live rows: add the missing ones, never remove.
         await db.achievements.bulkPut(stored.filter((row) => row.state === 'live').map((row) => (
           { id: row.id, userId: null, clave: row.key, fechaDesbloqueo: 1, updatedAt: 1, deletedAt: null }
@@ -574,7 +595,7 @@ async function achievementScenarios() {
         return { metrics, met, outcome, pwaNewlyUnlocked, prs: await listPRs() };
       });
       steps.push({
-        label: step.label, now: step.now,
+        label: step.label, now: step.now, trigger, inject: step.inject ?? [],
         sessions: step.data.sessions, loggedExercises: step.data.loggedExercises, sets: step.data.sets, mesocycles: step.data.mesocycles,
         expected: {
           metrics: { ...record.metrics, volumenTotal: num(record.metrics.volumenTotal) },
@@ -594,7 +615,7 @@ async function achievementScenarios() {
 
 function achievementStreakCases() {
   const cases = [];
-  const W = (n) => n * WEEK;
+  const W = (n) => 4 * DAY + n * WEEK; // 1970-01-05 is a Monday: week starts a UTC Monday-based zone agrees with
   const synthetic = [
     { weeks: [[1, 3], [2, 4], [3, 3]], objetivo: 3, current: W(3) },
     { weeks: [[1, 3], [2, 3], [3, 1]], objetivo: 3, current: W(3) },
@@ -602,11 +623,10 @@ function achievementStreakCases() {
     { weeks: [[1, 3], [2, 2], [3, 3], [4, 3], [5, 3]], objetivo: 3, current: W(5) },
     { weeks: [[1, 1], [3, 1], [4, 1], [6, 1]], objetivo: 1, current: W(7) },
     { weeks: [], objetivo: 3, current: W(5) },
-    { weeks: [[1, 0], [2, 0]], objetivo: 0, current: W(2) },
   ];
   for (const { weeks, objetivo, current } of synthetic) {
     const semanas = weeks.map(([n, sesiones]) => ({ inicioTs: W(n), sesiones }));
-    cases.push({ name: `synthetic ${JSON.stringify(weeks)} target ${objetivo}`, weeks: semanas, target: objetivo, currentWeekStart: current, expected: calcularRacha(semanas, objetivo, current) });
+    cases.push({ name: `synthetic ${JSON.stringify(weeks)} target ${objetivo}`, zone: 'UTC', weeks: semanas, target: objetivo, currentWeekStart: current, expected: calcularRacha(semanas, objetivo, current) });
   }
   // Real Monday-local week starts across DST changes (week start offsets differ from exact multiples of 7 days).
   const real = {

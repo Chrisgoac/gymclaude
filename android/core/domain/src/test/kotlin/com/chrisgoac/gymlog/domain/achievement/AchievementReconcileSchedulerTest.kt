@@ -17,14 +17,16 @@ import org.junit.Test
 class AchievementReconcileSchedulerTest {
     private val invalidation = StatsInvalidation()
     private val ready = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
-    private val workoutActive = MutableStateFlow(false)
+    private val canRun = MutableStateFlow(true)
+    private val allowed = mutableListOf<Boolean>()
     private var runs = 0
     private val errors = mutableListOf<Throwable>()
     private var failNext = false
 
     private fun scheduler() = AchievementReconcileScheduler(
-        invalidation, ready, workoutActive,
-        reconcile = {
+        invalidation, ready, canRun,
+        reconcile = { allowTombstone ->
+            allowed += allowTombstone
             if (failNext) {
                 failNext = false
                 error("boom")
@@ -60,14 +62,14 @@ class AchievementReconcileSchedulerTest {
         assertEquals(1, runs)
     }
 
-    @Test fun `it waits while a workout is being recorded and runs once when it ends`() = runTest(StandardTestDispatcher()) {
-        workoutActive.value = true
+    @Test fun `it waits while it may not run (no ready account or a workout) and runs once when it can`() = runTest(StandardTestDispatcher()) {
+        canRun.value = false
         backgroundScope.launch { scheduler().run() }
         runCurrent()
         invalidation.publish(achievements())
         advanceTimeBy(30_000)
         assertEquals("no run during the workout", 0, runs)
-        workoutActive.value = false
+        canRun.value = true
         runCurrent()
         assertEquals(1, runs)
     }
@@ -82,5 +84,24 @@ class AchievementReconcileSchedulerTest {
         invalidation.publish(achievements())
         advanceTimeBy(1_100)
         assertEquals(1, runs)
+    }
+
+    @Test fun `only a local edit in the window allows tombstoning`() = runTest(StandardTestDispatcher()) {
+        backgroundScope.launch { scheduler().run() }
+        runCurrent()
+        invalidation.publish(InvalidationScope.entries.toSet()) // a pull
+        advanceTimeBy(1_100)
+        ready.tryEmit(Unit)
+        advanceTimeBy(1_100)
+        invalidation.publish(achievements()) // a finished workout
+        advanceTimeBy(1_100)
+        assertEquals(listOf(false, false, false), allowed)
+
+        invalidation.publish(achievements(), localEdit = true)
+        invalidation.publish(InvalidationScope.entries.toSet()) // a pull in the same window does not cancel the edit
+        advanceTimeBy(1_100)
+        invalidation.publish(InvalidationScope.entries.toSet())
+        advanceTimeBy(1_100)
+        assertEquals(listOf(false, false, false, true, false), allowed)
     }
 }

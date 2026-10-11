@@ -13,9 +13,11 @@ interface AchievementTransaction {
 
     /**
      * Applies [plan] as ONE local mutation (domain rows + outbox row): [AchievementPlan.unlocks] stamped with
-     * [unlockedAt] and [AchievementPlan.tombstones]. Called only for a plan that is not a no-op.
+     * [unlockedAt] (a revived row keeps its original unlock date) and [AchievementPlan.tombstones]. Called only
+     * for a plan that is not a no-op. Returns whether any row was actually written: a planned row that no
+     * longer exists is skipped, and a plan that writes nothing leaves no outbox entry.
      */
-    suspend fun write(plan: AchievementPlan, unlockedAt: Long)
+    suspend fun write(plan: AchievementPlan, unlockedAt: Long): Boolean
 }
 
 /** Runs [block] with a transaction whose reads and write are atomic. */
@@ -31,7 +33,7 @@ data class ReconcileResult(val decisions: Map<String, AchievementDecision>, val 
 
 /**
  * Brings the stored achievements in line with the history: unlocks what is earned, tombstones what a
- * history edit made unearned, revives a tombstoned one when it is earned again. Deterministic (clock
+ * LOCAL history edit made unearned (only when [invoke] is told so), revives a tombstoned one when it is earned again. Deterministic (clock
  * and zone are parameters) and idempotent: the evidence read, the decision and the write happen in one
  * transaction, and a run that finds nothing to change writes nothing (no row, no outbox entry).
  */
@@ -40,10 +42,9 @@ class ReconcileAchievementsUseCase(
     private val now: () -> Long,
     private val zone: () -> ZoneId,
 ) {
-    suspend operator fun invoke(): ReconcileResult = store.transaction {
+    suspend operator fun invoke(allowTombstone: Boolean = false): ReconcileResult = store.transaction {
         val at = now()
-        val plan = AchievementRules.plan(metrics(Instant.ofEpochMilli(at), zone()), stored())
-        if (!plan.isNoOp) write(plan, at)
-        ReconcileResult(plan.decisions, wrote = !plan.isNoOp)
+        val plan = AchievementRules.plan(metrics(Instant.ofEpochMilli(at), zone()), stored(), allowTombstone)
+        ReconcileResult(plan.decisions, wrote = !plan.isNoOp && write(plan, at))
     }
 }

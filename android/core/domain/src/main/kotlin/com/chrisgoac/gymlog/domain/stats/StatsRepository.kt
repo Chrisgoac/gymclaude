@@ -7,11 +7,10 @@ import com.chrisgoac.gymlog.domain.history.SaveResult
 import com.chrisgoac.gymlog.domain.history.SaveWorkoutDraftUseCase
 import com.chrisgoac.gymlog.domain.history.WorkoutDraft
 import com.chrisgoac.gymlog.domain.time.Period
+import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutAggregate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
@@ -64,17 +63,26 @@ interface StatsRepository {
  * achievement reconciliation, which subscribe to [changes] for the scopes they depend on.
  */
 class StatsInvalidation {
-    private val events = MutableSharedFlow<Set<InvalidationScope>>(extraBufferCapacity = 64)
+    private class Event(val scopes: Set<InvalidationScope>, val localEdit: Boolean)
 
-    val scopes: SharedFlow<Set<InvalidationScope>> = events.asSharedFlow()
+    private val events = MutableSharedFlow<Event>(extraBufferCapacity = 64)
 
-    /** Never suspends; empty sets are ignored. */
-    fun publish(scopes: Set<InvalidationScope>) {
-        if (scopes.isNotEmpty()) events.tryEmit(scopes)
+    val scopes: Flow<Set<InvalidationScope>> = events.map { it.scopes }
+
+    /**
+     * Never suspends; empty sets are ignored. [localEdit] marks a change the user made on this device to
+     * existing history (a saved edit, a deleted workout): the only kind of event allowed to revoke achievements.
+     */
+    fun publish(scopes: Set<InvalidationScope>, localEdit: Boolean = false) {
+        if (scopes.isNotEmpty()) events.tryEmit(Event(scopes, localEdit))
     }
 
+    /** Like [changes] but only for local edits/deletes (see [publish]). */
+    fun localEditChanges(dependsOn: Set<InvalidationScope>): Flow<Unit> =
+        events.filter { it.localEdit && it.scopes.any { s -> s in dependsOn } }.map { }
+
     /** Emits once per published event that touches any of [dependsOn]. */
-    fun changes(dependsOn: Set<InvalidationScope>): Flow<Unit> = scopes.filter { event -> event.any { it in dependsOn } }.map { }
+    fun changes(dependsOn: Set<InvalidationScope>): Flow<Unit> = events.filter { event -> event.scopes.any { it in dependsOn } }.map { }
 }
 
 /** Publishes the scopes of every successful historical save to [invalidation]. */
@@ -83,7 +91,7 @@ class InvalidatingSaveWorkoutDraftUseCase(
     private val invalidation: StatsInvalidation,
 ) : SaveWorkoutDraftUseCase {
     override suspend fun invoke(original: WorkoutAggregate, draft: WorkoutDraft): SaveResult =
-        inner(original, draft).also { if (it is SaveResult.Saved) invalidation.publish(it.invalidatedScopes) }
+        inner(original, draft).also { if (it is SaveResult.Saved) invalidation.publish(it.invalidatedScopes, localEdit = true) }
 }
 
 /**
@@ -100,4 +108,15 @@ class InvalidatingSyncRepository(
         inner.syncOnce(userId).also { result ->
             if (result is SyncResult.Success && result.pulled > 0) invalidation.publish(InvalidationScope.entries.toSet())
         }
+}
+
+/** Publishes a LOCAL edit event (every scope) after a workout is deleted on this device: the delete path of derived-data invalidation. */
+class InvalidatingHistoryRepository(
+    private val inner: HistoryRepository,
+    private val invalidation: StatsInvalidation,
+) : HistoryRepository by inner {
+    override suspend fun deleteSession(sessionId: String) {
+        inner.deleteSession(sessionId)
+        invalidation.publish(InvalidationScope.entries.toSet(), localEdit = true)
+    }
 }

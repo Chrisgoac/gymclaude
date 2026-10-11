@@ -12,11 +12,11 @@ import com.chrisgoac.gymlog.domain.achievement.AchievementReconcileScheduler
 import com.chrisgoac.gymlog.domain.achievement.AchievementRepository
 import com.chrisgoac.gymlog.domain.achievement.ReconcileAchievementsUseCase
 import com.chrisgoac.gymlog.domain.history.InvalidationScope
+import com.chrisgoac.gymlog.domain.stats.InvalidatingHistoryRepository
 import com.chrisgoac.gymlog.domain.stats.InvalidatingSyncRepository
 import com.chrisgoac.gymlog.navigation.AchievementsServices
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterNotNull
 import com.chrisgoac.gymlog.data.exercise.OfflineExerciseRepository
 import com.chrisgoac.gymlog.data.routine.OfflineRoutineRepository
 import com.chrisgoac.gymlog.data.workout.OfflineWorkoutLogRepository
@@ -77,6 +77,7 @@ import com.chrisgoac.gymlog.timer.RestTimerAccountWatcher
 import com.chrisgoac.gymlog.timer.RestTimerDeletionHook
 import com.chrisgoac.gymlog.timer.RestTimerNotifier
 import com.chrisgoac.gymlog.timer.UserScopedRestTimerStore
+import com.chrisgoac.gymlog.sync.AchievementTriggers
 import com.chrisgoac.gymlog.sync.BootstrapAutoRetry
 import com.chrisgoac.gymlog.sync.CatalogSeedingUserDatabaseManager
 import com.chrisgoac.gymlog.sync.ConnectivityMonitor
@@ -192,8 +193,10 @@ class AppContainer(private val application: Application) {
         )
 
     /** Finished-workout history (filters, detail, change gym, delete) of the open account; writes are local (outbox). */
-    val historyRepository: HistoryRepository =
-        OfflineHistoryRepository(databases, ::localMutationRunner, exerciseRepository, routineRepository, now = syncClock::nowMillis)
+    val historyRepository: HistoryRepository = InvalidatingHistoryRepository(
+        OfflineHistoryRepository(databases, ::localMutationRunner, exerciseRepository, routineRepository, now = syncClock::nowMillis),
+        statsInvalidation,
+    )
 
     /**
      * Full edit of a past workout: validation against the server clock, then ONE local mutation (conflict-checked);
@@ -315,11 +318,12 @@ class AppContainer(private val application: Application) {
      * [InvalidationScope.ACHIEVEMENTS]) and when an account becomes ready; debounced, and deferred while a workout is recorded.
      */
     private fun startAchievementReconciliation() {
-        val readyAccounts = rootStateMachine.state.map { (it as? RootState.Ready)?.userId }.distinctUntilChanged().filterNotNull().map { }
         val workoutActive = offlineWorkouts.observeActiveWorkout().map { it != null }.distinctUntilChanged().catch { emit(false) }
         val scheduler = AchievementReconcileScheduler(
-            statsInvalidation, readyAccounts, workoutActive,
-            reconcile = { reconcileAchievements() },
+            statsInvalidation,
+            AchievementTriggers.readyAccounts(rootStateMachine.state),
+            AchievementTriggers.canRun(rootStateMachine.state, workoutActive),
+            reconcile = { allowTombstone -> reconcileAchievements(allowTombstone) },
             onError = { Log.w("GymLogAchievements", "Could not reconcile achievements", it) },
         )
         appScope.launch { scheduler.run() }

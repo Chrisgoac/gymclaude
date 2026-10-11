@@ -10,15 +10,12 @@ import com.chrisgoac.gymlog.database.UserDatabaseManager
 import com.chrisgoac.gymlog.domain.achievement.AchievementMetrics
 import com.chrisgoac.gymlog.domain.achievement.AchievementPlan
 import com.chrisgoac.gymlog.domain.achievement.AchievementRepository
-import com.chrisgoac.gymlog.domain.achievement.AchievementRules
 import com.chrisgoac.gymlog.domain.achievement.AchievementStore
 import com.chrisgoac.gymlog.domain.achievement.AchievementTransaction
 import com.chrisgoac.gymlog.domain.achievement.PersonalRecord
 import com.chrisgoac.gymlog.domain.achievement.StoredAchievement
 import com.chrisgoac.gymlog.domain.achievement.UnlockedAchievement
-import com.chrisgoac.gymlog.domain.achievement.WeekSessions
 import com.chrisgoac.gymlog.domain.stats.WorkoutStats
-import com.chrisgoac.gymlog.domain.time.Periods
 import com.chrisgoac.gymlog.model.AchievementRecord
 import com.chrisgoac.gymlog.model.RecordId
 import com.chrisgoac.gymlog.model.SyncTable
@@ -95,16 +92,8 @@ class OfflineAchievementRepository(
         override suspend fun metrics(now: Instant, zone: ZoneId): AchievementMetrics {
             val dao = database.statsDao()
             val target = OfflineStatsRepository.weeklyTarget(dao.setting(OfflineStatsRepository.WEEKLY_TARGET_KEY))
-            val perWeek = HashMap<Long, Int>()
-            dao.allSessionStarts().forEach { at ->
-                val week = Periods.weekStart(Instant.ofEpochMilli(at), zone).toEpochMilli()
-                perWeek[week] = (perWeek[week] ?: 0) + 1
-            }
-            val streak = AchievementRules.streak(
-                perWeek.map { (start, sessions) -> WeekSessions(start, sessions) },
-                target,
-                Periods.weekStart(now, zone).toEpochMilli(),
-            )
+            // The same reducer the Progress and Achievements screens use: they agree by construction.
+            val streak = WorkoutStats.weeklyStreak(dao.allSessionStarts(), target, now, zone)
             return AchievementMetrics(
                 sessions = dao.liveSessionCount(),
                 volume = dao.totalVolume(),
@@ -117,19 +106,24 @@ class OfflineAchievementRepository(
         override suspend fun stored(): List<StoredAchievement> =
             database.achievementDao().getAll().map { StoredAchievement(it.id, it.clave, it.fechaDesbloqueo, it.deletedAt != null) }
 
-        override suspend fun write(plan: AchievementPlan, unlockedAt: Long) {
+        override suspend fun write(plan: AchievementPlan, unlockedAt: Long): Boolean {
+            var wrote = false
             plan.unlocks.forEach { unlock ->
                 val id = RecordId(unlock.id)
+                val existing = scope.find(SyncTable.ACHIEVEMENTS, id) as? AchievementRecord
                 val stamp = scope.nextTimestamp(SyncTable.ACHIEVEMENTS, id)
-                // A revived row keeps its id (stable identity per clave) and takes the new unlock date.
-                scope.put(AchievementRecord(id, updatedAt = stamp, deletedAt = null, clave = unlock.key, fechaDesbloqueo = unlockedAt))
+                // A revived row keeps its id (stable identity per clave) AND its original unlock date.
+                scope.put(AchievementRecord(id, updatedAt = stamp, deletedAt = null, clave = unlock.key, fechaDesbloqueo = existing?.fechaDesbloqueo ?: unlockedAt))
+                wrote = true
             }
             plan.tombstones.forEach { row ->
                 val id = RecordId(row.id)
                 val current = scope.find(SyncTable.ACHIEVEMENTS, id) as? AchievementRecord ?: return@forEach
                 val stamp = scope.nextTimestamp(SyncTable.ACHIEVEMENTS, id)
                 scope.put(current.copy(updatedAt = stamp, deletedAt = stamp))
+                wrote = true
             }
+            return wrote
         }
     }
 
