@@ -66,6 +66,21 @@ class SaveWorkoutDraftTest {
         assertTrue(repo.applied.isEmpty())
     }
 
+    @Test fun `stored notes that are not normalized do not make a clean draft write`() = runTest {
+        val messy = original.copy(session = original.session.copy(notes = "  Bien \u0000\n"))
+        val repo = FakeEdits()
+        val result = DefaultSaveWorkoutDraftUseCase(repo) { NOW }(messy, WorkoutDraft.from(messy))
+        assertEquals(SaveResult.Saved(emptySet()), result)
+        assertTrue(repo.applied.isEmpty())
+    }
+
+    @Test fun `stored blank notes and an empty draft are the same`() = runTest {
+        val blank = original.copy(session = original.session.copy(notes = "   "))
+        val repo = FakeEdits()
+        DefaultSaveWorkoutDraftUseCase(repo) { NOW }(blank, WorkoutDraft.from(blank).copy(notes = ""))
+        assertTrue(repo.applied.isEmpty())
+    }
+
     @Test fun `the draft of an aggregate reproduces its order and formatted values`() {
         assertEquals(listOf("le1", "le2", "le3"), draft.exercises.map { it.id })
         assertEquals(listOf("60", "62.5"), draft.exercises[0].sets.map { it.weight })

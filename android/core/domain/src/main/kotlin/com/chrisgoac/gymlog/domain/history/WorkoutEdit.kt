@@ -46,7 +46,10 @@ data class WorkoutEdit(
             val session = original.session
             val notes = WorkoutDraftValidation.cleanNotes(draft.notes)
             val startedAt = draft.startedAt.toEpochMilli()
-            val sessionEdit = if (startedAt != session.startedAt || draft.gymId != session.gymId || notes != session.notes) {
+            // Stored notes may carry whitespace or NULs (PWA/sync data): compare them normalized the same way,
+            // so an untouched draft never rewrites the session.
+            val storedNotes = session.notes?.let(WorkoutDraftValidation::cleanNotes)
+            val sessionEdit = if (startedAt != session.startedAt || draft.gymId != session.gymId || notes != storedNotes) {
                 SessionEdit(startedAt, draft.gymId, notes)
             } else {
                 null
