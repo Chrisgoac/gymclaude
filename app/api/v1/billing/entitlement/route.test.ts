@@ -1,5 +1,10 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// The account-deletion access lock has its own tests (app/api/v1/account, lib/account).
+vi.mock('@/lib/account/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/account/access')>()),
+  assertAccountActive: async () => {},
+}));
 import { setAuthSourceForTests } from '@/lib/api/v1/auth';
 import { RateLimitedError } from '@/lib/api/v1/errors';
 import { ApiErrorBodySchema } from '@/lib/api/v1/contracts/common';

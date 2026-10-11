@@ -1,9 +1,12 @@
 // @vitest-environment node
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deleteLegacyObject,
   deletePrivateObject,
+  listLegacyObjects,
+  listPrivateObjects,
+  r2AccountStorage,
   putPrivateObject,
   r2MediaStorage,
   r2PrivateConfigured,
@@ -77,5 +80,30 @@ describe('private R2 helpers', () => {
     expect(del).toBeInstanceOf(DeleteObjectCommand);
     expect(del.input).toEqual({ Bucket: 'gymlog-test', Key: 'users/abc/exercise/1' });
     expect(r2MediaStorage.signRead).toBe(signPrivateRead);
+  });
+
+  it('lists every key under a prefix of the private bucket, following pagination', async () => {
+    const send = vi
+      .spyOn(S3Client.prototype, 'send')
+      .mockResolvedValueOnce({ Contents: [{ Key: 'users/abc/progress/1' }], IsTruncated: true, NextContinuationToken: 't1' } as never)
+      .mockResolvedValueOnce({ Contents: [{ Key: 'users/abc/exercise/2' }], IsTruncated: false } as never);
+    expect(await listPrivateObjects('users/abc/')).toEqual(['users/abc/progress/1', 'users/abc/exercise/2']);
+    const [first] = send.mock.calls[0] as unknown as [ListObjectsV2Command];
+    const [second] = send.mock.calls[1] as unknown as [ListObjectsV2Command];
+    expect(first).toBeInstanceOf(ListObjectsV2Command);
+    expect(first.input).toEqual({ Bucket: 'gymlog-test', Prefix: 'users/abc/', ContinuationToken: undefined });
+    expect(second.input).toMatchObject({ ContinuationToken: 't1' });
+  });
+
+  it('lists legacy keys from the public bucket and refuses prefixes without a trailing slash', async () => {
+    const send = vi.spyOn(S3Client.prototype, 'send').mockResolvedValue({ Contents: [{ Key: 'user_1/e/x.jpg' }] } as never);
+    expect(await listLegacyObjects('user_1/')).toEqual(['user_1/e/x.jpg']);
+    expect((send.mock.calls[0] as unknown as [ListObjectsV2Command])[0].input).toMatchObject({ Bucket: 'gymlog-public-test', Prefix: 'user_1/' });
+    // `user_1` without "/" would also match `user_10/…` of another user.
+    await expect(listLegacyObjects('user_1')).rejects.toThrow(/end with/);
+    await expect(listPrivateObjects('users/abc')).rejects.toThrow(/end with/);
+    vi.stubEnv('R2_BUCKET', '');
+    await expect(listLegacyObjects('user_1/')).rejects.toThrow(/R2_BUCKET/);
+    expect(r2AccountStorage).toMatchObject({ listPrivate: listPrivateObjects, listLegacy: listLegacyObjects });
   });
 });

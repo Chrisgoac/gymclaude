@@ -165,6 +165,7 @@ of messages. Retry only when `retryable` is `true`, with backoff.
 | 400 | `FUTURE_TIMESTAMP` | false | Timestamp beyond now + 5 min |
 | 400 | `UNKNOWN_TABLE` | false | Table without server adapter (defensive; schema rejects first) |
 | 401 | `AUTH_REQUIRED` | false | Missing or invalid Bearer token |
+| 403 | `ACCOUNT_DELETING` | false | The account has a deletion request; every route except `DELETE /api/v1/account` refuses it (sign out) |
 | 409 | `RECORD_ID_CONFLICT` | false | Record id is held by another user |
 | 409 | `MUTATION_IN_FLIGHT` | true | Same `mutationId` still being processed by a concurrent request |
 | 409 | `WRITE_RACE` | true | Concurrent write on the same record; retry |
@@ -417,3 +418,48 @@ to the new one and expires the old row. A token no account has verified yet is r
 acknowledged without a grant (the client's `verify` binds it). 200 = acknowledged (`{ outcome }`),
 503 = Pub/Sub retries (Google or database unavailable). Migration: `drizzle/0004_billing_events.sql`
 via `npm run db:migrate:billing` (after 0003).
+
+## Account deletion
+
+### `DELETE /api/v1/account`
+
+Deletes the caller's account and all of its data. Body (strict, `application/json`, ≤ 1 KiB):
+`{ "confirm": "ELIMINAR" }`. Spends the `account` rate limit (10 requests per 60 s per user).
+
+- **Recent authentication.** Requesting a deletion for the first time requires the session's first
+  factor to have been verified within the last 10 minutes: the Clerk session token's `fva` claim
+  (`[firstFactorAgeMinutes, secondFactorAgeMinutes]`, exposed by `auth().factorVerificationAge`) must
+  have `0 ≤ fva[0] ≤ 10`. A token's `iat` is useless here (session tokens are refreshed every minute).
+  Otherwise (or without the claim) → `403 REAUTH_REQUIRED`, nothing is locked; the client signs in
+  again (or runs Clerk reverification) and retries. Resuming an already requested deletion does not
+  require recent authentication.
+- **Immediate lock.** The first step inserts the `account_deletion_jobs` row; from then on every other
+  `/api/v1` route and the legacy PWA routes (`/api/sync/*`, `/api/*-photos`) answer
+  `403 ACCOUNT_DELETING`, and a write that was already waiting on the per-user sync lock is refused
+  inside its transaction.
+- **Steps** (each idempotent): R2 objects (private prefix `users/<hash>/`, legacy public prefix
+  `<userId>/`, plus the user's own keys cited by photo/`media_deletions` rows) → every user-scoped
+  Postgres row in one transaction (the 14 synced tables, `sync_changes`, `sync_mutations`,
+  `media_deletions`, `subscription_entitlements`, `billing_events` of the user's token hashes,
+  `api_rate_buckets` of `sha256(userId)`, `ai_reports`, `ai_responses`, `reported_ai_responses`) →
+  second R2 sweep → Clerk user (`users.deleteUser`; 404 = already deleted) → done (the job keeps only
+  the salted hash, status and timestamps).
+- **Responses.** `200 { status: "deleted", step: "done", retryable: false, activeSubscription }` or
+  `202 { status: "in_progress", step, retryable: true, errorCode?, activeSubscription }` when a step
+  failed (`STORAGE_FAILED`, `DATABASE_FAILED`, `IDENTITY_FAILED`): the account stays locked and the
+  deletion resumes on the next `DELETE` or by the daily cron. A repeated `DELETE` after completion
+  answers `200 deleted`. `503 DELETION_UNAVAILABLE` (retryable) when R2 is not configured, before
+  locking.
+- **Google Play subscription.** `activeSubscription` (`{ productId, state, validUntil, willRenew,
+  manageUrl }` or `null`) describes a Play subscription that is still live. The server does **not**
+  cancel or revoke it (the Play Developer API could, but cancelling a purchase is the user's decision
+  and refunds are out of scope): the client must tell the user to cancel it in Google Play
+  (`manageUrl`) — ideally before confirming, from `GET /api/v1/billing/entitlement`.
+
+Public web flow: `/delete-account` (works in any browser, signed in with Clerk; the server action
+uses Clerk reverification for the same 10-minute rule).
+
+Stuck jobs: `GET|POST /api/internal/account/process-deletions` (`Authorization: Bearer $CRON_SECRET`,
+Vercel cron daily at 04:30 UTC) resumes up to 10 pending jobs whose lease is free. Migration:
+`drizzle/0005_account_deletion_jobs.sql` via `npm run db:migrate:account` (after 0004), applied
+**before** deploying this code (the access guard and the sync lock read the table).

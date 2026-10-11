@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { legacyDeletingResponse } from '@/lib/account/access';
 import { getPoolDb } from '@/db/pool';
 import { enqueueMediaDeletion, isOwnedV1Key } from '@/lib/api/v1/media/deletions';
 import { r2Configured, putImage, deleteR2Object, publicUrl } from '@/lib/r2/client';
@@ -7,6 +8,8 @@ import { r2Configured, putImage, deleteR2Object, publicUrl } from '@/lib/r2/clie
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return new NextResponse('Unauthorized', { status: 401 });
+  const deleting = await legacyDeletingResponse(userId);
+  if (deleting) return deleting;
   if (!r2Configured()) return new NextResponse('R2 no configurado', { status: 503 });
 
   const form = await req.formData();
@@ -31,6 +34,8 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const { userId } = await auth();
   if (!userId) return new NextResponse('Unauthorized', { status: 401 });
+  const deleting = await legacyDeletingResponse(userId);
+  if (deleting) return deleting;
 
   const { key } = (await req.json()) as { key?: string };
   // Foto subida desde Android (bucket privado v1): la PWA no la borra directamente; se encola el

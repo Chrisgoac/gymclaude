@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// The account-deletion access lock has its own tests (app/api/v1/account, lib/account).
+vi.mock('@/lib/account/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/account/access')>()),
+  legacyDeletingResponse: async () => null,
+}));
 
 const auth = vi.fn();
 vi.mock('@clerk/nextjs/server', () => ({ auth: () => auth() }));

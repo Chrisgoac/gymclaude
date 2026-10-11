@@ -22,6 +22,8 @@ export const RATE_LIMIT_POLICIES = {
   media: { limit: 30, windowMs: 60_000 },
   /** POST /api/v1/billing/verify (one Google call each) and GET /api/v1/billing/entitlement share it. */
   billing: { limit: 30, windowMs: 60_000 },
+  /** DELETE /api/v1/account (each call may run R2/Postgres/Clerk steps). */
+  account: { limit: 10, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 export function hashSubject(subject: string): string {

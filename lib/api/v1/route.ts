@@ -1,4 +1,4 @@
-import { requirePrincipal, type ApiPrincipal } from './auth';
+import { requirePrincipal, type ApiPrincipal, type RequirePrincipalOptions } from './auth';
 import { errorResponse } from './response';
 
 const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,128}$/;
@@ -10,11 +10,12 @@ function requestIdFor(request: Request): string {
 
 export function withApiRoute(
   handler: (request: Request, principal: ApiPrincipal) => Promise<Response>,
+  options: RequirePrincipalOptions = {},
 ): (request: Request) => Promise<Response> {
   return async (request) => {
     const requestId = requestIdFor(request);
     try {
-      const principal = await requirePrincipal();
+      const principal = await requirePrincipal(options);
       const response = await handler(request, principal);
       const headers = new Headers(response.headers);
       headers.set('x-request-id', requestId);
