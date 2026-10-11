@@ -74,9 +74,6 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.onNodeWithContentDescription as nodeByDescription
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.printToString
 import com.chrisgoac.gymlog.domain.BackgroundSyncScheduler
 import com.chrisgoac.gymlog.domain.LocalAccountCleaner
 import com.chrisgoac.gymlog.domain.SignOutUseCase
@@ -105,7 +102,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -403,7 +399,8 @@ class FreeParityE2eTest {
         back()
 
         // Edit the OLDEST workout (10 -> 60 kg) from History.
-        val queuedBeforeEdit = sql("SELECT COUNT(*) FROM outbox_mutations").single().single()!!.toInt()
+        fun workoutEditMutations() = sql("SELECT payloadJson FROM outbox_mutations WHERE payloadJson LIKE '%loggedSets%' AND payloadJson LIKE '%\"set0\"%'").size
+        val editMutationsBefore = workoutEditMutations()
         rule.onNodeWithText("Historial").performClick()
         awaitText("Entrenamiento libre")
         repeat(4) { rule.onNode(verticalList).performTouchInput { swipeUp() } }
@@ -431,15 +428,17 @@ class FreeParityE2eTest {
         openFromProgress("Logros y récords")
         scrollTo("RÉCORDS (PRS)")
         awaitEntryStartingWith("Press de banca | 60 kg")
-        // The edit itself is ONE logical outbox mutation; the achievement reconcile (a local edit) may add one more.
-        val queuedAfterEdit = sql("SELECT COUNT(*) FROM outbox_mutations").single().single()!!.toInt()
-        assertTrue("edit queued locally: $queuedBeforeEdit -> $queuedAfterEdit", queuedAfterEdit in (queuedBeforeEdit + 1)..(queuedBeforeEdit + 2))
+        // The edit is EXACTLY one logical outbox mutation touching set0 (the achievement reconcile that follows a
+        // local edit is a separate mutation on `achievements` only, so it does not count here).
+        assertEquals("one logical mutation for the historical edit", editMutationsBefore + 1, workoutEditMutations())
+        val edit = sql("SELECT payloadJson FROM outbox_mutations WHERE payloadJson LIKE '%\"set0\"%' ORDER BY sequence DESC LIMIT 1").single().single()!!
+        assertTrue("the mutation carries only the changed set (unchanged rows are not rewritten) and no achievements", edit.contains("loggedSets") && !edit.contains("achievements"))
     }
 
     // ---- 2. body, gyms, theme, routine order, goal: all offline ----
 
     @Test
-    fun bodyGymsThemeRoutineOrderAndGoalAreSavedOfflineAndSurviveReopening() {
+    fun bodyGymsThemeRoutineOrderAndGoalAreSavedOffline() {
         runBlocking { routines.create(RoutineInput("Tirón", "", listOf(RoutineExerciseInput("k-remo", "seed-remo", "Remo con barra")))) }
         val outboxBefore = sql("SELECT COUNT(*) FROM outbox_mutations").single().single()!!.toInt()
 
@@ -469,9 +468,13 @@ class FreeParityE2eTest {
         awaitDescription("Usar Casa como predeterminado")
         rule.onNodeWithContentDescription("Usar Casa como predeterminado").performScrollTo().performClick()
         awaitTextContaining("Predeterminado")
+        val casaId = sql("SELECT id FROM gyms WHERE nombre = 'Casa'").single().single()!!
+        rule.waitUntil(TIMEOUT) { runBlocking { deviceSettings.observe().first().defaultGymId } == casaId }
         rule.onNodeWithContentDescription("Archivar Casa").performScrollTo().performClick()
         awaitTextContaining("Archivado")
         rule.waitUntil(TIMEOUT) { sql("SELECT archivada FROM gyms WHERE nombre = 'Casa'").single().single() == "1" }
+        // An archived gym cannot stay the default (read back from the repository).
+        rule.waitUntil(TIMEOUT) { runBlocking { deviceSettings.observe().first().defaultGymId } == null }
         back()
 
         // Settings -> Training: theme (device-only), weekly goal (synced), routine order (synced).
@@ -485,12 +488,33 @@ class FreeParityE2eTest {
         rule.onNodeWithContentDescription("Bajar Empuje").performClick()
         rule.waitUntil(TIMEOUT) { sql("SELECT nombre FROM routines WHERE deletedAt IS NULL ORDER BY orden").map { it.single() } == listOf("Tirón", "Empuje") }
 
-        // Device-only choices never reach the outbox; the synced ones did, as local mutations (no network).
-        assertEquals("theme/default gym are DataStore only", ThemeMode.DARK, runBlocking { deviceSettings.observe().first().theme })
-        assertTrue("body + gym + goal + routine order were queued locally", sql("SELECT COUNT(*) FROM outbox_mutations").single().single()!!.toInt() > outboxBefore)
+        // Device-only choices (theme, default gym) never reach the outbox; the synced ones did, as local mutations.
+        val payloads = sql("SELECT payloadJson FROM outbox_mutations").map { it.single()!! }
+        assertTrue("no outbox row mentions theme or default gym", payloads.none { p -> listOf("theme", "tema", "dark", "defaultGym", "predeterminado").any { p.contains(it, ignoreCase = true) } })
+        assertTrue("body + gym + goal + routine order were queued locally", payloads.size > outboxBefore)
+        assertTrue("body metric queued", payloads.any { it.contains("bodyMetrics") })
+        assertTrue("goal queued", payloads.any { it.contains("objetivoSemanal") })
     }
 
     // ---- 3. backup export -> delete everything -> import, through the documents seam ----
+
+    private val digestTables = listOf(
+        "exercises", "routines", "routine_exercises", "workout_sessions", "logged_exercises", "logged_sets", "gyms",
+        "exercise_photos", "user_settings", "coach_messages", "body_metrics", "progress_photos", "mesocycles", "achievements",
+    )
+
+    /** SHA-256 over every live row of the 14 synchronized tables, without versions (a merge keeps the file's own). */
+    private fun contentDigest(): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        for (table in digestTables) {
+            val columns = sql("PRAGMA table_info($table)").map { it[1]!! }.filter { it != "updatedAt" && it != "serverVersion" }.sorted()
+            md.update("#$table".toByteArray())
+            sql("SELECT ${columns.joinToString { "\"$it\"" }} FROM $table WHERE deletedAt IS NULL ORDER BY id").forEach { md.update(it.joinToString("|").toByteArray()) }
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun rowsOf(table: String) = sql("SELECT COUNT(*) FROM $table WHERE deletedAt IS NULL").single().single()!!.toInt()
 
     @Test
     fun backupExportDeleteImportRestoresEverythingOffline() {
@@ -498,22 +522,35 @@ class FreeParityE2eTest {
         fun awaitPhase(what: String, ok: (BackupPhase) -> Boolean): BackupPhase = runBlocking {
             try { withTimeout(TIMEOUT) { backup.phase.first(ok) } } catch (e: Throwable) { throw AssertionError("$what: stuck in ${backup.phase.value}", e) }
         }
-        fun counts() = listOf("workout_sessions", "logged_exercises", "logged_sets", "gyms", "routines", "routine_exercises").map {
-            it to sql("SELECT COUNT(*) FROM $it WHERE deletedAt IS NULL").single().single()!!.toInt()
-        }
+        // Rows in tables the seed does not fill: a body measurement and two synced settings.
+        val sqlDb = db.openHelper.writableDatabase
+        sqlDb.execSQL("INSERT INTO body_metrics (id, updatedAt, deletedAt, tipo, valor, fecha, serverVersion) VALUES ('bm1', 1, NULL, 'peso', 81.5, ${Instant.now().toEpochMilli()}, NULL)")
+        sqlDb.execSQL("INSERT INTO user_settings (id, updatedAt, deletedAt, valor, serverVersion) VALUES ('objetivoSemanal', 1, NULL, '5', NULL)")
+        sqlDb.execSQL("INSERT INTO user_settings (id, updatedAt, deletedAt, valor, serverVersion) VALUES ('modoProgresion', 1, NULL, '\"doble\"', NULL)")
 
-        val before = counts()
-        assertEquals(9, before.first { it.first == "workout_sessions" }.second)
+        val digestBefore = contentDigest()
+        assertEquals(9, rowsOf("workout_sessions"))
+        assertEquals(1, rowsOf("body_metrics"))
+        assertEquals(2, rowsOf("user_settings"))
 
         backup.exportTo("mem://backup.json")
         awaitPhase("export") { it is BackupPhase.Exported }
         val json = documents.files.getValue("mem://backup.json").decodeToString()
-        assertTrue("PWA-format file with the workouts", json.contains("workoutSessions") || json.contains("sessions"))
+        val root = kotlinx.serialization.json.Json.parseToJsonElement(json) as kotlinx.serialization.json.JsonObject
+        assertEquals("gymlog", (root["app"] as kotlinx.serialization.json.JsonPrimitive).content)
+        assertTrue("schema version", (root["version"] as kotlinx.serialization.json.JsonPrimitive).content.toInt() in 1..12)
+        assertTrue("exportedAt", (root["exportedAt"] as kotlinx.serialization.json.JsonPrimitive).content.toLong() > 0)
+        val data = root["data"] as kotlinx.serialization.json.JsonObject
+        assertEquals("the 14 synchronized tables", 14, data.size)
+        assertEquals(9, (data["workoutSessions"] as kotlinx.serialization.json.JsonArray).size)
+        assertEquals(1, (data["bodyMetrics"] as kotlinx.serialization.json.JsonArray).size)
+        assertEquals(2, (data["userSettings"] as kotlinx.serialization.json.JsonArray).size)
         assertTrue("no secrets or server metadata in the file", !json.contains("token", ignoreCase = true) && !json.contains("serverVersion"))
 
         // A fresh install: every table empty.
         db.clearAllTables()
-        assertEquals(0, counts().sumOf { it.second })
+        assertEquals(0, digestTables.sumOf { rowsOf(it) })
+        assertEquals(0, sql("SELECT COUNT(*) FROM outbox_mutations").single().single()!!.toInt())
 
         backup.importFrom("mem://backup.json")
         val ready = awaitPhase("validate") { it is BackupPhase.Ready } as BackupPhase.Ready
@@ -521,14 +558,16 @@ class FreeParityE2eTest {
         backup.selectMode(ImportMode.Merge)
         backup.startImport()
         awaitPhase("merge") { it is BackupPhase.Imported }
-        assertEquals("merge restores every live row", before, counts())
+        assertEquals("merge restores the exact content of every table", digestBefore, contentDigest())
+        assertTrue("the import was queued for sync", sql("SELECT COUNT(*) FROM outbox_mutations").single().single()!!.toInt() > 0)
 
-        // Replace: an extra workout that is not in the file is removed.
+        // Replace: an extra workout that is not in the file is removed; the outbox grows again.
+        val queuedAfterMerge = sql("SELECT COUNT(*) FROM outbox_mutations").single().single()!!.toInt()
         runBlocking {
             val at = Instant.now().toEpochMilli()
             db.workoutSessionDao().upsert(WorkoutSessionEntity("extra", 99_999_999_999_999L, null, null, null, null, at, 600, null, null))
         }
-        assertEquals(10, counts().first { it.first == "workout_sessions" }.second)
+        assertEquals(10, rowsOf("workout_sessions"))
         backup.importFrom("mem://backup.json")
         awaitPhase("validate again") { it is BackupPhase.Ready }
         backup.selectMode(ImportMode.ReplaceAfterConfirmation)
@@ -536,7 +575,8 @@ class FreeParityE2eTest {
         awaitPhase("confirm") { it is BackupPhase.ConfirmReplace }
         backup.confirmReplace()
         awaitPhase("replace") { it is BackupPhase.Imported }
-        assertEquals("replace leaves exactly the file", before, counts())
+        assertEquals("replace leaves exactly the file's content", digestBefore, contentDigest())
+        assertTrue("the replace tombstone was queued", sql("SELECT COUNT(*) FROM outbox_mutations").single().single()!!.toInt() > queuedAfterMerge)
     }
 
     private companion object {
@@ -544,3 +584,4 @@ class FreeParityE2eTest {
         const val TIMEOUT = 15_000L
     }
 }
+

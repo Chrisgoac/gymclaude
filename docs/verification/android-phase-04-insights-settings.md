@@ -6,12 +6,12 @@ Emulador: AVD `gymlog_api36` (Pixel 6, API 36, google_apis x86_64), headless, ap
 
 **Estado del gate: evidencia automatizada completa; comprobaciones en dispositivo pendientes.**
 
-## 1. Fixtures de dominio compartidos: diff cero TypeScript / Kotlin
+## 1. Fixtures de dominio compartidos: mismas salidas esperadas en TypeScript y Kotlin
 
 Los ocho `contracts/domain/*.json` se ejecutan en los dos runtimes. Los casos salen de los propios JSON;
 los tests de ambos lados los leen del repo (nunca copias).
 
-| Fixture | Test TypeScript (vitest) | Casos TS | Test Kotlin | Casos Kotlin |
+| Fixture | Test TypeScript (vitest) | Tests TS | Clase de test Kotlin | Métodos de test Kotlin |
 |---|---|---|---|---|
 | `num-cases.json` | `lib/num.test.ts` | 102 | `DomainParityTest` | 10 (agrupa fixtures num, fecha, period, body-stats) |
 | `fecha-cases.json` | `lib/fecha.test.ts` | 55 | `DomainParityTest` | (incluido arriba) |
@@ -34,10 +34,10 @@ cd android && ./gradlew testDebugUnitTest test --no-build-cache --rerun-tasks
   -> BUILD SUCCESSFUL; 780 tests, 0 failures, 0 errors, 0 skipped (todos los módulos)
 ```
 
-Cada test Kotlin compara con el fixture los valores aprobados (incluidos los resultados que difieren
+Los dos runtimes ejecutan las mismas salidas esperadas del JSON compartido (no es una comparación directa de las salidas de uno con las del otro). Cada test compara con el fixture los valores aprobados (incluidos los resultados que difieren
 a propósito de la PWA, registrados en el propio fixture: p. ej. el calentamiento cuenta en los PRs, la
 reconciliación de logros solo revoca tras una edición local). Un fallo en cualquiera de los dos lados rompe
-el build; no hay diff entre ambos porque los dos leen el mismo JSON.
+su suite; ambos pasan, así que ambos cumplen las mismas salidas aprobadas.
 
 ## 2. Una edición histórica mueve todo de forma consistente
 
@@ -48,7 +48,7 @@ Historial de 10 entrenos de Press de banca; una edición (110 kg y movido a hoy)
 - Tras la edición, y desde un único evento: récord de peso 110, 1RM 128,3, volumen del periodo 5050,
   balance muscular 5050 con 0 días sin entrenar, racha de días 1, resumen semanal 550 con récord de tipo peso,
   ejercicios estancados vacío.
-- Los logros se conservan tras la edición (no revoca nada que siga ganado) y el evento `COACH_SNAPSHOT` se
+- Los logros se conservan tras la edición una vez completada la reconciliación que dispara (señal positiva: contador de ejecuciones del planificador, sin esperas fijas) y el evento `COACH_SNAPSHOT` se
   publica una vez. No existe aún un constructor de snapshot del Coach en Android: la entrada del Coach es el
   evento de invalidación, que es lo que se comprueba.
 - Tras borrar el entreno (edición local): PR vuelve a 100, 1RM 116,7, volumen 4500 con 9 sesiones, racha 0,
@@ -61,7 +61,7 @@ Con 9 sesiones antiguas sembradas (10 kg x 5) más una registrada por la UI (40 
 Progreso muestra récord de la semana 1, 1 sesión, volumen 200, racha 1; en «Todo» 10 sesiones y 650;
 Logros muestra «Calentando» desbloqueado y el PR 40 kg. Editando desde Historial el entreno más antiguo
 (10 -> 60 kg) la pantalla pasa a volumen 900, récords de la semana 0, Press de banca como estancado y PR
-60 kg; la edición es una mutación lógica más en el outbox.
+60 kg; la edición añade exactamente una mutación lógica en el outbox con el set modificado (la reconciliación de logros es otra mutación aparte, solo de `achievements`).
 
 ## 3. Cuerpo, gimnasios, tema, orden de rutinas y copia de seguridad, sin red
 
@@ -71,11 +71,11 @@ Room en memoria con los repositorios y ViewModels reales; no hay seam de producc
 - `bodyGymsThemeRoutineOrderAndGoalAreSavedOfflineAndSurviveReopening`: añade una medición corporal (80,5),
   crea un gimnasio, lo marca como predeterminado y lo archiva; cambia el tema a Oscuro (DataStore, nunca el
   outbox), fija el objetivo semanal 4 (fila sincronizada `objetivoSemanal`) y reordena rutinas (orden en BD);
-  comprueba que lo sincronizable quedó en el outbox.
+  comprueba que la medición y el objetivo quedaron en el outbox y que ninguna fila del outbox menciona tema ni gimnasio predeterminado (solo DataStore); el predeterminado se lee de vuelta del repositorio y se borra al archivar el gimnasio.
 - `backupExportDeleteImportRestoresEverythingOffline`: el selector SAF no se puede automatizar de forma fiable,
   así que se usa `BackupViewModel` con un `BackupDocuments` en memoria (el seam bajo el selector). Exporta
-  (archivo con formato PWA, sin tokens ni `serverVersion`), vacía todas las tablas, importa en modo Combinar
-  (restaura exactamente las mismas filas vivas) y luego en modo Reemplazar con confirmación (elimina el entreno
+  (se decodifica la cabecera `app`/`version`/`exportedAt`/`data` con las 14 tablas, sin tokens ni `serverVersion`), vacía todas las tablas, importa en modo Combinar (con filas en el outbox)
+  (el digest SHA-256 del contenido de las 14 tablas, incl. `body_metrics` y `user_settings`, coincide con el previo) y luego en modo Reemplazar con confirmación (elimina el entreno
   extra que no está en el archivo).
 - Unidad de peso: la opción lb sigue oculta a propósito (ruling de paridad con la PWA), por eso no se prueba.
 

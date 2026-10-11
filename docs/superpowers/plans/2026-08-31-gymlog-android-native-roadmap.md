@@ -168,8 +168,8 @@ Evidence: [android-phase-03-workouts.md](../../verification/android-phase-03-wor
 
 Status: **automated evidence complete; device checks pending.**
 
-- [x] Every shared domain fixture runs in TypeScript (365 cases) and Kotlin with the same approved outcomes.
-- [x] A historical edit moves progress, PRs, 1RM, volume, balance, streak, stalls, achievements and the Coach invalidation event consistently (JVM + on-screen on the API 36 emulator).
+- [x] Every shared domain fixture is executed by both runtimes (365 TypeScript tests, Kotlin parity suites) against the same expected outputs from the shared JSON.
+- [x] A historical edit moves progress, PRs, 1RM, volume, balance, streak, stalls, achievements and the Coach invalidation event consistently (the Coach event is checked in the JVM test only; the on-screen test covers the other values on the API 36 emulator).
 - [x] Body, gyms, theme, weekly goal, routine order and backup export/delete/import (documents seam) work offline.
 - [x] `testDebugUnitTest test lintDebug assembleDebug verifyModuleGraph` green; `:app:connectedDebugAndroidTest` 11/11 on API 36.
 - [x] Chart text alternatives and 200% font semantics tests green.

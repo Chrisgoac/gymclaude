@@ -38,6 +38,9 @@ import com.chrisgoac.gymlog.domain.stats.WeeklyInsight
 import com.chrisgoac.gymlog.domain.time.Period
 import com.chrisgoac.gymlog.model.DeviceId
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -119,11 +122,26 @@ class HistoricalEditConsistencyTest {
         val reconcile = ReconcileAchievementsUseCase(achievements, now = { now }, zone = { zone })
 
         val coachEvents = MutableStateFlow(0)
-        scope.launch { invalidation.changes(setOf(InvalidationScope.COACH_SNAPSHOT)).collect { coachEvents.value++ } }
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { invalidation.changes(setOf(InvalidationScope.COACH_SNAPSHOT)).collect { coachEvents.update { n -> n + 1 } } }
+        // Every finished scheduler run bumps a counter: a positive signal that a reconcile completed.
+        val runs = MutableStateFlow(0)
         scope.launch {
-            AchievementReconcileScheduler(invalidation, extraSignals = flowOf(), canRun = flowOf(true), reconcile = { reconcile(it) }, debounceMillis = 50).run()
+            AchievementReconcileScheduler(
+                invalidation, extraSignals = flowOf(), canRun = flowOf(true),
+                reconcile = { allowTombstone -> reconcile(allowTombstone); runs.update { n -> n + 1 } }, debounceMillis = 50,
+            ).run()
         }
         reconcile() // account ready: unlock only
+        // Wait until the scheduler is subscribed: publish a harmless, non-local ACHIEVEMENTS event until it runs once.
+        withTimeout(10_000) {
+            while (runs.value == 0) {
+                invalidation.publish(setOf(InvalidationScope.ACHIEVEMENTS))
+                delay(100)
+            }
+        }
+        delay(200) // let any extra warm-up runs drain, then take the baseline
+        val warmCoach = coachEvents.value // warm-up events never touch COACH_SNAPSHOT
+        assertEquals(0, warmCoach)
         assertEquals(listOf("racha-4", "sesiones-10"), achievements.observeUnlocked().first().map { it.key }.sorted())
 
         val filter = StatsFilter(Period.FOUR_WEEKS, GymFilter.All)
@@ -147,6 +165,7 @@ class HistoricalEditConsistencyTest {
         }
         val draft = WorkoutDraft.from(original).withSet("set9") { it.copy(weight = "110") }.copy(startedAt = Instant.parse("2026-06-10T08:00:00Z"))
         val save = InvalidatingSaveWorkoutDraftUseCase(DefaultSaveWorkoutDraftUseCase(OfflineWorkoutEditRepository(manager, runnerFor)) { now }, invalidation)
+        val runsBeforeEdit = runs.value
         val result = save(original, draft)
         assertTrue("$result", result is SaveResult.Saved)
 
@@ -157,10 +176,11 @@ class HistoricalEditConsistencyTest {
         streak.awaitValue<Streak>("streak after") { it.days == 1 }
         weekly.awaitValue<WeeklyInsight>("weekly after") { it.summary.volume == 550.0 && it.records.map { r -> r.kind } == listOf(RecordKind.WEIGHT) }
         stalls.awaitValue<List<*>>("stalls after") { it.isEmpty() }
+        withTimeout(10_000) { coachEvents.first { it >= 1 } }
         assertEquals("coach snapshot invalidated once by the edit", 1, coachEvents.value)
-        // 10 sessions remain: the achievement is retained (no tombstone) after the edit run.
-        kotlinx.coroutines.delay(400)
-        unlocked.awaitValue<List<*>>("achievements retained after edit") { it.size == 2 }
+        // The edit-triggered reconcile (local edit, may tombstone) runs to completion; 10 sessions remain, so both stay unlocked.
+        withTimeout(10_000) { runs.first { it > runsBeforeEdit } }
+        assertEquals(listOf("racha-4", "sesiones-10"), achievements.observeUnlocked().first().map { it.key }.sorted())
 
         // ---- ONE delete of that session: 9 sessions left, sesiones-10 must be tombstoned ----
         val history = InvalidatingHistoryRepository(OfflineHistoryRepository(manager, runnerFor, OfflineExerciseRepository(manager, runnerFor), OfflineRoutineRepository(manager, runnerFor, OfflineExerciseRepository(manager, runnerFor)), now = { now }), invalidation)
@@ -172,6 +192,7 @@ class HistoricalEditConsistencyTest {
         balance.awaitValue<List<BalanceRow>>("balance after delete") { it.single().volume == 4500.0 }
         streak.awaitValue<Streak>("streak after delete") { it.days == 0 }
         unlocked.awaitValue<List<com.chrisgoac.gymlog.domain.achievement.UnlockedAchievement>>("sesiones-10 tombstoned by the local delete, racha-4 kept") { u -> u.map { it.key } == listOf("racha-4") }
+        withTimeout(10_000) { coachEvents.first { it >= 2 } }
         assertEquals("coach snapshot invalidated again by the delete", 2, coachEvents.value)
     }
 
