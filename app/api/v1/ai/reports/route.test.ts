@@ -113,17 +113,12 @@ afterEach(() => {
 });
 
 describe('POST /api/v1/ai/reports — authorization', () => {
-  it('401 / 429 / 403 / 503 before reading the cache or calling the model', async () => {
+  it('401 / 403 / 503 entitlement before reading the cache or calling the model', async () => {
     const { provider, calls } = fakeProvider(report);
     setDeps(provider);
     setAuthSourceForTests(async () => ({ userId: null }));
     expect((await post({ snapshot: snapshot() })).status).toBe(401);
     setAuthSourceForTests(async () => ({ userId: USER }));
-
-    h.rate.mockRejectedValueOnce(new RateLimitedError(5));
-    const limited = await post({ snapshot: snapshot() });
-    expect(limited.status).toBe(429);
-    expect(h.isPro).not.toHaveBeenCalled();
 
     h.isPro.mockResolvedValueOnce(false);
     const denied = await post({ snapshot: snapshot() });
@@ -132,11 +127,49 @@ describe('POST /api/v1/ai/reports — authorization', () => {
 
     h.isPro.mockRejectedValueOnce(new Error('down'));
     expect((await errorOf(await post({ snapshot: snapshot() }))).code).toBe('ENTITLEMENT_UNAVAILABLE');
+    expect(store.find).not.toHaveBeenCalled();
+    expect(h.rate).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
 
+  it('on a cache miss: 503 AI_UNAVAILABLE and 429 (minute or daily budget) before calling the model', async () => {
+    const { provider, calls } = fakeProvider(report);
+    setDeps(provider);
     h.configured.mockReturnValueOnce(false);
     expect((await errorOf(await post({ snapshot: snapshot() }))).code).toBe('AI_UNAVAILABLE');
-    expect(store.find).not.toHaveBeenCalled();
+    expect(h.rate).not.toHaveBeenCalled();
+
+    h.rate.mockRejectedValueOnce(new RateLimitedError(5));
+    const limited = await post({ snapshot: snapshot() });
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('retry-after')).toBe('5');
+
+    // Por minuto pasa, el presupuesto diario está agotado.
+    h.rate.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new RateLimitedError(3600));
+    const daily = await post({ snapshot: snapshot() });
+    expect(daily.status).toBe(429);
+    expect((await errorOf(daily)).code).toBe('RATE_LIMITED');
+    expect(daily.headers.get('retry-after')).toBe('3600');
+    expect(h.rate.mock.calls.slice(-2)).toEqual([['ai', USER], ['aiDaily', USER]]);
     expect(calls).toHaveLength(0);
+    expect(store.rows).toHaveLength(0);
+  });
+
+  it('a cache hit is served without DeepSeek configured and without spending AI quota', async () => {
+    const { provider, calls } = fakeProvider(report);
+    setDeps(provider);
+    await okOf(await post({ snapshot: snapshot() }));
+    expect(h.rate).toHaveBeenCalledTimes(2);
+    h.rate.mockClear();
+
+    h.configured.mockReturnValue(false);
+    h.rate.mockRejectedValue(new RateLimitedError(60));
+    const hit = await okOf(await post({ snapshot: snapshot() }));
+    expect(hit).toMatchObject({ reportId: 'report-1', cached: true });
+    expect(h.rate).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+    h.rate.mockReset();
+    h.rate.mockImplementation(async () => {});
   });
 
   it('400 for anything beyond the snapshot allowlist (photos, ids, extra fields)', async () => {

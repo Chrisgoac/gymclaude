@@ -233,6 +233,13 @@ own gating is presentation only.
 | 409 | `AI_RESPONSE_IN_PROGRESS` | true | Another attempt for the same `clientMessageId` is generating |
 | 409 | `CLIENT_MESSAGE_ID_CONFLICT` | false | The `clientMessageId` belongs to another AI request kind |
 
+### AI quota
+
+Every AI call spends the user's `ai` rate limit (20/minute) **and** the daily AI budget `aiDaily`
+(200 per user per fixed 24 h UTC window, shared by all `/api/v1/ai/*` routes). Either one spent →
+`429 RATE_LIMITED` with `Retry-After` (for the daily budget, up to 86 400 s: the time left in the day).
+An intelligent-report cache hit spends neither.
+
 ### Server-only tables
 
 `subscription_entitlements`, `ai_responses`, `ai_reports` and `reported_ai_responses`
@@ -256,7 +263,7 @@ the server. They are not sync tables: a push naming any of them fails with `400 
 
 ### Coach (`POST /api/v1/ai/coach`)
 
-Order: Bearer session → `ai` rate limit (429 + `Retry-After`) → `requirePro` → `503 AI_UNAVAILABLE`
+Order: Bearer session → AI quota (`ai` + `aiDaily`, 429 + `Retry-After`) → `requirePro` → `503 AI_UNAVAILABLE`
 (retryable) if DeepSeek is not configured → JSON body (`application/json`, ≤ 64 KiB, else 415/413)
 validated by `CoachRequestSchema` (400 `INVALID_REQUEST`). All of these are ordinary JSON errors.
 Then the response is `200 application/x-ndjson`: one event per line, `start` first, then `delta`s,
@@ -286,14 +293,14 @@ ending in exactly one `complete` or `error`. Concatenated `delta`s are the answe
 
 ### Report (`POST /api/v1/ai/responses/:id/report`)
 
-Any signed-in user may report a response they own (no Pro needed); `ai` rate limit. Body
+Any signed-in user may report a response they own (no Pro needed); AI quota (`ai` + `aiDaily`). Body
 `{category, context?}`. `201 {responseId, created: true}` on the first report, `200 {…, created:
 false}` on a repeat (the first report is kept). Unknown, malformed or another user's id: `404
 RESPONSE_NOT_FOUND`.
 
 ### Mesocycle (`POST /api/v1/ai/mesocycles`)
 
-Same order as the Coach (Bearer → `ai` rate limit → `requirePro` → `503 AI_UNAVAILABLE` → JSON body ≤ 192 KiB
+Same order as the Coach (Bearer → AI quota → `requirePro` → `503 AI_UNAVAILABLE` → JSON body ≤ 192 KiB
 validated by `MesocycleRequestSchema`). Returns `200 application/json`
 `{clientRequestId, responseId, draft, omitidos, disclaimer: true}` (`MesocycleResponseSchema`): a validated
 **draft**, nothing of the user's data is written. The client reviews it and saves it as its own synced
@@ -316,8 +323,9 @@ validated by `MesocycleRequestSchema`). Returns `200 application/json`
 
 ### Intelligent report (`POST /api/v1/ai/reports`)
 
-Same order as the Coach. Body `{snapshot}` (`IntelligentReportRequestSchema`: exactly the Coach snapshot
-allowlist). Returns `200 {reportId, generatedAt, cached, report: {resumen, puntosFuertes[], aMejorar[],
+Order: Bearer → `requirePro` → JSON body `{snapshot}` (`IntelligentReportRequestSchema`: exactly the Coach
+snapshot allowlist) → cache lookup. A cache hit is returned without checking DeepSeek or spending AI quota;
+only a miss then checks `503 AI_UNAVAILABLE` and the AI quota (429) before calling the model. Returns `200 {reportId, generatedAt, cached, report: {resumen, puntosFuertes[], aMejorar[],
 recomendaciones[]}, disclaimer: true}`. Reports are server-owned `ai_reports` rows keyed by
 (user, `kind = 'progress-v1'`, source fingerprint = SHA-256 of the kind and the canonical (key-sorted) JSON
 of the validated snapshot). An identical snapshot returns the stored report (`cached: true`, original

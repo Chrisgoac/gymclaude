@@ -119,11 +119,15 @@ export function parseReportOutput(raw: unknown): IntelligentReport {
 const logOutcome = (outcome: string, level: 'info' | 'warn' = 'info', extra?: string) =>
   console[level](`[api/v1/ai/reports] outcome=${outcome}${extra ? ` ${extra}` : ''}`);
 
-/** The cached report for this exact snapshot, or a freshly generated (and stored) one. */
+/**
+ * The cached report for this exact snapshot, or a freshly generated (and stored) one. `beforeGenerate`
+ * runs only on a cache miss, before the model call (availability + AI budget checks).
+ */
 export async function getIntelligentReport(
   deps: ReportDeps,
   userId: string,
   snapshot: CoachSnapshotDto,
+  options: { beforeGenerate?: () => Promise<void> } = {},
 ): Promise<IntelligentReportResponse> {
   const now = deps.now ?? Date.now;
   const fingerprint = reportFingerprint(snapshot);
@@ -140,6 +144,9 @@ export async function getIntelligentReport(
     logOutcome('cache_hit');
     return toResponse(existing, true);
   }
+  // Solo una generación real gasta cupo de IA o necesita el proveedor configurado: un acierto de
+  // caché no consume nada (lo decide la ruta con este gancho).
+  await options.beforeGenerate?.();
 
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
