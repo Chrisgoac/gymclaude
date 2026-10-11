@@ -10,8 +10,8 @@ describe('rate-limit (unit)', () => {
     expect(hashSubject('1.2.3.4')).toBe(createHash('sha256').update('1.2.3.4').digest('hex'));
   });
 
-  it('exposes sync/ai/aiDaily/media policies', () => {
-    expect(Object.keys(RATE_LIMIT_POLICIES).sort()).toEqual(['ai', 'aiDaily', 'media', 'sync']);
+  it('exposes sync/ai/aiDaily/media/billing policies', () => {
+    expect(Object.keys(RATE_LIMIT_POLICIES).sort()).toEqual(['ai', 'aiDaily', 'billing', 'media', 'sync']);
     expect(RATE_LIMIT_POLICIES.aiDaily).toEqual({ limit: 200, windowMs: 86_400_000 });
   });
 

@@ -347,3 +347,56 @@ MIGRATION_DATABASE_URL=postgresql://postgres:teacher123@127.0.0.1:5432/gymlog_sy
 `--days` is an integer 1..365. Re-running renews the same row; `--state REVOKED` (or `EXPIRED`, …)
 takes Pro away again. Rows with `source = 'test'` never grant Pro in a production build
 (`NODE_ENV=production`, i.e. every Vercel deployment and `next start`): use `next dev` locally.
+
+## Billing (Google Play)
+
+Schemas: `lib/billing/entitlements.ts`; Google adapter: `lib/billing/google-play.ts`. Both routes
+authenticate the Bearer session and spend the `billing` rate limit (30 requests per 60 s per user,
+shared). Only the server grants Pro; the client never sends a state, tier or user id.
+
+### `POST /api/v1/billing/verify`
+
+Body (strict): `{ "productId": "gymlog_pro_monthly" | "gymlog_pro_annual", "purchaseToken": string }`,
+token 1..4096 chars of `[A-Za-z0-9._-]`. The server reads `purchases.subscriptionsv2.get` for
+`GOOGLE_PLAY_PACKAGE_NAME` and requires:
+
+1. Google knows the token for our package (otherwise `422 PURCHASE_INVALID`).
+2. `externalAccountIdentifiers.obfuscatedExternalAccountId == sha256_hex(userId)`. **The Android
+   client must set `BillingFlowParams.setObfuscatedAccountId(sha256_hex(clerkUserId))`** when it
+   launches the purchase (64 hex chars, no PII); a missing or different value is
+   `403 PURCHASE_ACCOUNT_MISMATCH`.
+3. The subscription is not pending (`409 PURCHASE_PENDING`, retryable, nothing stored).
+4. `productId` is one of the purchase's line items (otherwise `422 PURCHASE_INVALID`).
+
+Google state → stored `subscription_entitlements.state`: `ACTIVE`→`ACTIVE`, `IN_GRACE_PERIOD`→`GRACE`,
+`ON_HOLD`→`ON_HOLD`, `PAUSED`→`PAUSED`, `CANCELED`→`ACTIVE` with `auto_renewing = false` (access until
+`expires_at`), `EXPIRED`→`EXPIRED`. `expires_at` is the line item's `expiryTime`. The row is keyed by
+`(user_id, purchase_token_hash)` — SHA-256 of the token; the raw token is never stored or logged.
+A replay by the same user refreshes the same row; a token already bound to another user is
+`409 PURCHASE_ALREADY_BOUND` and grants nothing. A purchase whose acknowledgement is pending is
+acknowledged after the row is stored (a failed acknowledgement does not fail the request).
+
+### `GET /api/v1/billing/entitlement`
+
+Both routes answer the caller's best entitlement:
+
+```json
+{ "tier": "PRO", "productId": "gymlog_pro_annual", "state": "ACTIVE", "validUntil": 1798761600000, "serverTime": 1767225600000 }
+```
+
+`tier` is `PRO` exactly when `isPro` would grant. `state`: `NONE` (no purchase), `ACTIVE`, `GRACE`,
+`CANCELED` (no longer renewing; still `PRO` until `validUntil`, or a stored canceled row), `PAUSED`
+(paused or account hold: fix/resume in Play), `EXPIRED` (expired, revoked, or past `validUntil`).
+Compare `validUntil` with `serverTime`, not the device clock.
+
+| HTTP | code | retryable | Cause |
+|------|------|-----------|-------|
+| 422 | `PURCHASE_INVALID` | false | Unknown token for our package, wrong product, canceled pending purchase |
+| 403 | `PURCHASE_ACCOUNT_MISMATCH` | false | Purchase made for another account |
+| 409 | `PURCHASE_ALREADY_BOUND` | false | Token linked to another account |
+| 409 | `PURCHASE_PENDING` | true | Payment still pending |
+| 503 | `BILLING_UNAVAILABLE` | true | Play not configured, Google unreachable or unexpected answer |
+| 503 | `ENTITLEMENT_UNAVAILABLE` | true | Entitlement store unreachable |
+
+Server env: `GOOGLE_PLAY_PACKAGE_NAME` (`com.chrisgoac.gymlog`) and `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+(service-account key JSON with Play Console "View financial data / Manage orders" access; never logged).

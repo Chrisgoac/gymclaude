@@ -20,6 +20,8 @@ export const RATE_LIMIT_POLICIES = {
   /** Presupuesto diario de IA por usuario (todas las rutas /api/v1/ai/*), ventana fija de 24 h. */
   aiDaily: { limit: 200, windowMs: 24 * 60 * 60_000 },
   media: { limit: 30, windowMs: 60_000 },
+  /** POST /api/v1/billing/verify (one Google call each) and GET /api/v1/billing/entitlement share it. */
+  billing: { limit: 30, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 export function hashSubject(subject: string): string {
