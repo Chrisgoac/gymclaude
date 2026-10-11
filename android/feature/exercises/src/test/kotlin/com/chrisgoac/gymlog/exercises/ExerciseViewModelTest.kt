@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -42,9 +44,11 @@ private class FakeExerciseRepository(initial: List<Exercise>) : ExerciseReposito
     var failWith: Exception? = null
     var failReads = false
     var creates = 0
+    val queries = mutableListOf<ExerciseFilter>()
     private var next = 0
 
     override fun observeExercises(filter: ExerciseFilter): Flow<List<Exercise>> = flow {
+        queries += filter
         if (failReads) throw IllegalStateException("db")
         emitAll(store.map { all -> all.filter(filter::matches).sortedBy { it.name } })
     }
@@ -101,6 +105,7 @@ class ExerciseViewModelTest {
         assertEquals(listOf("Press de banca", "Zancada búlgara"), vm.state.value.exercises.map { it.name })
 
         vm.onQueryChange("BULGARA")
+        settle()
         assertEquals(listOf("Zancada búlgara"), vm.state.value.exercises.map { it.name })
 
         vm.clearFilters()
@@ -112,8 +117,43 @@ class ExerciseViewModelTest {
         vm.onEquipmentSelected(Equipment.MANCUERNA)
         assertEquals(listOf("Zancada búlgara"), vm.state.value.exercises.map { it.name })
         vm.onQueryChange("press") // combined: no overlap
+        settle()
         assertTrue(vm.state.value.exercises.isEmpty())
         assertTrue(vm.state.value.filter.isActive)
+    }
+
+    private fun kotlinx.coroutines.test.TestScope.settle() {
+        advanceTimeBy(ExerciseListViewModel.QUERY_DEBOUNCE_MILLIS)
+        runCurrent()
+    }
+
+    @Test fun `typing keeps the previous results (no Loading flash) and queries once per pause`() = runTest {
+        val vm = ExerciseListViewModel(repository)
+        val states = mutableListOf<ExerciseListUiState>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { states += it } }
+        val before = repository.queries.size
+        states.clear()
+
+        for (typed in listOf("b", "bu", "bul", "bulg")) {
+            vm.onQueryChange(typed)
+            advanceTimeBy(100)
+        }
+        // The field echoes every keystroke; the list still shows the old results and never goes back to Loading.
+        assertEquals("bulg", vm.state.value.filter.query)
+        assertEquals(2, vm.state.value.exercises.size)
+        assertTrue(states.none { it.status == LoadStatus.Loading })
+        assertEquals(before, repository.queries.size)
+
+        settle()
+        assertEquals(listOf("Zancada búlgara"), vm.state.value.exercises.map { it.name })
+        assertEquals(listOf("bulg"), repository.queries.drop(before).map { it.query })
+        assertTrue(states.none { it.status == LoadStatus.Loading })
+
+        // Chips are not debounced.
+        vm.onMuscleGroupSelected(MuscleGroup.PECHO)
+        runCurrent()
+        assertTrue(vm.state.value.exercises.isEmpty())
+        assertEquals(MuscleGroup.PECHO, repository.queries.last().muscleGroup)
     }
 
     @Test fun `list surfaces a read failure and retry recovers`() = runTest {

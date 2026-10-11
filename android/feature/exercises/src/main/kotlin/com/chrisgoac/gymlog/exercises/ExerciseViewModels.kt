@@ -18,6 +18,10 @@ import com.chrisgoac.gymlog.domain.exercise.ExerciseValidator
 import com.chrisgoac.gymlog.domain.exercise.MuscleGroup
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -43,18 +47,34 @@ data class ExerciseListUiState(
     val exercises: List<Exercise> = emptyList(),
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
+/**
+ * The exercise list. Typing is debounced ([QUERY_DEBOUNCE_MILLIS]; group/equipment chips apply at
+ * once) and a new query keeps showing the previous results until its own arrive: there is no
+ * Loading flash per keystroke. Loading shows only before the first result and after [retry].
+ */
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class ExerciseListViewModel(repository: ExerciseRepository) : ViewModel() {
     private val filter = MutableStateFlow(ExerciseFilter())
     private val attempt = MutableStateFlow(0)
 
-    val state: StateFlow<ExerciseListUiState> = combine(filter, attempt) { f, _ -> f }
+    private class Results(val status: LoadStatus, val exercises: List<Exercise>)
+
+    /** The query last handed to the repository: only a changed, non-blank query waits (clearing applies at once). */
+    private var appliedQuery = filter.value.query
+
+    private val results: Flow<Results> = filter
+        .debounce { f -> if (f.query == appliedQuery || f.query.isBlank()) 0L else QUERY_DEBOUNCE_MILLIS }
+        .onEach { appliedQuery = it.query }
         .flatMapLatest { f ->
             repository.observeExercises(f)
-                .map { ExerciseListUiState(f, LoadStatus.Ready, it) }
-                .onStart { emit(ExerciseListUiState(f, LoadStatus.Loading)) }
-                .catch { emit(ExerciseListUiState(f, LoadStatus.Failed)) }
+                .map { Results(LoadStatus.Ready, it) }
+                .catch { emit(Results(LoadStatus.Failed, emptyList())) }
         }
+
+    val state: StateFlow<ExerciseListUiState> = attempt
+        .flatMapLatest { results.onStart { emit(Results(LoadStatus.Loading, emptyList())) } }
+        // The field shows what was typed at once; the list keeps the last results until new ones arrive.
+        .combine(filter) { r, f -> ExerciseListUiState(f, r.status, r.exercises) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), ExerciseListUiState())
 
     fun onQueryChange(query: String) = filter.update { it.copy(query = query) }
@@ -67,6 +87,10 @@ class ExerciseListViewModel(repository: ExerciseRepository) : ViewModel() {
     fun clearFilters() = filter.update { ExerciseFilter() }
 
     fun retry() = attempt.update { it + 1 }
+
+    companion object {
+        const val QUERY_DEBOUNCE_MILLIS = 250L
+    }
 }
 
 // ---- Detail ----

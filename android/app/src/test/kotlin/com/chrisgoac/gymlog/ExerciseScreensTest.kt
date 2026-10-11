@@ -31,6 +31,9 @@ import kotlinx.coroutines.flow.map
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import android.os.Looper
+import java.time.Duration
+import org.robolectric.Shadows.shadowOf
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -75,6 +78,9 @@ class ExerciseScreensTest {
     @Test fun searchIsAccentAndCaseInsensitive(): Unit = with(rule) {
         showList()
         onNode(hasSetTextAction()).performTextInput("BULGARA")
+        // The search is debounced: let its pause elapse.
+        mainClock.advanceTimeBy(ExerciseListViewModel.QUERY_DEBOUNCE_MILLIS + 50)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ExerciseListViewModel.QUERY_DEBOUNCE_MILLIS + 50))
         waitForIdle()
         onNodeWithText("Zancada búlgara").assertExists()
         onAllNodesWithText("Press de banca").assertCountEquals(0)
