@@ -127,7 +127,7 @@ class HistoricalEditConsistencyTest {
         val runs = MutableStateFlow(0)
         scope.launch {
             AchievementReconcileScheduler(
-                invalidation, extraSignals = flowOf(), canRun = flowOf(true),
+                invalidation, extraSignals = flowOf(), canRun = flowOf(true), currentAccount = { "u1" },
                 reconcile = { allowTombstone -> reconcile(allowTombstone); runs.update { n -> n + 1 } }, debounceMillis = 50,
             ).run()
         }

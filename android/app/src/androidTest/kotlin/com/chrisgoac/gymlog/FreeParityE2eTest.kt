@@ -188,7 +188,7 @@ class FreeParityE2eTest {
         val achievements = OfflineAchievementRepository(manager, runnerFor)
         val reconcile = ReconcileAchievementsUseCase(achievements, now = System::currentTimeMillis, zone = { zone })
         scope.launch {
-            AchievementReconcileScheduler(invalidation, flowOf(Unit), flowOf(true), { reconcile(it) }, debounceMillis = 100).run()
+            AchievementReconcileScheduler(invalidation, flowOf(Unit), flowOf(true), currentAccount = { "e2e" }, reconcile = { reconcile(it) }, debounceMillis = 100).run()
         }
         backupRepository = RoomBackupRepository(manager, runnerFor, System::currentTimeMillis, BackupImportEffects(invalidation, requestSync = {}))
         val dataDir = File(context.cacheDir, "e2e-" + UUID.randomUUID()).also { it.mkdirs() }

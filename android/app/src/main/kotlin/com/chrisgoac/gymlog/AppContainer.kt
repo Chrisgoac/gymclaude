@@ -391,6 +391,7 @@ class AppContainer(private val application: Application) {
             statsInvalidation,
             AchievementTriggers.readyAccounts(rootStateMachine.state),
             AchievementTriggers.canRun(rootStateMachine.state, workoutActive),
+            currentAccount = ::currentUserHash,
             reconcile = { allowTombstone -> reconcileAchievements(allowTombstone) },
             onError = { Log.w("GymLogAchievements", "Could not reconcile achievements", it) },
         )

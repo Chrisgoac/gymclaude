@@ -22,9 +22,11 @@ class AchievementReconcileSchedulerTest {
     private var runs = 0
     private val errors = mutableListOf<Throwable>()
     private var failNext = false
+    private var account: String? = "userA"
 
     private fun scheduler() = AchievementReconcileScheduler(
         invalidation, ready, canRun,
+        currentAccount = { account },
         reconcile = { allowTombstone ->
             allowed += allowTombstone
             if (failNext) {
@@ -103,5 +105,37 @@ class AchievementReconcileSchedulerTest {
         invalidation.publish(InvalidationScope.entries.toSet())
         advanceTimeBy(1_100)
         assertEquals(listOf(false, false, false, true, false), allowed)
+    }
+
+    @Test fun `a local edit made by one account never lets another account tombstone`() = runTest(StandardTestDispatcher()) {
+        backgroundScope.launch { scheduler().run() }
+        runCurrent()
+        canRun.value = false
+        invalidation.publish(achievements(), localEdit = true) // userA edits history
+        advanceTimeBy(1_100)
+        account = "userB" // sign-out / sign-in before the run could start
+        canRun.value = true
+        runCurrent()
+        assertEquals(listOf(false), allowed)
+
+        account = "userA" // the flag was dropped, not kept for later
+        invalidation.publish(achievements())
+        advanceTimeBy(1_100)
+        assertEquals(listOf(false, false), allowed)
+    }
+
+    @Test fun `a failing run keeps the revoke flag for the next trigger`() = runTest(StandardTestDispatcher()) {
+        backgroundScope.launch { scheduler().run() }
+        runCurrent()
+        failNext = true
+        invalidation.publish(achievements(), localEdit = true)
+        advanceTimeBy(1_100)
+        assertEquals(1, errors.size)
+        invalidation.publish(achievements()) // a non-local trigger: the kept flag still applies
+        advanceTimeBy(1_100)
+        invalidation.publish(achievements())
+        advanceTimeBy(1_100)
+        assertEquals(listOf(true, true, false), allowed)
+        assertEquals(2, runs)
     }
 }
