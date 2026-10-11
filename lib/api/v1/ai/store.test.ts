@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import type { PoolDb } from '@/db/pool';
 import { ApiError } from '@/lib/api/v1/errors';
-import { findAiReport, reportAiResponse } from './store';
+import { findAiReport, loadCoachContext, reportAiResponse } from './store';
 
 const NOW = 1_767_225_600_000;
 const url = process.env.SYNC_TEST_DATABASE_URL;
@@ -39,7 +39,7 @@ describe.skipIf(!url)('AI store (integration)', () => {
     if (!db) return;
     if (users.length) {
       const list = sql.join(users.map((u) => sql`${u}`), sql`, `);
-      for (const t of ['reported_ai_responses', 'ai_responses', 'ai_reports']) {
+      for (const t of ['reported_ai_responses', 'ai_responses', 'ai_reports', 'coach_messages']) {
         await db.execute(sql`DELETE FROM ${sql.identifier(t)} WHERE user_id IN (${list})`);
       }
     }
@@ -100,5 +100,49 @@ describe.skipIf(!url)('AI store (integration)', () => {
     await expect(db.execute(sql`
       INSERT INTO ai_responses (id, user_id, client_message_id, status, created_at, updated_at)
       VALUES (${crypto.randomUUID()}, ${u}, ${crypto.randomUUID()}, 'streaming', ${NOW}, ${NOW})`)).rejects.toThrow();
+  });
+
+  describe('loadCoachContext', () => {
+    let seq = 0;
+    const msg = async (userId: string, rol: string, contenido: string, createdAt: number,
+      over: { deletedAt?: number; id?: string } = {}) => {
+      const id = over.id ?? `cm-${crypto.randomUUID()}`;
+      seq++;
+      await db.execute(sql`
+        INSERT INTO coach_messages (id, user_id, updated_at, deleted_at, server_updated_at, rol, contenido, created_at)
+        VALUES (${id}, ${userId}, ${createdAt}, ${over.deletedAt ?? null}, ${NOW + seq}, ${rol}, ${contenido}, ${createdAt})`);
+      return id;
+    };
+
+    it("returns the user's newest live turns, oldest first, never another user's", async () => {
+      const u = newUser();
+      const other = newUser();
+      await msg(u, 'user', 'uno', 1);
+      await msg(u, 'assistant', 'dos', 2);
+      await msg(u, 'user', 'borrado', 3, { deletedAt: 4 });
+      await msg(u, 'system', 'inyectado', 4);
+      await msg(u, 'user', 'tres', 5);
+      await msg(other, 'user', 'ajeno', 6);
+      expect(await loadCoachContext(db, u, 10, 10_000)).toEqual([
+        { role: 'user', text: 'uno' },
+        { role: 'assistant', text: 'dos' },
+        { role: 'user', text: 'tres' },
+      ]);
+      expect(await loadCoachContext(db, u, 2, 10_000)).toEqual([
+        { role: 'assistant', text: 'dos' },
+        { role: 'user', text: 'tres' },
+      ]);
+    });
+
+    it('keeps the most recent contiguous window within the char budget and can exclude the current message', async () => {
+      const u = newUser();
+      await msg(u, 'user', 'a'.repeat(50), 1);
+      await msg(u, 'assistant', 'b'.repeat(30), 2);
+      await msg(u, 'user', 'c'.repeat(10), 3);
+      const current = await msg(u, 'user', 'actual', 4);
+      expect((await loadCoachContext(db, u, 10, 50, current)).map((t) => t.text)).toEqual(['b'.repeat(30), 'c'.repeat(10)]);
+      expect(await loadCoachContext(db, u, 10, 5, current)).toEqual([]);
+      expect(await loadCoachContext(db, u, 0, 1000)).toEqual([]);
+    });
   });
 });

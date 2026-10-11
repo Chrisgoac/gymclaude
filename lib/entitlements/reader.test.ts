@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
 import type { PoolDb } from '@/db/pool';
 import {
@@ -7,6 +7,7 @@ import {
   PRO_GRANTING_STATES,
   createDbEntitlementReader,
   grantsPro,
+  testEntitlementsAllowed,
   type EntitlementState,
 } from './reader';
 
@@ -26,6 +27,15 @@ describe('grantsPro (state mapping)', () => {
     expect(grantsPro({ state: 'ACTIVE', expiresAt: NOW }, NOW)).toBe(false);
     expect(grantsPro({ state: 'GRACE', expiresAt: NOW - 1 }, NOW)).toBe(false);
     expect(grantsPro({ state: 'ACTIVE', expiresAt: NOW + 1 }, NOW)).toBe(true);
+  });
+});
+
+describe('testEntitlementsAllowed', () => {
+  it('is false in any production build and true otherwise', () => {
+    expect(testEntitlementsAllowed({ NODE_ENV: 'production' } as NodeJS.ProcessEnv)).toBe(false);
+    expect(testEntitlementsAllowed({ NODE_ENV: 'production', VERCEL_ENV: 'preview' } as NodeJS.ProcessEnv)).toBe(false);
+    expect(testEntitlementsAllowed({ NODE_ENV: 'development' } as NodeJS.ProcessEnv)).toBe(true);
+    expect(testEntitlementsAllowed({ NODE_ENV: 'test' } as NodeJS.ProcessEnv)).toBe(true);
   });
 });
 
@@ -52,11 +62,12 @@ describe.skipIf(!url)('createDbEntitlementReader (integration)', () => {
     users.push(u);
     return u;
   };
-  const insert = (userId: string, state: EntitlementState, expiresAt: number, token = crypto.randomUUID()) =>
+  const insert = (userId: string, state: EntitlementState, expiresAt: number, token = crypto.randomUUID(),
+    source: 'test' | 'play' = 'test') =>
     db.execute(sql`
       INSERT INTO subscription_entitlements
         (user_id, product_id, purchase_token_hash, state, expires_at, auto_renewing, last_verified_at, source, created_at, updated_at)
-      VALUES (${userId}, 'gymlog_pro_monthly', ${token}, ${state}, ${expiresAt}, true, ${NOW}, 'test', ${NOW}, ${NOW})`);
+      VALUES (${userId}, 'gymlog_pro_monthly', ${token}, ${state}, ${expiresAt}, true, ${NOW}, ${source}, ${NOW}, ${NOW})`);
 
   beforeAll(async () => {
     const { drizzle } = await import('drizzle-orm/node-postgres');
@@ -64,6 +75,10 @@ describe.skipIf(!url)('createDbEntitlementReader (integration)', () => {
     const schema = await import('@/db/schema');
     pool = new Pool({ connectionString: url, max: 2 });
     db = drizzle(pool, { schema });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   afterAll(async () => {
@@ -119,5 +134,19 @@ describe.skipIf(!url)('createDbEntitlementReader (integration)', () => {
     await expect(insert(u, 'LIFETIME' as EntitlementState, NOW + DAY)).rejects.toThrow();
     await insert(u, 'ACTIVE', NOW + DAY, 'same-token');
     await expect(insert(u, 'ACTIVE', NOW + DAY, 'same-token')).rejects.toThrow();
+  });
+
+  it("source='test' rows never grant in a production build; Play rows still do", async () => {
+    const seeded = newUser();
+    const paid = newUser();
+    await insert(seeded, 'ACTIVE', NOW + DAY, crypto.randomUUID(), 'test');
+    await insert(paid, 'ACTIVE', NOW + DAY, crypto.randomUUID(), 'play');
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(await reader().isPro(seeded, NOW)).toBe(false);
+    expect(await reader().isPro(paid, NOW)).toBe(true);
+    vi.stubEnv('NODE_ENV', 'development');
+    expect(await reader().isPro(seeded, NOW)).toBe(true);
+    // Explicit override (independent of the environment).
+    expect(await createDbEntitlementReader(() => db, () => false).isPro(seeded, NOW)).toBe(false);
   });
 });

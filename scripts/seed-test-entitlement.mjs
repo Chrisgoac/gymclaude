@@ -1,6 +1,8 @@
 // Crea (o renueva) un derecho Pro de PRUEBA para un usuario en una BD LOCAL, para probar las rutas
 // /api/v1/ai/* sin Google Play. No hay atajo equivalente en producción: el script se niega a correr
-// salvo que MIGRATION_DATABASE_URL apunte a localhost/127.0.0.1/::1, y nunca lee .env.local.
+// salvo que MIGRATION_DATABASE_URL apunte a localhost/127.0.0.1/::1, y nunca lee .env.local. Además,
+// las filas source='test' no conceden Pro en un build de producción (NODE_ENV=production; ver
+// lib/entitlements/reader.ts): sirven con `next dev` y en tests.
 //
 // Uso:
 //   MIGRATION_DATABASE_URL=postgresql://postgres:...@127.0.0.1:5432/gymlog_sync_test \
@@ -39,7 +41,7 @@ if (!userId || userId.startsWith('--')) fail('Falta --user <clerkUserId>.');
 const state = arg('state') ?? 'ACTIVE';
 if (!STATES.includes(state)) fail(`--state debe ser uno de ${STATES.join(', ')}.`);
 const days = Number(arg('days') ?? 30);
-if (!Number.isFinite(days)) fail('--days debe ser un número.');
+if (!Number.isInteger(days) || days < 1 || days > 365) fail('--days debe ser un entero entre 1 y 365.');
 
 const now = Date.now();
 // Hash determinista por usuario: re-ejecutar renueva la misma fila en vez de acumular filas.

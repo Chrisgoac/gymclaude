@@ -26,10 +26,15 @@ describe('seed-test-entitlement (refusals; never connects)', () => {
     }
   });
 
-  it('requires --user and a known --state', () => {
+  it('requires --user, a known --state and an integer --days in 1..365', () => {
     const local = { MIGRATION_DATABASE_URL: 'postgresql://u:p@127.0.0.1:1/db' };
     expect(run(local, []).stderr).toContain('--user');
     expect(run(local, ['--user', 'u', '--state', 'LIFETIME']).stderr).toContain('--state');
+    for (const days of ['0', '366', '1.5', 'abc', '-3']) {
+      const r = run(local, ['--user', 'u', '--days', days]);
+      expect(r.status, days).toBe(1);
+      expect(r.stderr).toContain('--days');
+    }
   });
 });
 

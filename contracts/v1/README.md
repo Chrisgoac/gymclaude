@@ -238,8 +238,9 @@ the server. They are not sync tables: a push naming any of them fails with `400 
 
 ### Limits
 
-- Coach `text`: 1..2000 chars, not blank. `clientMessageId`: UUID (retries reuse it).
-  Optional `history`: ≤ 20 `{ role: user|assistant, text ≤ 4000 }` turns.
+- Coach `text`: 1..2000 chars, not blank. `clientMessageId`: UUID (retries reuse it). The client
+  sends no history: the server builds thread context from the user's own synced `coachMessages`
+  (newest live user/assistant turns within a char budget). `text` + serialized `snapshot` ≤ 36 KiB.
 - Coach `snapshot`: strict allowlist of `CoachSnapshot` (`lib/coach-snapshot.ts`): stalled ≤ 5,
   muscle groups ≤ 12, measurements ≤ 6, weekly PRs ≤ 100; no photos, ids, URLs or object keys;
   ≤ 32 KiB as UTF-8 JSON.
@@ -247,8 +248,8 @@ the server. They are not sync tables: a push naming any of them fails with `400 
   4..8 weeks, 30..90 min/session; catalog ≤ 400 entries with known muscle group/equipment.
 - Response report: `category` ∈ {inaccurate, harmful, medical, offensive, other}, optional
   `context` ≤ 500 chars. A repeated report of the same response is idempotent.
-- Stream events (one JSON object each): `start{clientMessageId}`, `delta{text}`,
-  `complete{responseId}`, `error{code, retryable}`.
+- Stream events (one JSON object each): `start{clientMessageId}`, `delta{text ≤ 8000 chars}`,
+  `complete{responseId}`, `error{code ^[A-Z_]{1,64}$, retryable}`.
 
 ### Test entitlement (non-production only)
 
@@ -261,4 +262,6 @@ MIGRATION_DATABASE_URL=postgresql://postgres:teacher123@127.0.0.1:5432/gymlog_sy
   npm run ai:seed-test-entitlement -- --user <clerkUserId> [--days 30] [--state ACTIVE]
 ```
 
-Re-running renews the same row; `--state REVOKED` (or `EXPIRED`, …) takes Pro away again.
+`--days` is an integer 1..365. Re-running renews the same row; `--state REVOKED` (or `EXPIRED`, …)
+takes Pro away again. Rows with `source = 'test'` never grant Pro in a production build
+(`NODE_ENV=production`, i.e. every Vercel deployment and `next start`): use `next dev` locally.

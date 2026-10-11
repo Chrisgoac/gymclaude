@@ -6,7 +6,9 @@ import {
   CoachRequestSchema,
   CoachSnapshotSchema,
   type CoachSnapshotDto,
+  MAX_COACH_REQUEST_BYTES,
   MAX_COACH_TEXT_CHARS,
+  MAX_STREAM_DELTA_CHARS,
   MAX_REPORT_CONTEXT_CHARS,
   MAX_SNAPSHOT_BYTES,
   MesocycleRequestSchema,
@@ -115,15 +117,23 @@ describe('CoachRequestSchema', () => {
     }
   });
 
-  it('accepts a bounded history of prior user/assistant turns', () => {
-    const history = [
-      { role: 'user', text: 'Hola' },
-      { role: 'assistant', text: 'Hola, ¿en qué te ayudo?' },
-    ];
-    expect(CoachRequestSchema.safeParse(coach({ history })).success).toBe(true);
-    expect(CoachRequestSchema.safeParse(coach({ history: [{ role: 'system', text: 'x' }] })).success).toBe(false);
-    const long = Array.from({ length: 21 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: 'x' }));
-    expect(CoachRequestSchema.safeParse(coach({ history: long })).success).toBe(false);
+  it('rejects client-supplied history (context is built server-side from synced coach_messages)', () => {
+    expect(CoachRequestSchema.safeParse(coach({ history: [{ role: 'user', text: 'Hola' }] })).success).toBe(false);
+  });
+
+  it(`caps text + snapshot together at ${MAX_COACH_REQUEST_BYTES} bytes`, () => {
+    expect(MAX_COACH_REQUEST_BYTES).toBe(36 * 1024);
+    // A snapshot just under its own 32 KiB cap…
+    const s = snapshot();
+    s.semana.prs = Array.from({ length: 94 }, () => ({ ejercicio: 'é'.repeat(150), tipo: 'peso' as const }));
+    const snapBytes = new TextEncoder().encode(JSON.stringify(s)).byteLength;
+    expect(snapBytes).toBeLessThanOrEqual(MAX_SNAPSHOT_BYTES);
+    expect(CoachSnapshotSchema.safeParse(s).success).toBe(true);
+    // …plus a text within its own 2000-char cap: fine alone, too large together.
+    const text = '€'.repeat(2000); // 2000 chars, 6000 UTF-8 bytes
+    expect(snapBytes + 6000).toBeGreaterThan(MAX_COACH_REQUEST_BYTES);
+    expect(CoachRequestSchema.safeParse(coach({ snapshot: s, text })).success).toBe(false);
+    expect(CoachRequestSchema.safeParse(coach({ snapshot: s, text: 'corto' })).success).toBe(true);
   });
 });
 
@@ -191,6 +201,11 @@ describe('AiStreamEventSchema', () => {
       { type: 'delta' },
       { type: 'done' },
       { type: 'delta', text: 'x', extra: 1 },
+      { type: 'delta', text: 'x'.repeat(MAX_STREAM_DELTA_CHARS + 1) },
+      { type: 'error', code: 'provider timeout', retryable: true },
+      { type: 'error', code: '', retryable: true },
+      { type: 'error', code: 'A'.repeat(65), retryable: true },
+      { type: 'error', code: 'ECONNREFUSED 10.0.0.1:5432', retryable: true },
     ]) {
       expect(AiStreamEventSchema.safeParse(e).success).toBe(false);
     }

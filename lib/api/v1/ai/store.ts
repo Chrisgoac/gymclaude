@@ -54,3 +54,41 @@ export async function findAiReport(
   const row = result.rows[0] as { id: string; payload: unknown; model: string; created_at: string | number } | undefined;
   return row ? { id: row.id, payload: row.payload, model: row.model, createdAt: Number(row.created_at) } : null;
 }
+
+export interface CoachContextTurn {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+/**
+ * Thread context for the Coach, built server-side from the user's OWN synced `coach_messages`
+ * (never from client-supplied history). Takes the newest live user/assistant messages, at most
+ * `limitTurns`, and keeps the most recent contiguous run whose total length fits `maxChars`
+ * (a message that would overflow the budget ends the window). Returned oldest first.
+ * `excludeId` drops the message being answered (it may already have synced).
+ */
+export async function loadCoachContext(
+  db: Db,
+  userId: string,
+  limitTurns: number,
+  maxChars: number,
+  excludeId?: string,
+): Promise<CoachContextTurn[]> {
+  if (!Number.isInteger(limitTurns) || limitTurns <= 0 || maxChars <= 0) return [];
+  const result = await db.execute(sql`
+    SELECT rol, contenido FROM coach_messages
+    WHERE user_id = ${userId}
+      AND deleted_at IS NULL
+      AND rol IN ('user', 'assistant')
+      AND id <> ${excludeId ?? ''}
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${Math.min(limitTurns, 200)}`);
+  const turns: CoachContextTurn[] = [];
+  let used = 0;
+  for (const row of result.rows as { rol: 'user' | 'assistant'; contenido: string }[]) {
+    if (used + row.contenido.length > maxChars) break;
+    used += row.contenido.length;
+    turns.push({ role: row.rol, text: row.contenido });
+  }
+  return turns.reverse();
+}

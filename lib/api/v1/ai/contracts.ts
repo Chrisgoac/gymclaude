@@ -7,11 +7,12 @@ import { Int32Schema, TextSchema } from '@/lib/api/v1/contracts/common';
 
 /** Max user message length for the Coach (chars). */
 export const MAX_COACH_TEXT_CHARS = 2000;
-/** Max prior turns sent with a Coach message, and max length of each. */
-export const MAX_COACH_HISTORY_TURNS = 20;
-export const MAX_COACH_HISTORY_TEXT_CHARS = 4000;
 /** Max serialized (UTF-8 JSON) size of a Coach snapshot. */
 export const MAX_SNAPSHOT_BYTES = 32 * 1024;
+/** Max UTF-8 bytes of a Coach request's text + serialized snapshot together. */
+export const MAX_COACH_REQUEST_BYTES = 36 * 1024;
+/** Max length of one streamed delta (chars). */
+export const MAX_STREAM_DELTA_CHARS = 8000;
 /** Max optional free-text context on a response report (chars). */
 export const MAX_REPORT_CONTEXT_CHARS = 500;
 /** Max catalog entries sent for mesocycle generation. */
@@ -22,6 +23,7 @@ const nonNegative = finite.min(0);
 const count = Int32Schema.min(0);
 const label = (max: number) => TextSchema.min(1).max(max);
 const EXERCISE_NAME_MAX = 200;
+const utf8Bytes = (s: string) => new TextEncoder().encode(s).byteLength;
 
 // ── Coach snapshot: explicit allowlist mirroring CoachSnapshot (lib/coach-snapshot.ts) ──
 // List caps mirror construirSnapshot (5 stalled, ≤12 muscle groups, 6 measurements); PRs are
@@ -67,7 +69,7 @@ export const CoachSnapshotSchema = z
       .strict(),
   })
   .strict()
-  .refine((s) => new TextEncoder().encode(JSON.stringify(s)).byteLength <= MAX_SNAPSHOT_BYTES, {
+  .refine((s) => utf8Bytes(JSON.stringify(s)) <= MAX_SNAPSHOT_BYTES, {
     message: `Snapshot exceeds ${MAX_SNAPSHOT_BYTES} bytes`,
   });
 export type CoachSnapshotDto = z.infer<typeof CoachSnapshotSchema>;
@@ -77,20 +79,19 @@ export type CoachSnapshotDto = z.infer<typeof CoachSnapshotSchema>;
 const nonBlank = (max: number) =>
   TextSchema.min(1).max(max).refine((s) => s.trim().length > 0, 'Must not be blank');
 
-export const CoachHistoryTurnSchema = z
-  .object({ role: z.enum(['user', 'assistant']), text: nonBlank(MAX_COACH_HISTORY_TEXT_CHARS) })
-  .strict();
-
 export const CoachRequestSchema = z
   .object({
     /** Client id of the user message: retries reuse it, so a response is never duplicated. */
     clientMessageId: z.uuid(),
     text: nonBlank(MAX_COACH_TEXT_CHARS),
     snapshot: CoachSnapshotSchema,
-    /** Prior turns of the persistent thread, oldest first. */
-    history: z.array(CoachHistoryTurnSchema).max(MAX_COACH_HISTORY_TURNS).optional(),
+    // No client-supplied history: the server builds thread context from the user's own synced
+    // coach_messages (lib/api/v1/ai/store.ts loadCoachContext).
   })
-  .strict();
+  .strict()
+  .refine((r) => utf8Bytes(r.text) + utf8Bytes(JSON.stringify(r.snapshot)) <= MAX_COACH_REQUEST_BYTES, {
+    message: `Coach request exceeds ${MAX_COACH_REQUEST_BYTES} bytes`,
+  });
 export type CoachRequest = z.infer<typeof CoachRequestSchema>;
 
 // ── Mesocycle generation (ranges match the PWA generator, components/meso-generator.tsx) ──
@@ -147,8 +148,8 @@ export type ReportResponseRequest = z.infer<typeof ReportResponseRequestSchema>;
 
 export const AiStreamEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('start'), clientMessageId: z.uuid() }).strict(),
-  z.object({ type: z.literal('delta'), text: z.string() }).strict(),
+  z.object({ type: z.literal('delta'), text: z.string().max(MAX_STREAM_DELTA_CHARS) }).strict(),
   z.object({ type: z.literal('complete'), responseId: AiResponseIdSchema }).strict(),
-  z.object({ type: z.literal('error'), code: z.string().min(1), retryable: z.boolean() }).strict(),
+  z.object({ type: z.literal('error'), code: z.string().regex(/^[A-Z_]{1,64}$/), retryable: z.boolean() }).strict(),
 ]);
 export type AiStreamEvent = z.infer<typeof AiStreamEventSchema>;
