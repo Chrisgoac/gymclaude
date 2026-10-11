@@ -14,9 +14,13 @@ import com.chrisgoac.gymlog.data.workout.OfflineWorkoutRepository
 import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
 import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
+import com.chrisgoac.gymlog.data.stats.OfflineStatsRepository
 import com.chrisgoac.gymlog.data.workout.OfflineHistoryRepository
 import com.chrisgoac.gymlog.data.workout.OfflineWorkoutEditRepository
 import com.chrisgoac.gymlog.domain.history.DefaultSaveWorkoutDraftUseCase
+import com.chrisgoac.gymlog.domain.stats.InvalidatingSaveWorkoutDraftUseCase
+import com.chrisgoac.gymlog.domain.stats.StatsInvalidation
+import com.chrisgoac.gymlog.domain.stats.StatsRepository
 import com.chrisgoac.gymlog.navigation.HistoryEditServices
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
@@ -79,6 +83,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.time.ZoneId
 
 /** Manual DI root, one per process. */
 class AppContainer(private val application: Application) {
@@ -166,11 +171,24 @@ class AppContainer(private val application: Application) {
     val historyRepository: HistoryRepository =
         OfflineHistoryRepository(databases, ::localMutationRunner, exerciseRepository, routineRepository, now = syncClock::nowMillis)
 
-    /** Full edit of a past workout: validation against the server clock, then ONE local mutation (conflict-checked). */
+    /** Stale-data events (SaveResult scopes) that make the progress statistics recompute. */
+    val statsInvalidation: StatsInvalidation = StatsInvalidation()
+
+    /**
+     * Full edit of a past workout: validation against the server clock, then ONE local mutation (conflict-checked);
+     * each successful save publishes its invalidated scopes to [statsInvalidation].
+     */
     val historyEditing: HistoryEditServices = HistoryEditServices(
-        save = DefaultSaveWorkoutDraftUseCase(OfflineWorkoutEditRepository(databases, ::localMutationRunner), now = syncClock::nowMillis),
+        save = InvalidatingSaveWorkoutDraftUseCase(
+            DefaultSaveWorkoutDraftUseCase(OfflineWorkoutEditRepository(databases, ::localMutationRunner), now = syncClock::nowMillis),
+            statsInvalidation,
+        ),
         now = syncClock::nowMillis,
     )
+
+    /** Progress statistics of the open account (server-corrected clock, device time zone); read-only. */
+    val statsRepository: StatsRepository =
+        OfflineStatsRepository(databases, statsInvalidation, now = syncClock::nowMillis, zone = ZoneId::systemDefault)
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)

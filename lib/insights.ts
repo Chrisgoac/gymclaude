@@ -1,4 +1,6 @@
-import type { ExerciseProgressPoint } from '@/lib/repositories/stats';
+import type { ExerciseProgressPoint, VolumeByMuscle } from '@/lib/repositories/stats';
+import type { MuscleGroup } from '@/lib/db/types';
+import { MUSCLE_GROUPS } from '@/lib/db/types';
 
 /** Consejo mostrado cuando un ejercicio está estancado. */
 export const DELOAD_CONSEJO = 'Prueba bajar ~10% y vuelve a subir, o cambia de ejercicio.';
@@ -33,4 +35,49 @@ export function detectarEstancamiento(points: ExerciseProgressPoint[], n = 3): E
   const mejorReciente = Math.max(...points.slice(points.length - n).map((p) => p.mejor1RM));
   const mejorPrevio = Math.max(...points.slice(0, points.length - n).map((p) => p.mejor1RM));
   return { estancado: mejorReciente <= mejorPrevio, sesionesSinMejora, ultimaMejoraFecha };
+}
+
+const DIA = 86400000;
+/** Un grupo sin entrenar más de estos días se marca como descuidado. */
+export const UMBRAL_DESCUIDADO_DIAS = 10;
+
+export interface FilaEquilibrio {
+  grupo: MuscleGroup;
+  /** Volumen (kg·rep) del periodo. */
+  volumen: number;
+  /** Días desde la última sesión que lo entrenó; null si nunca (o sin `lastTrained`). */
+  diasSinEntrenar: number | null;
+  descuidado: boolean;
+  /** % de la meta semanal de volumen cumplido (tope 100); null sin meta o sin volumen semanal. */
+  metaPct: number | null;
+}
+
+/**
+ * Filas del equilibrio muscular (Progreso): grupos con volumen en el periodo o, si hay `lastTrained`,
+ * entrenados alguna vez (afloran los descuidados), ordenados por volumen desc (estable en el orden de
+ * MUSCLE_GROUPS). Pura; `ahora` lo pasa el llamante.
+ */
+export function filasEquilibrio(input: {
+  data: VolumeByMuscle[];
+  lastTrained?: Record<MuscleGroup, number | null>;
+  ahora?: number;
+  objetivos?: Partial<Record<MuscleGroup, number>>;
+  volumenSemana?: Record<MuscleGroup, number>;
+}): FilaEquilibrio[] {
+  const { data, lastTrained, objetivos, volumenSemana } = input;
+  const volByGrupo = new Map(data.map((d) => [d.grupo, d.volumen]));
+  const ts = input.ahora ?? 0;
+  return MUSCLE_GROUPS
+    .filter((g) => volByGrupo.has(g) || (lastTrained ? lastTrained[g] != null : false))
+    .sort((a, b) => (volByGrupo.get(b) ?? 0) - (volByGrupo.get(a) ?? 0))
+    .map((g) => {
+      const volumen = volByGrupo.get(g) ?? 0;
+      const ult = lastTrained?.[g] ?? null;
+      const dias = ult == null ? null : Math.floor((ts - ult) / DIA);
+      const descuidado = lastTrained != null && (ult == null || (dias !== null && dias > UMBRAL_DESCUIDADO_DIAS));
+      const meta = objetivos?.[g];
+      const volSem = volumenSemana?.[g] ?? 0;
+      const metaPct = meta && meta > 0 && volumenSemana != null ? Math.min(100, Math.round((volSem / meta) * 100)) : null;
+      return { grupo: g, volumen, diasSinEntrenar: dias, descuidado, metaPct };
+    });
 }

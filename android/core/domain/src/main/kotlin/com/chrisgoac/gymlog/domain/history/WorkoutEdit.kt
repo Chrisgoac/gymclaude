@@ -100,10 +100,12 @@ data class WorkoutEdit(
      * Derived data that this edit makes stale (consumed by the progress/achievements/coach features):
      *
      * - date → [InvalidationScope.STREAKS], [InvalidationScope.WEEKLY_SUMMARY] (the session moves week),
-     *   and everything plotted or ranked over time: charts, PRs (when achieved), stalls, achievements.
+     *   volume and muscle balance (the session can leave or enter the selected period), and everything
+     *   plotted or ranked over time: charts, PRs (when achieved), stalls, achievements.
      * - set values (weight, reps, warm-up) or added/removed sets → PRs, 1RM, volume, charts, stalls, achievements.
      * - added/removed exercises → [InvalidationScope.MUSCLE_BALANCE] plus the set-value scopes.
-     * - gym → [InvalidationScope.CHARTS] only (charts can be filtered by gym; PRs/volume are gym-agnostic).
+     * - gym → every gym-filtered statistic (the Progress gym filter applies to PRs, 1RM, volume,
+     *   balance, charts, the weekly summary and stalls); streaks and achievements count every gym.
      * - notes, reordering sets or exercises → no metric changes.
      * - any change at all → [InvalidationScope.COACH_SNAPSHOT] (the Coach reads the raw history).
      */
@@ -122,7 +124,7 @@ data class WorkoutEdit(
         if (exercisesAddedOrRemoved) scopes += InvalidationScope.MUSCLE_BALANCE
         val sessionBefore = original.session
         if (session != null && session.startedAt != sessionBefore.startedAt) scopes += DATE_SCOPES
-        if (session != null && session.gymId != sessionBefore.gymId) scopes += InvalidationScope.CHARTS
+        if (session != null && session.gymId != sessionBefore.gymId) scopes += GYM_SCOPES
         return scopes
     }
 }
@@ -142,10 +144,22 @@ private val SET_VALUE_SCOPES = setOf(
 private val DATE_SCOPES = setOf(
     InvalidationScope.STREAKS,
     InvalidationScope.WEEKLY_SUMMARY,
+    InvalidationScope.VOLUME,
+    InvalidationScope.MUSCLE_BALANCE,
     InvalidationScope.CHARTS,
     InvalidationScope.PERSONAL_RECORDS,
     InvalidationScope.STALLS,
     InvalidationScope.ACHIEVEMENTS,
+)
+
+private val GYM_SCOPES = setOf(
+    InvalidationScope.PERSONAL_RECORDS,
+    InvalidationScope.ONE_REP_MAX,
+    InvalidationScope.VOLUME,
+    InvalidationScope.MUSCLE_BALANCE,
+    InvalidationScope.CHARTS,
+    InvalidationScope.WEEKLY_SUMMARY,
+    InvalidationScope.STALLS,
 )
 
 /** Derived data an edit can make stale. */

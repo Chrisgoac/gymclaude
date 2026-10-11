@@ -94,7 +94,9 @@ class SaveWorkoutDraftTest {
         assertEquals(SessionEdit(NOW - 3 * DAY, "g2", "Mejor"), edit.session)
         assertTrue(edit.upsertExercises.isEmpty() && edit.upsertSets.isEmpty() && edit.removedExerciseIds.isEmpty() && edit.removedSetIds.isEmpty())
         assertEquals(
-            SaveResult.Saved(setOf(STREAKS, WEEKLY_SUMMARY, CHARTS, PERSONAL_RECORDS, STALLS, ACHIEVEMENTS, COACH_SNAPSHOT)),
+            SaveResult.Saved(
+                setOf(STREAKS, WEEKLY_SUMMARY, VOLUME, MUSCLE_BALANCE, CHARTS, PERSONAL_RECORDS, ONE_REP_MAX, STALLS, ACHIEVEMENTS, COACH_SNAPSHOT),
+            ),
             result,
         )
     }
@@ -105,9 +107,12 @@ class SaveWorkoutDraftTest {
         assertEquals(SaveResult.Saved(setOf(COACH_SNAPSHOT)), result)
     }
 
-    @Test fun `gym change only invalidates charts and coach`() = runTest {
+    @Test fun `gym change invalidates every gym-filtered statistic but not streaks or achievements`() = runTest {
         val (result, _) = save(draft.copy(gymId = null))
-        assertEquals(SaveResult.Saved(setOf(CHARTS, COACH_SNAPSHOT)), result)
+        assertEquals(
+            SaveResult.Saved(setOf(PERSONAL_RECORDS, ONE_REP_MAX, VOLUME, MUSCLE_BALANCE, CHARTS, WEEKLY_SUMMARY, STALLS, COACH_SNAPSHOT)),
+            result,
+        )
     }
 
     @Test fun `set values add and remove keep stable ids and compact positions`() = runTest {

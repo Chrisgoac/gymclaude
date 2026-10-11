@@ -29,7 +29,7 @@ import java.time.ZoneId
 /**
  * Runs every date/number fixture shared with the PWA (the contracts/domain "-cases" JSON files, read in place;
  * generated from the TypeScript code by scripts/export-domain-fixtures.mjs). progression.json and
- * routine-rotation.json have their own runners (ProgressionTest, RoutineRotationTest).
+ * routine-rotation.json and insight-cases.json have their own runners (ProgressionTest, RoutineRotationTest, InsightsParityTest).
  */
 class DomainParityTest {
     private val dir: File = File(checkNotNull(System.getProperty("gymlog.domainContractsDir")) { "gymlog.domainContractsDir not set" })
@@ -49,7 +49,7 @@ class DomainParityTest {
     fun everyFixtureFileHasARunner() {
         val runners = setOf(
             "period-cases.json", "fecha-cases.json", "num-cases.json", "body-stats-cases.json",
-            "progression.json", "routine-rotation.json",
+            "progression.json", "routine-rotation.json", "insight-cases.json",
         )
         val files = dir.listFiles { f -> f.extension == "json" }!!.map { it.name }.toSet()
         assertEquals("fixture without a runner (add it to DomainParityTest)", emptySet<String>(), files - runners)

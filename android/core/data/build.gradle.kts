@@ -28,4 +28,8 @@ tasks.withType<Test>().configureEach {
     val catalogAsset = rootProject.projectDir.resolve("app/src/main/assets/exercises-v1.json")
     systemProperty("gymlog.catalogAsset", catalogAsset.canonicalPath)
     inputs.file(catalogAsset)
+    // Domain parity fixtures (insight-cases.json) are read in place from <repo>/contracts/domain.
+    val domainContractsDir = rootProject.projectDir.resolve("../contracts/domain")
+    systemProperty("gymlog.domainContractsDir", domainContractsDir.canonicalPath)
+    inputs.dir(domainContractsDir)
 }

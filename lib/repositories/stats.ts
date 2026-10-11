@@ -239,12 +239,13 @@ const dayKey = (ts: number) => {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 };
 
-export async function getCurrentStreakDays(): Promise<number> {
+/** Días naturales (hora local) consecutivos con sesión, contando hacia atrás desde hoy. `now` inyectable. */
+export async function getCurrentStreakDays(now: number = Date.now()): Promise<number> {
   const sessions = activo(await db.workoutSessions.toArray());
   if (sessions.length === 0) return 0;
   const days = new Set(sessions.map((s) => dayKey(s.fecha)));
   let streak = 0;
-  const cursor = new Date();
+  const cursor = new Date(now);
   while (days.has(dayKey(cursor.getTime()))) {
     streak++;
     cursor.setDate(cursor.getDate() - 1);

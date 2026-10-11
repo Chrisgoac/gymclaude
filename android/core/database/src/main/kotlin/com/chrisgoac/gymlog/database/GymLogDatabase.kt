@@ -16,6 +16,7 @@ import com.chrisgoac.gymlog.database.dao.MesocycleDao
 import com.chrisgoac.gymlog.database.dao.ProgressPhotoDao
 import com.chrisgoac.gymlog.database.dao.RoutineDao
 import com.chrisgoac.gymlog.database.dao.RoutineExerciseDao
+import com.chrisgoac.gymlog.database.dao.StatsDao
 import com.chrisgoac.gymlog.database.dao.SyncDao
 import com.chrisgoac.gymlog.database.dao.UserSettingDao
 import com.chrisgoac.gymlog.database.dao.WorkoutSessionDao
@@ -88,6 +89,7 @@ import com.chrisgoac.gymlog.database.entity.WorkoutSessionEntity
 abstract class GymLogDatabase : RoomDatabase() {
     abstract fun exerciseDao(): ExerciseDao
     abstract fun workoutHistoryDao(): WorkoutHistoryDao
+    abstract fun statsDao(): StatsDao
     abstract fun routineDao(): RoutineDao
     abstract fun routineExerciseDao(): RoutineExerciseDao
     abstract fun workoutSessionDao(): WorkoutSessionDao
