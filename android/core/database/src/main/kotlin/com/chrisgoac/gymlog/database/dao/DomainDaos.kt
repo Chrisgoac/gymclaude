@@ -139,6 +139,10 @@ interface GymDao {
     @Query("SELECT * FROM gyms WHERE deletedAt IS NULL ORDER BY orden, id")
     fun observeLive(): Flow<List<GymEntity>>
 
+    /** Live gyms (archived included) at this moment; usable inside a transaction. */
+    @Query("SELECT * FROM gyms WHERE deletedAt IS NULL ORDER BY orden, id")
+    suspend fun live(): List<GymEntity>
+
     @Query("SELECT * FROM gyms ORDER BY id")
     suspend fun getAll(): List<GymEntity>
 }

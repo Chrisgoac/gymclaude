@@ -34,7 +34,11 @@ import com.chrisgoac.gymlog.domain.auth.AuthGateway
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.timer.RestTimerController
+import com.chrisgoac.gymlog.domain.SyncUiState
+import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
+import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
+import kotlinx.coroutines.flow.Flow
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.navigation.GymLogApp
 import com.chrisgoac.gymlog.navigation.SettingsServices
@@ -52,6 +56,9 @@ fun GymLogRoot(
     workouts: WorkoutRepository? = null,
     workoutLog: WorkoutLogRepository? = null,
     restTimer: RestTimerController? = null,
+    finishWorkout: FinishWorkoutUseCase? = null,
+    history: HistoryRepository? = null,
+    syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
     onOpenWorkoutHandled: () -> Unit = {},
 ) {
@@ -70,6 +77,9 @@ fun GymLogRoot(
                 workouts = workouts,
                 workoutLog = workoutLog,
                 restTimer = restTimer,
+                finishWorkout = finishWorkout,
+                history = history,
+                syncState = syncState,
                 openWorkoutRequest = openWorkoutRequest,
                 onOpenWorkoutHandled = onOpenWorkoutHandled,
             )

@@ -8,6 +8,9 @@ import com.chrisgoac.gymlog.database.entity.WorkoutSessionEntity
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.domain.workout.Gym
 import com.chrisgoac.gymlog.domain.workout.StartedWorkout
+import com.chrisgoac.gymlog.domain.workout.WorkoutFinishRepository
+import com.chrisgoac.gymlog.domain.workout.WorkoutLimits
+import com.chrisgoac.gymlog.domain.workout.WorkoutRowMissingException
 import com.chrisgoac.gymlog.domain.workout.TrainingSummary
 import com.chrisgoac.gymlog.domain.workout.WorkoutAggregate
 import com.chrisgoac.gymlog.domain.workout.WorkoutExercise
@@ -46,7 +49,7 @@ class OfflineWorkoutRepository(
     private val now: () -> Long = System::currentTimeMillis,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
     private val newId: () -> String = { UUID.randomUUID().toString() },
-) : WorkoutRepository {
+) : WorkoutRepository, WorkoutFinishRepository {
 
     // ---- Reads ----
 
@@ -168,6 +171,30 @@ class OfflineWorkoutRepository(
                     )
                 }
                 StartedWorkout(sessionId.value, resumed = false)
+            },
+        )
+    }
+
+    override suspend fun finish(sessionId: String, notes: String?): Int {
+        val cleaned = notes?.replace("\u0000", "")?.trim()
+        require(cleaned == null || cleaned.length <= WorkoutLimits.NOTES_MAX) { "Notes over ${WorkoutLimits.NOTES_MAX} characters" }
+        val database = checkNotNull(databases.current.value) { "No account database is open" }.database
+        return runnerFor(database).run(
+            LocalMutation {
+                val session = (find(SyncTable.WORKOUT_SESSIONS, RecordId(sessionId)) as? WorkoutSessionRecord)?.takeIf { it.deletedAt == null }
+                    ?: throw WorkoutRowMissingException(sessionId)
+                // Finishing twice keeps the first completion time.
+                session.duracionSegundos?.let { return@LocalMutation it }
+                // PWA: Math.round((now - fecha) / 1000); a start in the future (clock skew) is 0.
+                val duration = Math.floorDiv((now() - session.fecha).coerceAtLeast(0L) + 500L, 1000L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                put(
+                    session.copy(
+                        duracionSegundos = duration,
+                        notas = if (cleaned == null) session.notas else cleaned.ifEmpty { null },
+                        updatedAt = nextTimestamp(SyncTable.WORKOUT_SESSIONS, session.id),
+                    ),
+                )
+                duration
             },
         )
     }

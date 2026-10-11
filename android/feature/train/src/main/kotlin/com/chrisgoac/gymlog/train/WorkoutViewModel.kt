@@ -10,6 +10,9 @@ import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.domain.routine.Routine
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.workout.ExerciseHistory
+import com.chrisgoac.gymlog.domain.workout.FinishResult
+import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
+import com.chrisgoac.gymlog.domain.workout.WorkoutSummary
 import com.chrisgoac.gymlog.domain.workout.FieldParse
 import com.chrisgoac.gymlog.domain.workout.HistorySet
 import com.chrisgoac.gymlog.domain.workout.Progression
@@ -58,6 +61,19 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 enum class WorkoutLogStatus { Loading, Ready, Missing, Failed }
+
+/** Progress of finishing the workout. [Finished] carries the summary shown on the closing screen. */
+sealed interface FinishUiState {
+    data object Idle : FinishUiState
+    data object Saving : FinishUiState
+
+    /** No repetition logged: ask "¿Terminar sin series?" before finishing anyway. */
+    data object ConfirmEmpty : FinishUiState
+
+    /** Nothing was finished (typed values could not be saved, or the workout vanished); retry is safe. */
+    data object Failed : FinishUiState
+    data class Finished(val summary: WorkoutSummary) : FinishUiState
+}
 
 /** Routine target for one exercise of the workout. */
 data class ExerciseTarget(val sets: Int?, val repsMin: Int?, val repsMax: Int?, val restSeconds: Int?)
@@ -130,8 +146,62 @@ class WorkoutViewModel(
     private val onSetCompleted: (restSeconds: Int?) -> Unit = {},
     private val debounceMillis: Long = DEBOUNCE_MILLIS,
     private val restTimer: RestTimerController? = null,
+    private val finishWorkout: FinishWorkoutUseCase? = null,
 ) : ViewModel() {
     private val local = MutableStateFlow(restore())
+
+    private val _finish = MutableStateFlow<FinishUiState>(FinishUiState.Idle)
+    val finishState: StateFlow<FinishUiState> = _finish
+
+    /** True when the finish action exists (a use case was provided). */
+    val canFinish: Boolean get() = finishWorkout != null
+
+    /**
+     * Finishes the workout. Everything typed is committed FIRST; if any of it could not be stored
+     * the workout is not finished, so a typed set is never lost. A workout without a repetition asks
+     * for confirmation ([FinishUiState.ConfirmEmpty]); repeated taps are ignored.
+     */
+    fun finish() = runFinish(confirmEmpty = false)
+
+    /** The user confirmed "Terminar sin series". */
+    fun confirmFinishEmpty() = runFinish(confirmEmpty = true)
+
+    /** Back to logging after a confirmation prompt or a failure. */
+    fun cancelFinish() {
+        _finish.update { if (it is FinishUiState.ConfirmEmpty || it is FinishUiState.Failed) FinishUiState.Idle else it }
+    }
+
+    private fun runFinish(confirmEmpty: Boolean) {
+        val useCase = finishWorkout ?: return
+        val current = _finish.value
+        if (current is FinishUiState.Saving || current is FinishUiState.Finished) return
+        if (!notesValid(local.value.notes.orEmpty())) return
+        _finish.value = FinishUiState.Saving
+        writeScope.launch {
+            _finish.value = try {
+                flushAll()
+                if (hasUnsavedValidInput()) {
+                    FinishUiState.Failed
+                } else {
+                    when (val result = useCase(sessionId, local.value.notes, confirmEmpty)) {
+                        is FinishResult.Finished -> FinishUiState.Finished(result.summary)
+                        FinishResult.NeedsConfirmation -> FinishUiState.ConfirmEmpty
+                        FinishResult.NotFound -> FinishUiState.Failed
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                update { it.copy(writeFailed = true) }
+                FinishUiState.Failed
+            }
+        }
+    }
+
+    private fun hasUnsavedValidInput(): Boolean {
+        val l = local.value
+        return l.drafts.values.any { it.hasValidField() } || (l.notesDirty && l.notes != null && notesValid(l.notes))
+    }
 
     /** The account's rest timer when it belongs to this workout (restored from storage at creation). */
     val timer: StateFlow<RestTimerState?> = restTimer?.state ?: MutableStateFlow(null)

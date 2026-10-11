@@ -121,4 +121,25 @@
     <string name="rest_resume">Seguir</string>
     <string name="rest_skip">Saltar</string>
     <string name="rest_dismiss">Cerrar</string>
+
+    <string name="finish_button">Terminar entrenamiento</string>
+    <string name="finish_failed">No se pudo terminar el entrenamiento. Lo escrito sigue guardado; inténtalo de nuevo.</string>
+    <string name="finish_empty_title">¿Terminar sin series?</string>
+    <string name="finish_empty_message">Aún no has registrado ninguna repetición. El entreno se guardará vacío.</string>
+    <string name="finish_empty_confirm">Terminar sin series</string>
+    <string name="finish_empty_cancel">Seguir entrenando</string>
+    <string name="finish_summary_title">Resumen</string>
+    <string name="finish_summary_done">Entrenamiento terminado</string>
+    <string name="finish_summary_duration_minutes">Duración: %1$d min</string>
+    <string name="finish_summary_duration_hours">Duración: %1$d h %2$02d min</string>
+    <plurals name="finish_summary_exercises">
+        <item quantity="one">%1$d ejercicio</item>
+        <item quantity="other">%1$d ejercicios</item>
+    </plurals>
+    <plurals name="finish_summary_sets">
+        <item quantity="one">%1$d serie</item>
+        <item quantity="other">%1$d series</item>
+    </plurals>
+    <string name="finish_summary_volume">Volumen: %1$s kg·rep</string>
+    <string name="finish_summary_close">Listo</string>
 </resources>

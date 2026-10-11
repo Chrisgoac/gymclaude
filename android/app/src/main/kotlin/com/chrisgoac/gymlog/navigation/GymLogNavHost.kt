@@ -47,6 +47,15 @@ import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
+import com.chrisgoac.gymlog.history.HistoryDetailScreen
+import com.chrisgoac.gymlog.history.HistoryDetailViewModel
+import com.chrisgoac.gymlog.history.HistoryListScreen
+import com.chrisgoac.gymlog.history.HistoryListViewModel
+import com.chrisgoac.gymlog.domain.SyncUiState
+import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
+import com.chrisgoac.gymlog.domain.workout.HistoryRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import com.chrisgoac.gymlog.train.ActiveWorkoutScreen
 import com.chrisgoac.gymlog.train.WorkoutViewModel
 import com.chrisgoac.gymlog.train.StartWorkoutUseCase
@@ -93,6 +102,9 @@ fun GymLogApp(
     workouts: WorkoutRepository? = null,
     workoutLog: WorkoutLogRepository? = null,
     restTimer: RestTimerController? = null,
+    finishWorkout: FinishWorkoutUseCase? = null,
+    history: HistoryRepository? = null,
+    syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
     onOpenWorkoutHandled: () -> Unit = {},
 ) {
@@ -114,7 +126,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, syncState)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -146,6 +158,9 @@ private fun GymLogNavHost(
     workouts: WorkoutRepository?,
     workoutLog: WorkoutLogRepository?,
     restTimer: RestTimerController?,
+    finishWorkout: FinishWorkoutUseCase?,
+    history: HistoryRepository?,
+    syncState: Flow<SyncUiState>?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
     // and it survives navigation and rotation, but never another account.
@@ -216,6 +231,7 @@ private fun GymLogNavHost(
                             sessionId, workouts, workoutLog, exercises, routines, createSavedStateHandle(),
                             onSetCompleted = { onRestStarted(it) },
                             restTimer = restTimer,
+                            finishWorkout = finishWorkout,
                         )
                     }
                     ActiveWorkoutScreen(viewModel, onBack = { navController.popBackStack() })
@@ -306,7 +322,28 @@ private fun GymLogNavHost(
             composable<GymLogDestination.Progress> { SmokeScreen(GymLogDestination.Progress, navController) }
         }
         navigation<GymLogGraph.History>(startDestination = GymLogDestination.History) {
-            composable<GymLogDestination.History> { SmokeScreen(GymLogDestination.History, navController) }
+            composable<GymLogDestination.History> {
+                if (history == null || workouts == null) {
+                    SmokeScreen(GymLogDestination.History, navController)
+                } else {
+                    // Shell-scoped: filters and the loaded window survive opening a detail and rotation.
+                    val viewModel = viewModel { HistoryListViewModel(history, workouts, syncState ?: emptyFlow()) }
+                    HistoryListScreen(
+                        viewModel,
+                        onOpen = { navController.navigate(GymLogDestination.HistoryDetail(it)) },
+                        onSettings = { navController.navigate(GymLogDestination.Settings) },
+                    )
+                }
+            }
+            composable<GymLogDestination.HistoryDetail> { entry ->
+                val sessionId = entry.toRoute<GymLogDestination.HistoryDetail>().sessionId
+                if (history == null || workouts == null) {
+                    SmokeScreen(GymLogDestination.History, navController, secondary = true)
+                } else {
+                    val viewModel = viewModel(key = sessionId) { HistoryDetailViewModel(history, workouts, sessionId) }
+                    HistoryDetailScreen(viewModel, onBack = { navController.popBackStack() })
+                }
+            }
         }
         composable<GymLogDestination.Coach> { SmokeScreen(GymLogDestination.Coach, navController, secondary = true) }
         composable<GymLogDestination.Body> { SmokeScreen(GymLogDestination.Body, navController, secondary = true) }

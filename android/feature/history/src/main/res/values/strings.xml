@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="es">
+    <string name="history_title">Historial</string>
+    <string name="history_settings">Ajustes</string>
+    <string name="history_back">Atrás</string>
+    <string name="history_loading">Cargando historial</string>
+    <string name="history_error_title">No se pudo cargar el historial</string>
+    <string name="history_error_message">Inténtalo de nuevo. Tus datos siguen guardados en este dispositivo.</string>
+    <string name="history_retry">Reintentar</string>
+    <string name="history_empty_title">Aún no has registrado entrenos</string>
+    <string name="history_empty_message">Cuando termines un entrenamiento aparecerá aquí.</string>
+    <string name="history_no_results_title">Sin resultados</string>
+    <string name="history_no_results_message">Ningún entrenamiento coincide con la búsqueda y los filtros.</string>
+    <string name="history_clear_filters">Quitar filtros</string>
+    <string name="history_search_label">Buscar rutina, ejercicio o nota</string>
+    <string name="history_filter_period">Periodo</string>
+    <string name="history_filter_gym">Gimnasio</string>
+    <string name="history_period_4w">4 sem</string>
+    <string name="history_period_3m">3 meses</string>
+    <string name="history_period_year">Año</string>
+    <string name="history_period_all">Todo</string>
+    <string name="history_gym_all">Todos</string>
+    <string name="history_gym_none">Sin gimnasio</string>
+    <string name="history_selected">seleccionado</string>
+    <string name="history_load_more">Ver más</string>
+    <string name="history_free_workout">Entrenamiento libre</string>
+    <string name="history_item_summary">%1$s · %2$s</string>
+    <plurals name="history_exercises">
+        <item quantity="one">%1$d ejercicio</item>
+        <item quantity="other">%1$d ejercicios</item>
+    </plurals>
+    <plurals name="history_sets">
+        <item quantity="one">%1$d serie</item>
+        <item quantity="other">%1$d series</item>
+    </plurals>
+    <string name="history_volume">%1$s kg·rep</string>
+    <string name="history_duration_minutes">%1$d min</string>
+    <string name="history_duration_hours">%1$d h %2$02d min</string>
+
+    <string name="history_sync_synced">Todo sincronizado</string>
+    <plurals name="history_sync_pending">
+        <item quantity="one">%1$d cambio pendiente de enviar</item>
+        <item quantity="other">%1$d cambios pendientes de enviar</item>
+    </plurals>
+    <plurals name="history_sync_offline">
+        <item quantity="one">Sin conexión · %1$d cambio guardado aquí</item>
+        <item quantity="other">Sin conexión · %1$d cambios guardados aquí</item>
+    </plurals>
+    <plurals name="history_sync_needs_action">
+        <item quantity="one">%1$d cambio necesita revisión en Ajustes</item>
+        <item quantity="other">%1$d cambios necesitan revisión en Ajustes</item>
+    </plurals>
+    <string name="history_sync_session_required">Inicia sesión de nuevo para sincronizar</string>
+    <string name="history_sync_session_rejected">Sincronización en pausa; tus datos están a salvo</string>
+
+    <string name="history_detail_title">Entreno</string>
+    <string name="history_detail_loading">Cargando entreno</string>
+    <string name="history_detail_not_found_title">Entreno no encontrado</string>
+    <string name="history_detail_not_found_message">Puede que se haya eliminado.</string>
+    <string name="history_detail_error_title">No se pudo cargar el entreno</string>
+    <string name="history_detail_started">%1$s</string>
+    <string name="history_detail_gym">Gimnasio: %1$s</string>
+    <string name="history_detail_gym_change">Cambiar gimnasio</string>
+    <string name="history_detail_gym_cancel">Cancelar</string>
+    <string name="history_detail_gym_failed">No se pudo cambiar el gimnasio. Inténtalo de nuevo.</string>
+    <string name="history_detail_notes">Notas</string>
+    <string name="history_detail_no_exercises">Este entreno no tiene ejercicios.</string>
+    <string name="history_detail_unknown_exercise">Ejercicio eliminado</string>
+    <string name="history_detail_set_line">%1$d. %2$s kg × %3$d</string>
+    <string name="history_detail_set_warmup">%1$d. %2$s kg × %3$d (calentamiento)</string>
+    <string name="history_detail_delete">Borrar entreno</string>
+    <string name="history_detail_delete_confirm_title">¿Borrar este entreno?</string>
+    <string name="history_detail_delete_confirm_message">Se borrarán sus ejercicios y series. Esta acción se sincroniza con tus otros dispositivos.</string>
+    <string name="history_detail_delete_confirm">Borrar</string>
+    <string name="history_detail_delete_cancel">Cancelar</string>
+    <string name="history_detail_delete_failed">No se pudo borrar el entreno. Inténtalo de nuevo.</string>
+</resources>

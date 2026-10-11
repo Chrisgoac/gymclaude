@@ -37,8 +37,58 @@ ORDER BY s.fecha DESC
 LIMIT 1
 """
 
+/** A finished session as the history list needs it (no child rows). */
+data class FinishedSessionRow(
+    val id: String,
+    val fecha: Long,
+    val duracionSegundos: Int,
+    val gymId: String?,
+    val routineId: String?,
+    val notas: String?,
+)
+
+/** Per-session totals over live exercises and live sets. */
+data class SessionTotalsRow(val sessionId: String, val exercises: Int, val sets: Int, val volume: Double)
+
+private const val FINISHED_COLUMNS = "s.id AS id, s.fecha AS fecha, s.duracionSegundos AS duracionSegundos, s.gymId AS gymId, s.routineId AS routineId, s.notas AS notas"
+
+// Finished = live with a duration. Ordered through index_workout_sessions_fecha; `:gymId IS NULL` = every gym.
+private const val FINISHED_WHERE = "s.deletedAt IS NULL AND s.duracionSegundos IS NOT NULL AND s.fecha >= :since AND (:gymId IS NULL OR s.gymId = :gymId)"
+
 @Dao
 interface WorkoutHistoryDao {
     @Query(LATEST_HISTORY_CANDIDATE_SQL)
     suspend fun latestCandidate(exerciseId: String, excludeSessionId: String, gymId: String?): HistoryCandidate?
+
+    /** Newest-first page of finished sessions: the LIMIT stops the walk of the fecha index. */
+    @Query("SELECT $FINISHED_COLUMNS FROM workout_sessions AS s WHERE $FINISHED_WHERE ORDER BY s.fecha DESC, s.id LIMIT :limit")
+    suspend fun finishedPage(since: Long, gymId: String?, limit: Int): List<FinishedSessionRow>
+
+    /** Finished sessions that have notes (the text is matched accent-insensitively by the caller). */
+    @Query("SELECT $FINISHED_COLUMNS FROM workout_sessions AS s WHERE $FINISHED_WHERE AND s.notas IS NOT NULL ORDER BY s.fecha DESC, s.id")
+    suspend fun finishedWithNotes(since: Long, gymId: String?): List<FinishedSessionRow>
+
+    @Query("SELECT $FINISHED_COLUMNS FROM workout_sessions AS s WHERE $FINISHED_WHERE AND s.routineId IN (:routineIds) ORDER BY s.fecha DESC, s.id")
+    suspend fun finishedByRoutines(since: Long, gymId: String?, routineIds: List<String>): List<FinishedSessionRow>
+
+    @Query(
+        "SELECT DISTINCT $FINISHED_COLUMNS FROM logged_exercises AS le " +
+            "JOIN workout_sessions AS s ON s.id = le.sessionId " +
+            "WHERE le.exerciseId IN (:exerciseIds) AND le.deletedAt IS NULL AND $FINISHED_WHERE ORDER BY s.fecha DESC, s.id",
+    )
+    suspend fun finishedByExercises(since: Long, gymId: String?, exerciseIds: List<String>): List<FinishedSessionRow>
+
+    @Query(
+        "SELECT le.sessionId AS sessionId, COUNT(DISTINCT le.id) AS exercises, COUNT(ls.id) AS sets, COALESCE(SUM(ls.peso * ls.reps), 0.0) AS volume " +
+            "FROM logged_exercises AS le LEFT JOIN logged_sets AS ls ON ls.loggedExerciseId = le.id AND ls.deletedAt IS NULL " +
+            "WHERE le.sessionId IN (:sessionIds) AND le.deletedAt IS NULL GROUP BY le.sessionId",
+    )
+    suspend fun totals(sessionIds: List<String>): List<SessionTotalsRow>
+
+    /** Live sets of every live exercise of one session, in display order. */
+    @Query(
+        "SELECT ls.* FROM logged_sets AS ls JOIN logged_exercises AS le ON le.id = ls.loggedExerciseId " +
+            "WHERE le.sessionId = :sessionId AND le.deletedAt IS NULL AND ls.deletedAt IS NULL ORDER BY ls.orden, ls.id",
+    )
+    suspend fun liveSetsForSession(sessionId: String): List<com.chrisgoac.gymlog.database.entity.LoggedSetEntity>
 }

@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -32,6 +33,8 @@ import com.chrisgoac.gymlog.designsystem.component.HierroText
 import com.chrisgoac.gymlog.designsystem.component.HierroTextField
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.domain.exercise.Exercise
+import com.chrisgoac.gymlog.domain.workout.SetValidation
+import com.chrisgoac.gymlog.domain.workout.WorkoutSummary
 import com.chrisgoac.gymlog.feature.train.R
 import java.text.DateFormat
 import java.util.Date
@@ -44,6 +47,7 @@ import java.util.Date
 fun ActiveWorkoutScreen(viewModel: WorkoutViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsState()
     val picker by viewModel.pickerResults.collectAsState()
+    val finish by viewModel.finishState.collectAsState()
     // Any way out of this destination (system back, tab switch) commits what was typed.
     DisposableEffect(viewModel) { onDispose { viewModel.flushPending() } }
     val actions = remember(viewModel) { ViewModelActions(viewModel) }
@@ -63,6 +67,11 @@ fun ActiveWorkoutScreen(viewModel: WorkoutViewModel, onBack: () -> Unit, modifie
         onDismissError = viewModel::dismissWriteError,
         onRetry = viewModel::retry,
         restTimer = { RestTimerHost(viewModel) },
+        finish = finish,
+        canFinish = viewModel.canFinish,
+        onFinish = viewModel::finish,
+        onConfirmFinishEmpty = viewModel::confirmFinishEmpty,
+        onCancelFinish = viewModel::cancelFinish,
         modifier = modifier,
     )
 }
@@ -95,7 +104,16 @@ internal fun ActiveWorkoutContent(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     restTimer: @Composable () -> Unit = {},
+    finish: FinishUiState = FinishUiState.Idle,
+    canFinish: Boolean = false,
+    onFinish: () -> Unit = {},
+    onConfirmFinishEmpty: () -> Unit = {},
+    onCancelFinish: () -> Unit = {},
 ) {
+    if (finish is FinishUiState.Finished) {
+        FinishSummaryContent(finish.summary, onDone = onBack, modifier = modifier)
+        return
+    }
     Column(modifier.fillMaxSize().imePadding()) {
         HierroScreenHeader(stringResource(R.string.workout_title)) {
             HierroHeaderAction(stringResource(R.string.workout_back), onBack)
@@ -153,6 +171,7 @@ internal fun ActiveWorkoutContent(
                             errorMessage = if (state.notesTooLong) stringResource(R.string.workout_notes_too_long) else null,
                         )
                     }
+                    if (canFinish) item(key = "finish") { FinishCard(finish, state.notesTooLong, onFinish, onConfirmFinishEmpty, onCancelFinish) }
                 }
             }
         }
@@ -193,3 +212,59 @@ private fun ExerciseSearch(
 
 /** Enough to find an exercise by typing; the full catalog list would be hundreds of rows. */
 private const val MAX_RESULTS = 30
+
+@Composable
+private fun FinishCard(
+    finish: FinishUiState,
+    notesTooLong: Boolean,
+    onFinish: () -> Unit,
+    onConfirmEmpty: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    HierroCard {
+        when (finish) {
+            FinishUiState.ConfirmEmpty -> {
+                HierroText(stringResource(R.string.finish_empty_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.title)
+                HierroText(stringResource(R.string.finish_empty_message))
+                HierroButton(stringResource(R.string.finish_empty_confirm), onConfirmEmpty, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
+                HierroButton(stringResource(R.string.finish_empty_cancel), onCancel, Modifier.fillMaxWidth())
+            }
+            else -> {
+                if (finish == FinishUiState.Failed) {
+                    HierroText(stringResource(R.string.finish_failed), color = HierroTheme.colors.error)
+                }
+                HierroButton(
+                    stringResource(R.string.finish_button),
+                    onFinish,
+                    Modifier.fillMaxWidth(),
+                    enabled = !notesTooLong,
+                    loading = finish == FinishUiState.Saving,
+                )
+            }
+        }
+    }
+}
+
+/** Closing screen: what the workout amounted to. */
+@Composable
+internal fun FinishSummaryContent(summary: WorkoutSummary, onDone: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxSize()) {
+        HierroScreenHeader(stringResource(R.string.finish_summary_title))
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item(key = "stats") {
+                HierroCard {
+                    HierroText(stringResource(R.string.finish_summary_done), Modifier.semantics { heading() }, HierroTheme.typography.title)
+                    val minutes = summary.durationSeconds / 60
+                    HierroText(
+                        if (minutes < 60) stringResource(R.string.finish_summary_duration_minutes, minutes)
+                        else stringResource(R.string.finish_summary_duration_hours, minutes / 60, minutes % 60),
+                    )
+                    HierroText(pluralStringResource(R.plurals.finish_summary_exercises, summary.exerciseCount, summary.exerciseCount))
+                    HierroText(pluralStringResource(R.plurals.finish_summary_sets, summary.setCount, summary.setCount))
+                    HierroText(stringResource(R.string.finish_summary_volume, SetValidation.formatWeight(Math.round(summary.volume * 10) / 10.0)))
+                }
+            }
+            item(key = "done") { HierroButton(stringResource(R.string.finish_summary_close), onDone, Modifier.fillMaxWidth()) }
+        }
+    }
+}

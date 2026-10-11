@@ -35,6 +35,10 @@ sealed interface GymLogDestination {
     @Serializable data class ActiveWorkout(val sessionId: String) : GymLogDestination {
         override val title: Int get() = R.string.nav_active_workout
     }
+    /** A finished workout in the History graph. */
+    @Serializable data class HistoryDetail(val sessionId: String) : GymLogDestination {
+        override val title: Int get() = R.string.nav_history_detail
+    }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 

@@ -18,6 +18,8 @@ import com.chrisgoac.gymlog.domain.routine.RoutineExercise
 import com.chrisgoac.gymlog.domain.routine.RoutineInput
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.workout.ExerciseHistory
+import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
+import com.chrisgoac.gymlog.domain.workout.WorkoutFinishRepository
 import com.chrisgoac.gymlog.domain.workout.Gym
 import com.chrisgoac.gymlog.domain.workout.HistorySet
 import com.chrisgoac.gymlog.domain.workout.ProgressionSettings
@@ -57,7 +59,7 @@ import org.junit.Before
 import org.junit.Test
 
 /** In-memory session store with the repository's rules (compact order, no-op on unchanged/missing). */
-private class FakeLog : WorkoutRepository, WorkoutLogRepository {
+private class FakeLog : WorkoutRepository, WorkoutLogRepository, WorkoutFinishRepository {
     val workout = MutableStateFlow(
         WorkoutAggregate(
             WorkoutSession("s1", routineId = "r1", gymId = null, startedAt = 1_000L, durationSeconds = null, notes = null),
@@ -68,6 +70,8 @@ private class FakeLog : WorkoutRepository, WorkoutLogRepository {
     val writes = mutableListOf<String>()
     var addGate: CompletableDeferred<Unit>? = null
     var failRemove = false
+    var failUpdate = false
+    var finishNow = 61_000L
     var failObserve = 0
     var observeCalls = 0
     private var ids = 0
@@ -126,6 +130,7 @@ private class FakeLog : WorkoutRepository, WorkoutLogRepository {
         return id
     }
     override suspend fun updateSet(setId: String, change: SetChange) {
+        if (failUpdate) throw IllegalStateException("disk full")
         val set = findSet(setId) ?: return
         val next = set.copy(weight = change.weight ?: set.weight, reps = change.reps ?: set.reps, warmup = change.warmup ?: set.warmup)
         if (next == set) return
@@ -146,6 +151,14 @@ private class FakeLog : WorkoutRepository, WorkoutLogRepository {
                 if (i < 0) e else e.copy(sets = e.sets.toMutableList().apply { add((i + delta).coerceIn(0, lastIndex), removeAt(i)) })
             }
         }
+    }
+    override suspend fun finish(sessionId: String, notes: String?): Int {
+        val session = workout.value.session
+        session.durationSeconds?.let { return it }
+        val duration = ((finishNow - session.startedAt) / 1000).toInt()
+        writes += "finish:${notes?.trim()}"
+        workout.value = workout.value.copy(session = session.copy(durationSeconds = duration, notes = notes?.trim()?.ifEmpty { null } ?: session.notes))
+        return duration
     }
     override suspend fun updateNotes(sessionId: String, notes: String) {
         writes += "notes:${notes.trim()}"
@@ -523,5 +536,107 @@ class WorkoutViewModelTest {
         runCurrent()
         assertEquals(WorkoutLogStatus.Ready, vm.state.value.status)
         assertEquals(1, repo.observeCalls)
+    }
+
+    // ---- Finish ----
+
+    private fun TestScope.finishingViewModel(timer: RestTimerController? = null): WorkoutViewModel {
+        val vm = WorkoutViewModel(
+            "s1", repo, repo, FakeExercises(), TargetRoutines(), SavedStateHandle(),
+            debounceMillis = 400, restTimer = timer, finishWorkout = FinishWorkoutUseCase(repo, repo, timer),
+        )
+        backgroundScope.launch(dispatcher) { vm.state.collect {} }
+        runCurrent()
+        return vm
+    }
+
+    @Test fun `finishing commits the typed set first, then finishes and shows the summary`() = runTest(dispatcher) {
+        val vm = finishingViewModel()
+        vm.onWeight("set1", "70")
+        vm.onNotes("Buen día")
+
+        vm.finish()
+        advanceUntilIdle()
+
+        assertEquals(listOf("updateSet:set1:70.0:8:false", "notes:Buen día", "finish:Buen día"), repo.writes)
+        val finished = vm.finishState.value as FinishUiState.Finished
+        assertEquals(60, finished.summary.durationSeconds)
+        assertEquals(70.0 * 8, finished.summary.volume, 0.0)
+    }
+
+    @Test fun `repeated finish taps finish once`() = runTest(dispatcher) {
+        val vm = finishingViewModel()
+        vm.finish()
+        vm.finish()
+        vm.finish()
+        advanceUntilIdle()
+        assertEquals(1, repo.writes.count { it.startsWith("finish") })
+        assertTrue(vm.finishState.value is FinishUiState.Finished)
+    }
+
+    @Test fun `a workout without repetitions asks first and confirming finishes it`() = runTest(dispatcher) {
+        val vm = finishingViewModel()
+        repo.workout.value = repo.workout.value.copy(
+            exercises = listOf(WorkoutExercise("le1", "seed-press", "Press de banca", 0, listOf(WorkoutSet("set1", 0, 0.0, 0, false)))),
+        )
+        runCurrent()
+
+        vm.finish()
+        advanceUntilIdle()
+        assertEquals(FinishUiState.ConfirmEmpty, vm.finishState.value)
+        assertTrue(repo.writes.none { it.startsWith("finish") })
+
+        vm.cancelFinish()
+        assertEquals(FinishUiState.Idle, vm.finishState.value)
+
+        vm.finish()
+        advanceUntilIdle()
+        vm.confirmFinishEmpty()
+        advanceUntilIdle()
+        assertTrue(vm.finishState.value is FinishUiState.Finished)
+        assertEquals(1, repo.writes.count { it.startsWith("finish") })
+    }
+
+    @Test fun `a typed set that cannot be stored blocks finishing and keeps the draft`() = runTest(dispatcher) {
+        val vm = finishingViewModel()
+        repo.failUpdate = true
+        vm.onWeight("set1", "75")
+
+        vm.finish()
+        advanceUntilIdle()
+
+        assertEquals(FinishUiState.Failed, vm.finishState.value)
+        assertNull(repo.workout.value.session.durationSeconds)
+        assertEquals("75", vm.row("set1").weightText)
+
+        repo.failUpdate = false
+        vm.cancelFinish()
+        vm.finish()
+        advanceUntilIdle()
+        assertTrue(vm.finishState.value is FinishUiState.Finished)
+        assertEquals(75.0, repo.workout.value.exercises.single().sets.single().weight, 0.0)
+    }
+
+    @Test fun `finishing clears the rest timer`() = runTest(dispatcher) {
+        val store = object : RestTimerStore {
+            var saved: RestTimerState? = null
+            override suspend fun read() = saved
+            override suspend fun write(state: RestTimerState?) { saved = state }
+        }
+        val alarm = object : RestTimerAlarm {
+            override fun schedule(runId: String, sessionId: String, endsAtEpochMillis: Long) = Unit
+            override fun cancel() = Unit
+        }
+        val timer = RestTimerController(store, alarm, clock = { 5_000L }, newRunId = { "run" })
+        val vm = finishingViewModel(timer)
+        vm.completeSet("set1")
+        runCurrent()
+        assertTrue(timer.state.value != null)
+
+        vm.finish()
+        advanceUntilIdle()
+
+        assertNull(timer.state.value)
+        assertNull(store.saved)
     }
 }

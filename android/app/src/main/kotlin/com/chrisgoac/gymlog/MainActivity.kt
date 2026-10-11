@@ -29,6 +29,9 @@ class MainActivity : ComponentActivity() {
                     workouts = container.workoutRepository,
                     workoutLog = container.workoutLogRepository,
                     restTimer = container.restTimer,
+                    finishWorkout = container.finishWorkout,
+                    history = container.historyRepository,
+                    syncState = container.syncUiState,
                     openWorkoutRequest = container.openWorkoutRequest.collectAsState().value,
                     onOpenWorkoutHandled = { container.openWorkoutRequest.value = null },
                 )

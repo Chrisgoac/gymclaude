@@ -3,6 +3,9 @@ package com.chrisgoac.gymlog
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -28,6 +31,8 @@ import com.chrisgoac.gymlog.domain.routine.RoutineInput
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineSummary
 import com.chrisgoac.gymlog.domain.workout.ExerciseHistory
+import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
+import com.chrisgoac.gymlog.domain.workout.WorkoutFinishRepository
 import com.chrisgoac.gymlog.domain.workout.Gym
 import com.chrisgoac.gymlog.domain.workout.HistorySet
 import com.chrisgoac.gymlog.domain.workout.ProgressionSettings
@@ -59,7 +64,7 @@ private val benchPress = Exercise("seed-press", "Press de banca", MuscleGroup.PE
 private val zCurl = Exercise("seed-curl", "Curl con barra Z", MuscleGroup.BICEPS, Equipment.BARRA, ExerciseType.AISLAMIENTO, isCustom = false)
 
 /** Minimal in-memory session for screen tests: records writes, applies set edits and additions. */
-private class ScreenWorkouts : WorkoutRepository, WorkoutLogRepository {
+private class ScreenWorkouts : WorkoutRepository, WorkoutLogRepository, WorkoutFinishRepository {
     val workout = MutableStateFlow(
         WorkoutAggregate(
             WorkoutSession("s1", "r1", null, 1_000L, null, null),
@@ -102,6 +107,12 @@ private class ScreenWorkouts : WorkoutRepository, WorkoutLogRepository {
     override suspend fun removeSet(setId: String) { writes += "removeSet:$setId" }
     override suspend fun moveSet(setId: String, delta: Int) { writes += "moveSet" }
     override suspend fun updateNotes(sessionId: String, notes: String) { writes += "notes" }
+    override suspend fun finish(sessionId: String, notes: String?): Int {
+        writes += "finish"
+        val w = workout.value
+        workout.value = w.copy(session = w.session.copy(durationSeconds = 2700))
+        return 2700
+    }
 }
 
 private class Catalog : ExerciseRepository {
@@ -130,12 +141,15 @@ private class PushRoutine : RoutineRepository {
 class ActiveWorkoutScreenTest {
     @get:Rule val rule = createComposeRule()
 
-    private fun show(repo: ScreenWorkouts, rests: MutableList<Int?>, fontScale: Float = 2f) {
-        val viewModel = WorkoutViewModel("s1", repo, repo, Catalog(), PushRoutine(), SavedStateHandle(), onSetCompleted = { rests += it })
+    private fun show(repo: ScreenWorkouts, rests: MutableList<Int?>, fontScale: Float = 2f, onBack: () -> Unit = {}) {
+        val viewModel = WorkoutViewModel(
+            "s1", repo, repo, Catalog(), PushRoutine(), SavedStateHandle(), onSetCompleted = { rests += it },
+            finishWorkout = FinishWorkoutUseCase(repo, repo),
+        )
         rule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                GymLogTheme { ActiveWorkoutScreen(viewModel, onBack = {}) }
+                GymLogTheme { ActiveWorkoutScreen(viewModel, onBack = onBack) }
             }
         }
         rule.waitForIdle()
@@ -191,5 +205,48 @@ class ActiveWorkoutScreenTest {
         rule.waitForIdle()
         assertEquals(listOf("addExercise:seed-curl"), repo.writes)
         rule.onNodeWithText("Curl con barra Z").assertExists()
+    }
+
+    @Test fun finishingShowsTheSummaryThenClosesTheScreen() {
+        val repo = ScreenWorkouts()
+        var left = 0
+        show(repo, mutableListOf(), fontScale = 1f, onBack = { left++ })
+
+        rule.onNodeWithText("Terminar entrenamiento").performScrollTo().performClick()
+        rule.waitForIdle()
+
+        assertEquals(listOf("finish"), repo.writes)
+        rule.onNodeWithText("Entrenamiento terminado").assertIsDisplayed()
+        rule.onNodeWithText("Duración: 45 min").assertExists()
+        rule.onNodeWithText("1 ejercicio").assertExists()
+        rule.onNodeWithText("1 serie").assertExists()
+        rule.onNodeWithText("Volumen: 480 kg·rep").assertExists()
+        rule.onNodeWithText("Listo").performClick()
+        assertEquals(1, left)
+    }
+
+    @Test fun finishingWithoutRepetitionsAsksFirst() {
+        val repo = ScreenWorkouts()
+        repo.workout.value = repo.workout.value.copy(
+            exercises = listOf(WorkoutExercise("le1", "seed-press", "Press de banca", 0, listOf(WorkoutSet("set1", 0, 0.0, 0, false)))),
+        )
+        show(repo, mutableListOf(), fontScale = 1f)
+
+        rule.onNodeWithText("Terminar entrenamiento").performScrollTo().performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("¿TERMINAR SIN SERIES?").assertExists()
+        assertTrue(repo.writes.isEmpty())
+
+        rule.onNodeWithText("Seguir entrenando").performScrollTo().performClick()
+        rule.waitForIdle()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasText("Terminar entrenamiento"))
+        rule.onNodeWithText("Terminar entrenamiento").assertExists()
+
+        rule.onNodeWithText("Terminar entrenamiento").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Terminar sin series").performScrollTo().performClick()
+        rule.waitForIdle()
+        assertEquals(listOf("finish"), repo.writes)
+        rule.onNodeWithText("Entrenamiento terminado").assertExists()
     }
 }

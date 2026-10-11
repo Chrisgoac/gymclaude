@@ -11,7 +11,10 @@ import com.chrisgoac.gymlog.data.exercise.OfflineExerciseRepository
 import com.chrisgoac.gymlog.data.routine.OfflineRoutineRepository
 import com.chrisgoac.gymlog.data.workout.OfflineWorkoutLogRepository
 import com.chrisgoac.gymlog.data.workout.OfflineWorkoutRepository
+import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
+import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
+import com.chrisgoac.gymlog.data.workout.OfflineHistoryRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
@@ -28,7 +31,9 @@ import com.chrisgoac.gymlog.database.UserDatabaseManagerImpl
 import com.chrisgoac.gymlog.domain.DefaultSyncUseCases
 import com.chrisgoac.gymlog.domain.SyncClock
 import com.chrisgoac.gymlog.domain.SyncRepository
+import com.chrisgoac.gymlog.domain.SyncUiState
 import com.chrisgoac.gymlog.domain.SyncUseCases
+import com.chrisgoac.gymlog.domain.toUiState
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
 import com.chrisgoac.gymlog.model.DeviceId
 import com.chrisgoac.gymlog.network.AuthSessionProvider
@@ -64,7 +69,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -141,11 +148,20 @@ class AppContainer(private val application: Application) {
     val routineRepository: RoutineRepository = OfflineRoutineRepository(databases, ::localMutationRunner, exerciseRepository)
 
     /** Workout sessions (active workout, start flows, weekly summary) of the open account; writes are local (outbox). */
-    val workoutRepository: WorkoutRepository =
+    private val offlineWorkouts =
         OfflineWorkoutRepository(databases, ::localMutationRunner, exerciseRepository, now = syncClock::nowMillis)
+    val workoutRepository: WorkoutRepository = offlineWorkouts
 
     /** Set logging inside a workout (sets, order, notes, history for suggestions); local writes only. */
     val workoutLogRepository: WorkoutLogRepository = OfflineWorkoutLogRepository(databases, ::localMutationRunner)
+
+    /** Finish-workout use case: completion write + rest-timer cleanup (the notification shares [restTimer]). */
+    val finishWorkout: FinishWorkoutUseCase =
+        FinishWorkoutUseCase(offlineWorkouts, offlineWorkouts, restTimer)
+
+    /** Finished-workout history (filters, detail, change gym, delete) of the open account; writes are local (outbox). */
+    val historyRepository: HistoryRepository =
+        OfflineHistoryRepository(databases, ::localMutationRunner, exerciseRepository, routineRepository, now = syncClock::nowMillis)
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)
@@ -161,6 +177,9 @@ class AppContainer(private val application: Application) {
         syncScheduler,
         currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId },
     )
+
+    /** What the user needs to know about sync, for the small indicator on History. */
+    val syncUiState: Flow<SyncUiState> = syncUseCases.observeStatus().map { it.toUiState() }
 
     /**
      * Finishes sign-out deletions a crash interrupted. The root state machine waits for it, so a
