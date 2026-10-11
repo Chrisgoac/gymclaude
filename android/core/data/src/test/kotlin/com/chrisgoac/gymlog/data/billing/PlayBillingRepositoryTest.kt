@@ -41,6 +41,9 @@ class PlayBillingRepositoryTest {
     private val cache = FakeCache()
     private val account = MutableStateFlow<String?>(USER)
 
+    /** The root state read at apply time (by default the same as [account]). */
+    private var rootAccount: () -> String? = { account.value }
+
     private fun TestScope.repository(start: Boolean = true): PlayBillingRepository =
         PlayBillingRepository(
             client = client,
@@ -48,6 +51,7 @@ class PlayBillingRepositoryTest {
             cache = cache,
             currentUserId = account,
             scope = backgroundScope,
+            currentUserIdNow = { rootAccount() },
             now = { BASE + testScheduler.currentTime },
             foregroundIntervalMillis = MINUTE,
             connectBackoffMillis = listOf(1_000, 2_000),
@@ -144,6 +148,7 @@ class PlayBillingRepositoryTest {
         assertEquals("offer-annual", launch.offerToken)
         assertEquals(sha256Hex(USER), launch.accountId)
         assertEquals(64, launch.accountId.length)
+        assertNull(launch.replacing) // nothing owned: a fresh subscription
         assertTrue(launch.activity === ACTIVITY)
     }
 
@@ -253,9 +258,8 @@ class PlayBillingRepositoryTest {
     }
 
     @Test
-    fun alreadyOwnedRestoresTheExistingPurchase() = runTest {
+    fun theSameProductAlreadyOwnedIsVerifiedWithoutOpeningPlay() = runTest {
         api.entitlementAnswer = { free() }
-        client.launchCode = BillingCode.ITEM_ALREADY_OWNED
         val repo = repository()
         runCurrent()
         client.owned += purchase(TOKEN_A, BillingWireIds.ANNUAL)
@@ -266,6 +270,76 @@ class PlayBillingRepositoryTest {
         assertTrue(status is PurchaseStatus.Completed)
         assertTrue(repo.entitlement.value.isPro)
         assertEquals(1, api.verifyCalls)
+        assertTrue(client.launches.isEmpty())
+    }
+
+    @Test
+    fun playReportingAlreadyOwnedAtLaunchRestores() = runTest {
+        client.launchCode = BillingCode.ITEM_ALREADY_OWNED
+        val repo = repository()
+        runCurrent()
+        api.verifyAnswer = { _, _ -> pro(BillingWireIds.ANNUAL) }
+        client.onLaunch = { client.owned += purchase(TOKEN_A, BillingWireIds.ANNUAL) } // Play's cache caught up late
+
+        val status = repo.launchPurchase(ACTIVITY, ProProduct.ANNUAL)
+
+        assertTrue(status is PurchaseStatus.Completed)
+        assertEquals(1, api.verifyCalls)
+    }
+
+    @Test
+    fun switchingPlanReplacesTheOwnedSubscriptionInsteadOfAddingOne() = runTest {
+        val repo = repository()
+        runCurrent()
+        client.owned += purchase(TOKEN_A, BillingWireIds.MONTHLY)
+
+        val status = repo.launchPurchase(ACTIVITY, ProProduct.ANNUAL)
+
+        assertEquals(PurchaseStatus.AwaitingPlay(ProProduct.ANNUAL), status)
+        val launch = client.launches.single()
+        assertEquals(BillingWireIds.ANNUAL, launch.productId)
+        assertEquals(TOKEN_A, launch.replacing)
+        assertEquals(sha256Hex(USER), launch.accountId)
+    }
+
+    @Test
+    fun aSubscriptionOfAnotherOrNoAccountIsNeverReplacedNorDuplicated() = runTest {
+        val repo = repository()
+        runCurrent()
+        for (foreignAccount in listOf(sha256Hex("user_2"), null)) {
+            client.owned.clear()
+            client.owned += purchase("foreign", BillingWireIds.MONTHLY, account = foreignAccount)
+
+            for (product in ProProduct.entries) {
+                assertEquals(PurchaseStatus.Failed(BillingFailure.SUBSCRIBED_ELSEWHERE), repo.launchPurchase(ACTIVITY, product))
+            }
+        }
+        assertTrue(client.launches.isEmpty())
+        assertEquals(0, api.verifyCalls)
+        assertEquals(
+            "https://play.google.com/store/account/subscriptions?sku=gymlog_pro_monthly&package=com.chrisgoac.gymlog",
+            repo.managementUri(),
+        )
+    }
+
+    @Test
+    fun aPendingOtherPlanBlocksTheSwitch() = runTest {
+        val repo = repository()
+        runCurrent()
+        client.owned += purchase(TOKEN_A, BillingWireIds.MONTHLY, state = PlayPurchaseState.PENDING)
+
+        assertEquals(PurchaseStatus.Pending, repo.launchPurchase(ACTIVITY, ProProduct.ANNUAL))
+        assertTrue(client.launches.isEmpty())
+    }
+
+    @Test
+    fun unreadablePlayPurchasesMeanNoLaunch() = runTest {
+        val repo = repository()
+        runCurrent()
+        client.purchaseQueryCodes += BillingCode.SERVICE_UNAVAILABLE
+
+        assertEquals(PurchaseStatus.Failed(BillingFailure.NETWORK), repo.launchPurchase(ACTIVITY, ProProduct.MONTHLY))
+        assertTrue(client.launches.isEmpty())
     }
 
     @Test
@@ -388,24 +462,83 @@ class PlayBillingRepositoryTest {
     }
 
     @Test
-    fun foregroundReverifiesAtMostOncePerInterval() = runTest {
+    fun foregroundOnlyReadsTheEntitlementAtMostOncePerInterval() = runTest {
         client.owned += purchase(TOKEN_A, BillingWireIds.MONTHLY)
+        api.entitlementAnswer = { pro(BillingWireIds.MONTHLY) }
         api.verifyAnswer = { _, _ -> pro(BillingWireIds.MONTHLY) }
         val repo = repository()
         repo.onForeground() // ON_START before the first sync finished: that sync already covers it
         runCurrent()
-        assertEquals(1, api.verifyCalls)
+        assertEquals(1, api.verifyCalls) // startup re-verifies
         assertEquals(1, api.entitlementCalls)
 
         repo.onForeground()
         runCurrent()
-        assertEquals(1, api.verifyCalls) // right after startup: throttled
+        assertEquals(1, api.entitlementCalls) // right after startup: throttled
 
         advanceTimeBy(MINUTE + 1)
         repo.onForeground()
         runCurrent()
-        assertEquals(2, api.verifyCalls)
         assertEquals(2, api.entitlementCalls)
+        assertEquals(1, api.verifyCalls) // server says PRO: no POST
+    }
+
+    @Test
+    fun foregroundReverifiesWhenTheServerSaysFreeWhilePlayOwnsAPurchase() = runTest {
+        api.entitlementAnswer = { free() }
+        val repo = repository()
+        runCurrent()
+        assertEquals(0, api.verifyCalls)
+
+        client.owned += purchase(TOKEN_A, BillingWireIds.MONTHLY)
+        api.verifyAnswer = { _, _ -> pro(BillingWireIds.MONTHLY) }
+        advanceTimeBy(MINUTE + 1)
+        repo.onForeground()
+        runCurrent()
+
+        assertEquals(listOf(TOKEN_A), api.verifyTokens)
+        assertTrue(repo.entitlement.value.isPro)
+    }
+
+    @Test
+    fun foregroundDoesNotPostAnotherAccountsOrAPendingPurchase() = runTest {
+        api.entitlementAnswer = { free() }
+        val repo = repository()
+        runCurrent()
+        client.owned += purchase("other", BillingWireIds.MONTHLY, account = sha256Hex("user_2"))
+        client.owned += purchase("pending", BillingWireIds.ANNUAL, state = PlayPurchaseState.PENDING)
+
+        advanceTimeBy(MINUTE + 1)
+        repo.onForeground()
+        runCurrent()
+
+        assertEquals(2, api.entitlementCalls)
+        assertEquals(0, api.verifyCalls)
+    }
+
+    @Test
+    fun startIsIdempotent() = runTest {
+        val repo = repository()
+        repo.start()
+        runCurrent()
+
+        assertEquals(1, api.entitlementCalls)
+    }
+
+    @Test
+    fun anAnswerIsDroppedOnceTheRootAccountLeftEvenBeforeTheFlowReEmits() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        api.entitlementGate = gate
+        api.entitlementAnswer = { pro(BillingWireIds.MONTHLY) }
+        val repo = repository()
+        runCurrent()
+
+        rootAccount = { null } // signed out in the root state; [account] has not re-emitted yet
+        gate.complete(Unit)
+        runCurrent()
+
+        assertFalse(repo.entitlement.value.isPro)
+        assertNull(cache.values[USER])
     }
 
     @Test
@@ -591,7 +724,7 @@ class PlayBillingRepositoryTest {
 
     // ── Fakes and helpers ──
 
-    private class Launch(val activity: Any, val productId: String, val offerToken: String, val accountId: String)
+    private class Launch(val activity: Any, val productId: String, val offerToken: String, val accountId: String, val replacing: String?)
 
     private class FakePlayClient(private val events: MutableList<String>) : PlayBillingClient {
         override val purchaseUpdates = MutableSharedFlow<PurchasesUpdate>(extraBufferCapacity = 16)
@@ -609,6 +742,7 @@ class PlayBillingRepositoryTest {
         val owned = mutableListOf<PlayPurchase>()
         val purchaseQueryCodes = ArrayDeque<BillingCode>()
         var launchCode = BillingCode.OK
+        var onLaunch: () -> Unit = {}
         val launches = mutableListOf<Launch>()
         val acks = mutableListOf<String>()
 
@@ -634,8 +768,15 @@ class PlayBillingRepositoryTest {
             return PurchasesQuery(code, if (code == BillingCode.OK) owned.toList() else emptyList())
         }
 
-        override fun launch(activity: Any, productId: String, offerToken: String, obfuscatedAccountId: String): BillingCode {
-            launches += Launch(activity, productId, offerToken, obfuscatedAccountId)
+        override fun launch(
+            activity: Any,
+            productId: String,
+            offerToken: String,
+            obfuscatedAccountId: String,
+            replacingPurchaseToken: String?,
+        ): BillingCode {
+            launches += Launch(activity, productId, offerToken, obfuscatedAccountId, replacingPurchaseToken)
+            onLaunch()
             return launchCode
         }
 

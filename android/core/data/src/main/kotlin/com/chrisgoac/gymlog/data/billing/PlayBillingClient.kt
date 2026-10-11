@@ -24,9 +24,16 @@ interface PlayBillingClient {
 
     /**
      * Opens the purchase sheet (main thread; [activity] is the foreground `android.app.Activity`) for the
-     * base plan [offerToken] of [productId], tagged with [obfuscatedAccountId].
+     * base plan [offerToken] of [productId], tagged with [obfuscatedAccountId]. With [replacingPurchaseToken] it is a
+     * plan switch replacing that subscription (`SubscriptionUpdateParams`, `WITH_TIME_PRORATION`), never a second one.
      */
-    fun launch(activity: Any, productId: String, offerToken: String, obfuscatedAccountId: String): BillingCode
+    fun launch(
+        activity: Any,
+        productId: String,
+        offerToken: String,
+        obfuscatedAccountId: String,
+        replacingPurchaseToken: String? = null,
+    ): BillingCode
 
     suspend fun acknowledge(purchaseToken: String): BillingCode
 }

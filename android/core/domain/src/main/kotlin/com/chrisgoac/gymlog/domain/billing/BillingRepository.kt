@@ -68,6 +68,11 @@ enum class BillingFailure {
     OTHER_ACCOUNT,
     /** The purchase is already linked to another GymLog account. */
     ALREADY_BOUND,
+    /**
+     * Play already holds a GymLog subscription on this device that was bought for another (or no) GymLog
+     * account: nothing is launched; the user manages it in Play ([BillingRepository.managementUri]).
+     */
+    SUBSCRIBED_ELSEWHERE,
     /** No signed-in account (or its session ended). */
     SIGNED_OUT,
     UNKNOWN,
@@ -115,6 +120,14 @@ interface BillingRepository {
      * Opens the Play purchase sheet for [product]. [activity] is the foreground `android.app.Activity`
      * (typed `Any` because the domain is JVM-only). The result arrives in [purchaseStatus]; the returned
      * value is the status right after launching.
+     *
+     * Never a second subscription. Before launching, the Play account's active GymLog subscriptions are read:
+     * - [product] itself already owned for this GymLog account → no sheet; it is verified like [restore].
+     * - the other plan owned for this GymLog account → a plan switch replacing it (`SubscriptionUpdateParams`,
+     *   old token from Play, `WITH_TIME_PRORATION`), not a new purchase.
+     * - any GymLog subscription owned for another (or no) GymLog account → [BillingFailure.SUBSCRIBED_ELSEWHERE],
+     *   nothing launched; [managementUri] points to it.
+     * - Play cannot be read → failure, nothing launched.
      */
     suspend fun launchPurchase(activity: Any, product: ProProduct): PurchaseStatus
 
@@ -124,7 +137,7 @@ interface BillingRepository {
     /** Re-reads the server entitlement and re-verifies the device's purchases. */
     suspend fun refresh()
 
-    /** Play's subscription management page (for the current product when known). */
+    /** Play's subscription management page (for the current or Play-owned product when known). */
     fun managementUri(): String
 }
 

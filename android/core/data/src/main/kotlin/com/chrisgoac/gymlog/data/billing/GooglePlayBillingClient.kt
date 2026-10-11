@@ -17,12 +17,9 @@ import com.android.billingclient.api.acknowledgePurchase
 import com.android.billingclient.api.queryProductDetails
 import com.android.billingclient.api.queryPurchasesAsync
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.coroutines.resume
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * [PlayBillingClient] on Play Billing Library 9 (one instance per process, application context: no Activity is
@@ -45,20 +42,19 @@ class GooglePlayBillingClient(context: Context) : PlayBillingClient {
 
     override val isReady: Boolean get() = client.isReady
 
-    override suspend fun connect(): BillingCode = withTimeoutOrNull(CONNECT_TIMEOUT_MILLIS) {
-        suspendCancellableCoroutine { continuation ->
-            client.startConnection(
-                object : BillingClientStateListener {
-                    override fun onBillingSetupFinished(result: BillingResult) {
-                        if (continuation.isActive) continuation.resume(result.code())
-                    }
+    private val connection = ConnectionGate(CONNECT_TIMEOUT_MILLIS)
 
-                    // Next calls reconnect on demand (and the library reconnects by itself).
-                    override fun onBillingServiceDisconnected() = Unit
-                },
-            )
-        }
-    } ?: BillingCode.SERVICE_TIMEOUT
+    /** Never two `startConnection` at once; a disconnection during setup is a transient failure. */
+    override suspend fun connect(): BillingCode = connection.connect { callbacks ->
+        client.startConnection(
+            object : BillingClientStateListener {
+                override fun onBillingSetupFinished(result: BillingResult) = callbacks.onSetupFinished(result.code())
+
+                // After setup this is a no-op: the next call reconnects on demand (and the library by itself).
+                override fun onBillingServiceDisconnected() = callbacks.onDisconnected()
+            },
+        )
+    }
 
     override suspend fun queryProducts(productIds: List<String>): ProductsQuery {
         val params = QueryProductDetailsParams.newBuilder()
@@ -88,7 +84,13 @@ class GooglePlayBillingClient(context: Context) : PlayBillingClient {
         return PurchasesQuery(code, if (code == BillingCode.OK) result.purchasesList.map(::toPlay) else emptyList())
     }
 
-    override fun launch(activity: Any, productId: String, offerToken: String, obfuscatedAccountId: String): BillingCode {
+    override fun launch(
+        activity: Any,
+        productId: String,
+        offerToken: String,
+        obfuscatedAccountId: String,
+        replacingPurchaseToken: String?,
+    ): BillingCode {
         require(activity is Activity) { "launch needs the foreground Activity" }
         val product = details[productId] ?: return BillingCode.ITEM_UNAVAILABLE
         val params = BillingFlowParams.newBuilder()
@@ -96,8 +98,16 @@ class GooglePlayBillingClient(context: Context) : PlayBillingClient {
                 listOf(BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(product).setOfferToken(offerToken).build()),
             )
             .setObfuscatedAccountId(obfuscatedAccountId)
-            .build()
-        return client.launchBillingFlow(activity, params).code()
+        if (replacingPurchaseToken != null) {
+            // Plan switch: Play replaces the current subscription (remaining time credited) instead of adding a second one.
+            params.setSubscriptionUpdateParams(
+                BillingFlowParams.SubscriptionUpdateParams.newBuilder()
+                    .setOldPurchaseToken(replacingPurchaseToken)
+                    .setSubscriptionReplacementMode(BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.WITH_TIME_PRORATION)
+                    .build(),
+            )
+        }
+        return client.launchBillingFlow(activity, params.build()).code()
     }
 
     override suspend fun acknowledge(purchaseToken: String): BillingCode =

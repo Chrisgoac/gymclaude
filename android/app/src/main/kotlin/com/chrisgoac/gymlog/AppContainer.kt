@@ -167,10 +167,12 @@ class AppContainer(private val application: Application) {
 
     // The hook releases the open DataStore before the directory goes; account changes are handled by RestTimerAccountWatcher.
     private val accountPrefs = UserScopedPreferenceStores(application.filesDir)
+    private val entitlementCache = DataStoreEntitlementCache(accountPrefs)
     private val accountCleaner = RoomLocalAccountCleaner(
         application, databaseManager, syncLocks,
         onLocalDataDeleted = { hash ->
             restTimerDeletionHook.onDeleted(hash)
+            entitlementCache.forget(hash)
             accountPrefs.forget(hash)
             mediaScheduler.cancelAll(hash)
             offlineMedia.forgetAccount(hash)
@@ -473,11 +475,15 @@ class AppContainer(private val application: Application) {
         PlayBillingRepository(
             client = GooglePlayBillingClient(application),
             api = createBillingApi(BuildConfig.API_BASE_URL, authSession, serverClock),
-            cache = DataStoreEntitlementCache(accountPrefs),
+            cache = entitlementCache,
             currentUserId = rootStateMachine.state
                 .map { (it as? RootState.Ready)?.userId }
                 .stateIn(appScope, SharingStarted.Eagerly, (rootStateMachine.state.value as? RootState.Ready)?.userId),
             scope = appScope,
+            // Read at apply time: the session ends (auth state) before sign-out deletes the account's files.
+            currentUserIdNow = {
+                (rootStateMachine.state.value as? RootState.Ready)?.userId?.takeIf { authSession.state.value == AuthState.SignedIn(it) }
+            },
             now = syncClock::nowMillis,
             log = { message, error -> Log.w("GymLogBilling", message, error) },
         )

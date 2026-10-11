@@ -17,6 +17,7 @@ import com.chrisgoac.gymlog.model.billing.EntitlementResponseDto
 import com.chrisgoac.gymlog.network.BillingApi
 import com.chrisgoac.gymlog.network.SyncApiException
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +60,11 @@ class PlayBillingRepository(
     private val cache: EntitlementCache,
     private val currentUserId: StateFlow<String?>,
     private val scope: CoroutineScope,
+    /**
+     * The account signed in right now, read at the moment an answer is applied or cached (production: the root
+     * state itself, so nothing lands for an account that just left, even before [currentUserId] re-emits).
+     */
+    private val currentUserIdNow: () -> String? = { currentUserId.value },
     /** Server-corrected clock (epoch ms), compared with the server's `validUntil`. */
     private val now: () -> Long,
     private val packageName: String = PACKAGE_NAME,
@@ -90,9 +96,14 @@ class PlayBillingRepository(
     @Volatile private var lastSyncAt: Long? = null
     private var syncJob: Job? = null
     private var expiryJob: Job? = null
+    private val started = AtomicBoolean(false)
 
-    /** Starts listening to Play purchase updates and to the signed-in account. Call once. */
+    /** A GymLog subscription Play holds for another (or no) account, last seen by [launchPurchase]. */
+    @Volatile private var ownedElsewhere: ProProduct? = null
+
+    /** Starts listening to Play purchase updates and to the signed-in account. Later calls do nothing. */
     fun start() {
+        if (!started.compareAndSet(false, true)) return
         scope.launch { client.purchaseUpdates.collect { handleUpdate(it) } }
         scope.launch {
             currentUserId.collectLatest { userId -> onAccount(userId) }
@@ -100,15 +111,19 @@ class PlayBillingRepository(
     }
 
     /**
-     * App came to the foreground: re-read and re-verify, at most once per [foregroundIntervalMillis]. Skipped while
-     * the account's first sync (start / sign-in) has not finished: that one is already doing it.
+     * App came to the foreground: re-reads the server entitlement (GET only), at most once per
+     * [foregroundIntervalMillis]; purchases are POSTed again only when the server says FREE while Play holds a
+     * purchase for this account. Skipped while the account's first sync (start / sign-in) has not finished.
      */
     fun onForeground() {
         val userId = currentUserId.value ?: return
         val last = lastSyncAt ?: return
         if (now() - last < foregroundIntervalMillis) return
         if (syncJob?.isActive == true) return
-        syncJob = scope.launch { sync(userId) }
+        syncJob = scope.launch {
+            refreshAndReconcile(userId)
+            if (isCurrent(userId)) lastSyncAt = now()
+        }
     }
 
     override suspend fun refresh() {
@@ -117,7 +132,7 @@ class PlayBillingRepository(
     }
 
     override fun managementUri(): String {
-        val product = _entitlement.value.product
+        val product = _entitlement.value.product ?: ownedElsewhere
         val sku = if (product != null) "sku=${product.productId}&" else ""
         return "https://play.google.com/store/account/subscriptions?${sku}package=$packageName"
     }
@@ -157,7 +172,23 @@ class PlayBillingRepository(
         false
     }
 
-    private fun isCurrent(userId: String): Boolean = currentUserId.value == userId
+    /**
+     * GET the entitlement; when the server answers not-Pro while Play holds a purchased GymLog subscription for this
+     * account (e.g. a notification the server could not bind), send the purchases again. True if the server answered.
+     */
+    private suspend fun refreshAndReconcile(userId: String): Boolean {
+        if (!refreshFromServer(userId)) return false
+        if (!isCurrent(userId) || _entitlement.value.isPro) return true
+        val query = playCall(PurchasesQuery::code, { PurchasesQuery(it, emptyList()) }) { client.queryActiveSubscriptions() }
+        val accountId = obfuscatedAccountId(userId)
+        val owned = query.code == BillingCode.OK && query.purchases.any {
+            it.product() != null && it.state == PlayPurchaseState.PURCHASED && it.obfuscatedAccountId == accountId
+        }
+        if (owned) reverify(userId)
+        return true
+    }
+
+    private fun isCurrent(userId: String): Boolean = currentUserIdNow() == userId
 
     /** Shows and caches a server answer for [userId], unless the account changed meanwhile. */
     private suspend fun apply(userId: String, dto: EntitlementResponseDto): Entitlement? {
@@ -208,7 +239,7 @@ class PlayBillingRepository(
         }
         expiryJob = scope.launch {
             delay((validUntil - now()).coerceAtLeast(0) + EXPIRY_MARGIN_MILLIS)
-            val refreshed = refreshFromServer(userId)
+            val refreshed = refreshAndReconcile(userId)
             val current = _entitlement.value
             if (!refreshed && isCurrent(userId) && current.isPro && (current.validUntil ?: 0) <= now()) {
                 _entitlement.value = current.lapsed()
@@ -238,12 +269,28 @@ class PlayBillingRepository(
         }
     }
 
+    /** See [BillingRepository.launchPurchase] for the never-a-second-subscription rule. */
     override suspend fun launchPurchase(activity: Any, product: ProProduct): PurchaseStatus {
         val userId = currentUserId.value ?: return report(PurchaseStatus.Failed(BillingFailure.SIGNED_OUT))
         if (product !in offerTokens) loadProducts()
         val offerToken = offerTokens[product]
             ?: return report(PurchaseStatus.Failed((_products.value as? ProductCatalog.Unavailable)?.reason ?: BillingFailure.PRODUCT_UNAVAILABLE))
-        val code = playCall({ it }, { it }) { client.launch(activity, product.productId, offerToken, obfuscatedAccountId(userId)) }
+
+        val owned = playCall(PurchasesQuery::code, { PurchasesQuery(it, emptyList()) }) { client.queryActiveSubscriptions() }
+        if (owned.code != BillingCode.OK) return report(PurchaseStatus.Failed(owned.code.toFailure()))
+        val accountId = obfuscatedAccountId(userId)
+        val subscriptions = owned.purchases.filter { it.product() != null && it.state != PlayPurchaseState.UNSPECIFIED }
+        subscriptions.firstOrNull { it.obfuscatedAccountId != accountId }?.let { foreign ->
+            ownedElsewhere = foreign.product()
+            return report(PurchaseStatus.Failed(BillingFailure.SUBSCRIBED_ELSEWHERE))
+        }
+        if (subscriptions.any { it.product() == product }) return recoverOwned()
+        val replaced = subscriptions.firstOrNull()
+        if (replaced?.state == PlayPurchaseState.PENDING) return report(PurchaseStatus.Pending)
+
+        val code = playCall({ it }, { it }) {
+            client.launch(activity, product.productId, offerToken, accountId, replacingPurchaseToken = replaced?.purchaseToken)
+        }
         return when (code) {
             BillingCode.OK -> report(PurchaseStatus.AwaitingPlay(product))
             BillingCode.USER_CANCELED -> report(PurchaseStatus.Canceled)
