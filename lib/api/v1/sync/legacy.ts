@@ -2,6 +2,7 @@ import { syncChanges } from '@/db/schema';
 import type { PoolTx } from '@/db/pool';
 import { SYNC_TABLE_NAMES, type SyncTableName } from '@/lib/api/v1/contracts/sync';
 import { ApiError } from '@/lib/api/v1/errors';
+import { enqueueReleasedMediaKey } from '@/lib/api/v1/media/deletions';
 import { resolveServerWrite } from '@/lib/sync/server-merge';
 import { withoutServerMeta } from '@/lib/sync/server-tables';
 import type { TableChanges } from '@/lib/sync/types';
@@ -70,4 +71,12 @@ async function applyLegacyRecord(
     .values({ userId, tableName: table, recordId: id, changedAt: now })
     .returning({ sequence: syncChanges.sequence });
   await adapter.update(tx, userId, id, existing ? { ...values, serverVersion: change.sequence } : { serverVersion: change.sequence });
+  // Una foto v1 tombstoneada desde la PWA libera su objeto privado: borrado diferido, misma tx.
+  await enqueueReleasedMediaKey(tx, {
+    table,
+    userId,
+    before: existing ? { key: existing.row.key, deletedAt: existing.deletedAt } : null,
+    after: values,
+    at: now,
+  });
 }

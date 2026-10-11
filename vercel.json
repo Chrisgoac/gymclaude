@@ -1,0 +1,3 @@
+{
+  "crons": [{ "path": "/api/internal/media/process-deletions", "schedule": "0 4 * * *" }]
+}
