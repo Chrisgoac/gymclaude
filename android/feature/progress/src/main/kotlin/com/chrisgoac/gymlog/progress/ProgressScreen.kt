@@ -55,6 +55,7 @@ fun ProgressScreen(
     viewModel: ProgressViewModel,
     onOpenExercise: (exerciseId: String, filter: StatsFilter) -> Unit,
     onOpenReport: (() -> Unit)? = null,
+    onOpenBody: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -66,6 +67,7 @@ fun ProgressScreen(
         onRetry = viewModel::retry,
         onOpenExercise = { id -> onOpenExercise(id, StatsFilter(state.period, state.gym)) },
         onOpenReport = onOpenReport,
+        onOpenBody = onOpenBody,
         modifier = modifier,
     )
 }
@@ -79,6 +81,7 @@ internal fun ProgressContent(
     onRetry: () -> Unit,
     onOpenExercise: (String) -> Unit,
     onOpenReport: (() -> Unit)?,
+    onOpenBody: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize()) {
@@ -110,6 +113,11 @@ internal fun ProgressContent(
                 }
             }
             exerciseSearchSection(state, onQuery, onOpenExercise)
+            if (onOpenBody != null) {
+                item(key = "body") {
+                    HierroButton(stringResource(R.string.progress_body_action), onOpenBody, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
+                }
+            }
             item(key = "report") { ReportAction(state.isPro, onOpenReport) }
         }
     }

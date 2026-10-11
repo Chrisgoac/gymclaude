@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="es">
+    <string name="body_title">Cuerpo</string>
+    <string name="body_back">Atrás</string>
+    <string name="body_loading">Cargando medidas</string>
+    <string name="body_error_title">No se pudieron cargar las medidas</string>
+    <string name="body_error_message">Inténtalo de nuevo. Tus datos siguen guardados en este dispositivo.</string>
+    <string name="body_retry">Reintentar</string>
+    <string name="body_empty_title">Aún no hay mediciones de %1$s</string>
+    <string name="body_empty_message">Registra la primera para ver su evolución y los cambios entre mediciones.</string>
+
+    <string name="body_filter_metric">Medida</string>
+    <string name="body_filter_period">Periodo</string>
+    <string name="body_period_4w">4 sem</string>
+    <string name="body_period_3m">3 meses</string>
+    <string name="body_period_year">Año</string>
+    <string name="body_period_all">Todo</string>
+    <string name="body_metric_new">Nueva medida</string>
+    <string name="body_add">Añadir medición</string>
+
+    <string name="body_section_summary">Resumen</string>
+    <string name="body_section_chart">Evolución</string>
+    <string name="body_section_history">Historial</string>
+    <string name="body_section_photos">Fotos de progreso</string>
+
+    <string name="body_stat_latest">Última medición</string>
+    <string name="body_stat_previous">Cambio frente a la anterior</string>
+    <string name="body_stat_period">Cambio en el periodo</string>
+    <string name="body_stat_period_start">Inicio del periodo</string>
+    <string name="body_value_with_unit">%1$s %2$s</string>
+    <string name="body_latest_when">%1$s, %2$s</string>
+    <string name="body_delta_none">Sin datos suficientes</string>
+    <string name="body_delta_flat">Sin cambio</string>
+    <string name="body_delta_up">+%1$s %2$s</string>
+    <string name="body_delta_down">−%1$s %2$s</string>
+    <string name="body_delta_up_spoken">Sube %1$s %2$s</string>
+    <string name="body_delta_down_spoken">Baja %1$s %2$s</string>
+    <string name="body_delta_none_spoken">Sin datos suficientes para comparar</string>
+
+    <string name="body_chart_show_table">Ver como tabla</string>
+    <string name="body_chart_hide_table">Ocultar tabla</string>
+    <string name="body_chart_col_date">Fecha</string>
+    <string name="body_chart_col_value">Valor</string>
+    <string name="body_chart_empty">Sin datos en este periodo.</string>
+    <string name="body_chart_title">Evolución de %1$s</string>
+    <string name="body_chart_summary">%1$s, %2$d puntos. Mínimo %3$s el %4$s, máximo %5$s el %6$s, último %7$s el %8$s. Tendencia: %9$s.</string>
+    <string name="body_chart_summary_one">%1$s, un punto: %2$s el %3$s.</string>
+    <string name="body_chart_period_empty">No hay mediciones en este periodo. Elige un periodo más largo.</string>
+    <string name="body_chart_one_point">Con una sola medición aún no hay línea.</string>
+    <string name="body_trend_up">al alza</string>
+    <string name="body_trend_down">a la baja</string>
+    <string name="body_trend_flat">estable</string>
+
+    <string name="body_history_row">%1$s, %2$s</string>
+    <string name="body_history_edit">Editar</string>
+    <string name="body_history_delete">Borrar</string>
+    <string name="body_history_edit_description">Editar la medición del %1$s, %2$s</string>
+    <string name="body_history_delete_description">Borrar la medición del %1$s, %2$s</string>
+
+    <string name="body_editor_title_new">Nueva medición de %1$s</string>
+    <string name="body_editor_title_edit">Editar medición de %1$s</string>
+    <string name="body_editor_value">Valor (%1$s)</string>
+    <string name="body_editor_date">Fecha</string>
+    <string name="body_editor_date_change">Cambiar fecha, %1$s</string>
+    <string name="body_editor_save">Guardar</string>
+    <string name="body_editor_saving">Guardando</string>
+    <string name="body_editor_cancel">Cancelar</string>
+    <string name="body_date_ok">Aceptar</string>
+    <string name="body_date_cancel">Cancelar</string>
+    <string name="body_date_title">Fecha de la medición</string>
+    <string name="body_error_required">Escribe un valor.</string>
+    <string name="body_error_not_number">Escribe solo un número, por ejemplo 80,5.</string>
+    <string name="body_error_negative">El valor no puede ser negativo.</string>
+    <string name="body_error_too_small">El valor mínimo es %1$s %2$s.</string>
+    <string name="body_error_too_large">El valor máximo es %1$s %2$s.</string>
+    <string name="body_error_date_future">La fecha no puede ser futura.</string>
+    <string name="body_error_date_old">La fecha es demasiado antigua.</string>
+    <string name="body_error_missing">Esta medición ya no existe. Vuelve al historial.</string>
+    <string name="body_error_save">No se pudo guardar. Inténtalo de nuevo.</string>
+
+    <string name="body_delete_title">¿Borrar esta medición?</string>
+    <string name="body_delete_message">Se borrará la medición del %1$s: %2$s. Esta acción se sincroniza con tus otros dispositivos.</string>
+    <string name="body_delete_confirm">Borrar</string>
+    <string name="body_delete_cancel">Cancelar</string>
+    <string name="body_action_failed">No se pudo completar la acción. Inténtalo de nuevo.</string>
+    <string name="body_action_dismiss">Cerrar aviso</string>
+
+    <string name="body_custom_title">Nueva medida</string>
+    <string name="body_custom_name">Nombre</string>
+    <string name="body_custom_unit">Unidad (opcional)</string>
+    <string name="body_custom_save">Crear medida</string>
+    <string name="body_custom_cancel">Cancelar</string>
+    <string name="body_custom_error_empty">Escribe un nombre con letras o números.</string>
+    <string name="body_custom_error_name_long">El nombre admite hasta %1$d caracteres.</string>
+    <string name="body_custom_error_unit_long">La unidad admite hasta %1$d caracteres.</string>
+    <string name="body_custom_error_reserved">Ya existe una medida con ese nombre.</string>
+    <string name="body_custom_error_limit">Has alcanzado el máximo de %1$d medidas propias.</string>
+    <string name="body_custom_error_failed">No se pudo crear la medida. Inténtalo de nuevo.</string>
+
+    <string name="body_photos_action">Fotos de progreso</string>
+    <string name="body_photos_soon">Disponible próximamente</string>
+    <string name="body_photos_description">Fotos de progreso. Disponible próximamente.</string>
+
+    <string name="body_unit_kg_spoken">kilogramos</string>
+    <string name="body_unit_lb_spoken">libras</string>
+    <string name="body_unit_cm_spoken">centímetros</string>
+    <string name="body_unit_percent_spoken">por ciento</string>
+    <string name="body_unit_other_spoken">unidad %1$s</string>
+</resources>

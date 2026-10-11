@@ -100,6 +100,12 @@ import com.chrisgoac.gymlog.domain.stats.GymFilter
 import com.chrisgoac.gymlog.domain.stats.StatsFilter
 import com.chrisgoac.gymlog.domain.stats.StatsRepository
 import com.chrisgoac.gymlog.domain.time.Period
+import com.chrisgoac.gymlog.body.BodyScreen
+import com.chrisgoac.gymlog.body.BodyViewModel
+import com.chrisgoac.gymlog.body.BodyClock
+import com.chrisgoac.gymlog.domain.body.BodyRepository
+import com.chrisgoac.gymlog.domain.math.WeightUnit
+import kotlinx.coroutines.flow.StateFlow
 import com.chrisgoac.gymlog.progress.ExerciseProgressScreen
 import com.chrisgoac.gymlog.progress.ExerciseProgressViewModel
 import com.chrisgoac.gymlog.progress.ProgressClock
@@ -127,6 +133,19 @@ class ProgressServices(
     fun clock(): ProgressClock = ProgressClock(now(), zone())
 }
 
+/**
+ * What the Body route needs: the repository, the server-corrected clock + device zone and the weight display unit
+ * (kilograms until the synced units setting exists, Plan 4 Task 6).
+ */
+class BodyServices(
+    val repository: BodyRepository,
+    val now: () -> Long,
+    val zone: () -> ZoneId,
+    val weightUnit: StateFlow<WeightUnit>,
+) {
+    fun clock(): BodyClock = BodyClock(now(), zone())
+}
+
 /** Five-tab shell. Route content is smoke-only except Settings; real feature screens replace it in later tasks. */
 @Composable
 fun GymLogApp(
@@ -141,6 +160,7 @@ fun GymLogApp(
     history: HistoryRepository? = null,
     historyEditing: HistoryEditServices? = null,
     progress: ProgressServices? = null,
+    body: BodyServices? = null,
     syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
     onOpenWorkoutHandled: () -> Unit = {},
@@ -163,7 +183,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, syncState)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, body, syncState)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -199,6 +219,7 @@ private fun GymLogNavHost(
     history: HistoryRepository?,
     historyEditing: HistoryEditServices?,
     progress: ProgressServices?,
+    body: BodyServices?,
     syncState: Flow<SyncUiState>?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
@@ -378,6 +399,7 @@ private fun GymLogNavHost(
                             },
                             // TODO(Plan 5): navigate to the intelligent report once it exists; null keeps the action disabled.
                             onOpenReport = null,
+                            onOpenBody = body?.let { { navController.navigate(GymLogDestination.Body) { launchSingleTop = true } } },
                         )
                     }
                 }
@@ -447,7 +469,14 @@ private fun GymLogNavHost(
                 }
             }
             composable<GymLogDestination.Coach> { SmokeScreen(GymLogDestination.Coach, navController, secondary = true) }
-            composable<GymLogDestination.Body> { SmokeScreen(GymLogDestination.Body, navController, secondary = true) }
+            composable<GymLogDestination.Body> {
+                if (body == null) {
+                    SmokeScreen(GymLogDestination.Body, navController, secondary = true)
+                } else {
+                    val viewModel = viewModel { BodyViewModel(body.repository, createSavedStateHandle(), body::clock, body.weightUnit) }
+                    BodyScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+                }
+            }
             composable<GymLogDestination.Achievements> { SmokeScreen(GymLogDestination.Achievements, navController, secondary = true) }
             composable<GymLogDestination.Settings> {
                 if (settingsViewModel == null) {

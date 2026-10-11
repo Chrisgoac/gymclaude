@@ -14,6 +14,9 @@ import com.chrisgoac.gymlog.data.workout.OfflineWorkoutRepository
 import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
 import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
+import com.chrisgoac.gymlog.data.body.OfflineBodyRepository
+import com.chrisgoac.gymlog.domain.body.BodyRepository
+import com.chrisgoac.gymlog.domain.math.WeightUnit
 import com.chrisgoac.gymlog.data.stats.OfflineStatsRepository
 import com.chrisgoac.gymlog.data.workout.OfflineHistoryRepository
 import com.chrisgoac.gymlog.data.workout.OfflineWorkoutEditRepository
@@ -22,6 +25,7 @@ import com.chrisgoac.gymlog.domain.stats.InvalidatingSaveWorkoutDraftUseCase
 import com.chrisgoac.gymlog.domain.stats.StatsInvalidation
 import com.chrisgoac.gymlog.domain.stats.StatsRepository
 import com.chrisgoac.gymlog.navigation.HistoryEditServices
+import com.chrisgoac.gymlog.navigation.BodyServices
 import com.chrisgoac.gymlog.navigation.ProgressServices
 import com.chrisgoac.gymlog.domain.entitlement.EntitlementReader
 import com.chrisgoac.gymlog.domain.time.DayRollover
@@ -209,6 +213,17 @@ class AppContainer(private val application: Application) {
         ticks = DayRollover.ticks(syncClock::nowMillis, ZoneId::systemDefault),
         now = syncClock::nowMillis,
         zone = ZoneId::systemDefault,
+    )
+
+    /** Body measurements (+ the PWA's custom-metric setting) of the open account. */
+    val bodyRepository: BodyRepository = OfflineBodyRepository(databases, ::localMutationRunner, now = syncClock::nowMillis)
+
+    /** Body route. TODO(Plan 4 Task 6): feed the synced units setting; kilograms until it exists. */
+    val bodyServices: BodyServices = BodyServices(
+        repository = bodyRepository,
+        now = syncClock::nowMillis,
+        zone = ZoneId::systemDefault,
+        weightUnit = MutableStateFlow(WeightUnit.KG),
     )
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)

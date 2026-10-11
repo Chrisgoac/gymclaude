@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
                     history = container.historyRepository,
                     historyEditing = container.historyEditing,
                     progress = container.progressServices,
+                    body = container.bodyServices,
                     syncState = container.syncUiState,
                     openWorkoutRequest = container.openWorkoutRequest.collectAsState().value,
                     onOpenWorkoutHandled = { container.openWorkoutRequest.value = null },

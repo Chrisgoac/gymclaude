@@ -211,6 +211,13 @@ interface BodyMetricDao {
     @Query("SELECT * FROM body_metrics WHERE deletedAt IS NULL ORDER BY fecha DESC, id")
     fun observeLive(): Flow<List<BodyMetricEntity>>
 
+    /** One metric chronologically (index tipo, fecha); same-day ties by write order. */
+    @Query("SELECT * FROM body_metrics WHERE tipo = :type AND deletedAt IS NULL ORDER BY fecha, updatedAt, id")
+    fun observeLiveByType(type: String): Flow<List<BodyMetricEntity>>
+
+    @Query("SELECT DISTINCT tipo FROM body_metrics WHERE deletedAt IS NULL")
+    fun observeLiveTypes(): Flow<List<String>>
+
     @Query("SELECT * FROM body_metrics ORDER BY id")
     suspend fun getAll(): List<BodyMetricEntity>
 }
