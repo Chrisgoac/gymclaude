@@ -164,6 +164,19 @@ Status: **automated evidence complete; device checks pending.**
 
 Evidence: [android-phase-03-workouts.md](../../verification/android-phase-03-workouts.md).
 
+### Insights and settings gate (Plan 4)
+
+Status: **automated evidence complete; device checks pending.**
+
+- [x] Every shared domain fixture runs in TypeScript (365 cases) and Kotlin with the same approved outcomes.
+- [x] A historical edit moves progress, PRs, 1RM, volume, balance, streak, stalls, achievements and the Coach invalidation event consistently (JVM + on-screen on the API 36 emulator).
+- [x] Body, gyms, theme, weekly goal, routine order and backup export/delete/import (documents seam) work offline.
+- [x] `testDebugUnitTest test lintDebug assembleDebug verifyModuleGraph` green; `:app:connectedDebugAndroidTest` 11/11 on API 36.
+- [x] Chart text alternatives and 200% font semantics tests green.
+- [ ] TalkBack, API 26 run, real SAF picker and PWA backup round trip on a physical device.
+
+Evidence: [android-phase-04-insights-settings.md](../../verification/android-phase-04-insights-settings.md).
+
 ### Product parity gate
 
 - [ ] Complete the inventory in design spec section 6 without WebView screens.
