@@ -12,11 +12,24 @@ export function r2Configured(): boolean {
   );
 }
 
-/** Medios privados v1: no necesitan URL pública, solo credenciales y bucket. */
+/**
+ * Medios privados v1: bucket propio y SIN acceso público (`R2_PRIVATE_BUCKET`), separado del bucket
+ * público legacy de la PWA. Sin él, las rutas v1 de medios fallan cerradas (503) en vez de escribir
+ * en el bucket público.
+ */
 export function r2PrivateConfigured(): boolean {
   return Boolean(
-    process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_BUCKET,
+    process.env.R2_ACCOUNT_ID &&
+      process.env.R2_ACCESS_KEY_ID &&
+      process.env.R2_SECRET_ACCESS_KEY &&
+      process.env.R2_PRIVATE_BUCKET,
   );
+}
+
+function privateBucket(): string {
+  const bucket = process.env.R2_PRIVATE_BUCKET;
+  if (!bucket) throw new Error('R2_PRIVATE_BUCKET is not configured');
+  return bucket;
 }
 
 let cached: S3Client | null = null;
@@ -53,13 +66,13 @@ export function publicUrl(key: string): string {
   return `${process.env.R2_PUBLIC_URL}/${key}`;
 }
 
-// ── Medios privados v1 ──
+// ── Medios privados v1 (bucket `R2_PRIVATE_BUCKET`) ──
 // El objeto solo es legible con una URL GET firmada y breve; nunca se construye una URL pública.
 
 export async function putPrivateObject(key: string, body: Uint8Array, contentType: string): Promise<void> {
   await client().send(
     new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET!,
+      Bucket: privateBucket(),
       Key: key,
       Body: body,
       ContentType: contentType,
@@ -71,13 +84,19 @@ export async function putPrivateObject(key: string, body: Uint8Array, contentTyp
 
 /** Firma local (SigV4, sin red) de una lectura que caduca en `ttlSeconds`. */
 export async function signPrivateRead(key: string, ttlSeconds: number): Promise<string> {
-  return getSignedUrl(client(), new GetObjectCommand({ Bucket: process.env.R2_BUCKET!, Key: key }), {
+  return getSignedUrl(client(), new GetObjectCommand({ Bucket: privateBucket(), Key: key }), {
     expiresIn: ttlSeconds,
   });
 }
 
 /** Idempotente: R2/S3 responde éxito aunque el objeto ya no exista. */
 export async function deletePrivateObject(key: string): Promise<void> {
+  await client().send(new DeleteObjectCommand({ Bucket: privateBucket(), Key: key }));
+}
+
+/** Borra un objeto legacy de la PWA (`<userId>/…`) del bucket público `R2_BUCKET`. Idempotente. */
+export async function deleteLegacyObject(key: string): Promise<void> {
+  if (!process.env.R2_BUCKET) throw new Error('R2_BUCKET is not configured');
   await deleteR2Object(key);
 }
 
@@ -86,4 +105,5 @@ export const r2MediaStorage = {
   putPrivate: putPrivateObject,
   signRead: signPrivateRead,
   remove: deletePrivateObject,
+  removeLegacy: deleteLegacyObject,
 };

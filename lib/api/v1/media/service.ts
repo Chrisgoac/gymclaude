@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { exercisePhotos, exercises, mediaDeletions, progressPhotos, syncChanges } from '@/db/schema';
 import type { PoolDb, PoolTx } from '@/db/pool';
@@ -19,16 +19,30 @@ import {
   type MediaUploadResponse,
   type ProgressMediaFields,
 } from './contracts';
+import {
+  MEDIA_DELETION_DELAY_MS,
+  V1_MEDIA_KEY_PREFIX,
+  enqueueMediaDeletion,
+  isOwnedMediaKey,
+  mediaObjectKey,
+} from './deletions';
+
+export { MEDIA_DELETION_DELAY_MS, mediaObjectKey, userHash } from './deletions';
 
 // Servicio de medios privados v1: valida bytes, genera la clave en el servidor, escribe la fila
 // por el diario de sync (sync_changes/serverVersion) y firma lecturas breves. El borrado tombstonea
 // la fila y encola el borrado diferido e idempotente del objeto (`processDeletions`).
 
-/** Puerto de almacenamiento (R2 en producción: `r2MediaStorage`; doble en tests). */
+/**
+ * Puerto de almacenamiento (R2 en producción: `r2MediaStorage`; doble en tests). `putPrivate`,
+ * `signRead` y `remove` actúan sobre el bucket privado v1; `removeLegacy` borra claves legacy de la
+ * PWA del bucket público.
+ */
 export interface MediaStorage {
   putPrivate(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   signRead(key: string, ttlSeconds: number): Promise<string>;
   remove(key: string): Promise<void>;
+  removeLegacy(key: string): Promise<void>;
 }
 
 export interface MediaServiceDeps {
@@ -48,8 +62,6 @@ export interface ProcessDeletionsResult {
   failed: number;
 }
 
-/** Espera entre el tombstone y el borrado del objeto: margen para que otros dispositivos converjan. */
-export const MEDIA_DELETION_DELAY_MS = 24 * 60 * 60_000;
 /** Lease de un borrado reclamado: otro proceso no lo toca mientras dure. */
 const DELETION_LEASE_MS = 5 * 60_000;
 const DELETION_RETRY_BASE_MS = 15 * 60_000;
@@ -68,33 +80,12 @@ const invalid = (code: string, message: string, status = 400) => new ApiError(st
 
 // ── Claves ──
 
-/** Hash estable y no reversible del userId: las claves no exponen el id de Clerk. */
-export function userHash(userId: string): string {
-  return createHash('sha256').update(`gymlog-media:${userId}`).digest('hex').slice(0, 32);
-}
-
-export function mediaObjectKey(userId: string, kind: MediaKind, uuid: string): string {
-  return `users/${userHash(userId)}/${kind}/${uuid}`;
-}
-
 /** Ruta autenticada de la app que redirige a una URL firmada (`url` de las filas v1). */
 export function mediaReadRoute(mediaId: string): string {
   return `/api/media/read/${mediaId}`;
 }
 
-/**
- * Una clave es del usuario si está en su namespace v1 del tipo correcto o en su namespace legacy
- * de la PWA (`<userId>/…`). Cualquier otra (p. ej. una clave ajena colada por la sync) nunca se
- * firma ni se borra.
- */
-function isOwnedKey(userId: string, kind: MediaKind, key: string): boolean {
-  if (key.includes('..') || key.includes('//')) return false;
-  return key.startsWith(`users/${userHash(userId)}/${kind}/`) || key.startsWith(`${userId}/`);
-}
-
-function isOwnedByUser(userId: string, key: string): boolean {
-  return MEDIA_KINDS.some((kind) => isOwnedKey(userId, kind, key));
-}
+const isOwnedKey = (userId: string, kind: MediaKind, key: string) => isOwnedMediaKey(userId, key, kind);
 
 // ── Validación de bytes ──
 
@@ -387,12 +378,7 @@ export function createMediaService(deps: MediaServiceDeps) {
           await adapter.update(tx, userId, mediaId, { ...values, serverVersion: change.sequence });
         }
         // Repetir el borrado es éxito; reprograma solo si el borrado no estaba ya en cola.
-        if (isOwnedKey(userId, kind, key)) {
-          await tx
-            .insert(mediaDeletions)
-            .values({ objectKey: key, userId, dueAt: at + MEDIA_DELETION_DELAY_MS, createdAt: at })
-            .onConflictDoNothing();
-        }
+        if (isOwnedKey(userId, kind, key)) await enqueueMediaDeletion(tx, { userId, objectKey: key, at });
         return true;
       }
       return false;
@@ -404,8 +390,9 @@ export function createMediaService(deps: MediaServiceDeps) {
   /**
    * Borra los objetos cuyo plazo venció. Idempotente y seguro con varias instancias: cada fila se
    * reclama con un lease (`due_at` adelantado, SKIP LOCKED) y el trabajo de red va fuera de la
-   * transacción. Si la fila de la foto vuelve a estar viva, el borrado se cancela. Pensado para un
-   * cron o ruta interna futura; no hay infraestructura de cron todavía.
+   * transacción. Si la fila de la foto vuelve a estar viva, el borrado se cancela. Las claves v1
+   * (`users/…`) se borran del bucket privado y las legacy de la PWA del bucket público. Lo dispara
+   * el cron de `/api/internal/media/process-deletions`.
    */
   async function processDeletions(options: { limit?: number } = {}): Promise<ProcessDeletionsResult> {
     const limit = options.limit ?? 25;
@@ -428,13 +415,13 @@ export function createMediaService(deps: MediaServiceDeps) {
         LIMIT 1`);
       // En uso de nuevo por su dueño, o una clave fuera de su namespace: nunca se borra. Una fila
       // ajena que copie la clave (vía sync) no cancela nada: solo cuenta la del dueño.
-      if (live.rows.length > 0 || !isOwnedByUser(owner, key)) {
+      if (live.rows.length > 0 || !isOwnedMediaKey(owner, key)) {
         await done();
         result.cancelled++;
         continue;
       }
       try {
-        await storage.remove(key);
+        await (key.startsWith(V1_MEDIA_KEY_PREFIX) ? storage.remove(key) : storage.removeLegacy(key));
         await done();
         result.deleted++;
       } catch (e) {

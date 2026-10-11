@@ -2,6 +2,7 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  deleteLegacyObject,
   deletePrivateObject,
   putPrivateObject,
   r2MediaStorage,
@@ -14,7 +15,8 @@ const ENV = {
   R2_ACCOUNT_ID: 'acct123',
   R2_ACCESS_KEY_ID: 'AKIDTEST',
   R2_SECRET_ACCESS_KEY: 'secret-test',
-  R2_BUCKET: 'gymlog-test',
+  R2_BUCKET: 'gymlog-public-test',
+  R2_PRIVATE_BUCKET: 'gymlog-test',
 };
 
 describe('private R2 helpers', () => {
@@ -29,10 +31,28 @@ describe('private R2 helpers', () => {
     resetR2ClientForTests();
   });
 
-  it('is configured without a public URL', () => {
-    expect(r2PrivateConfigured()).toBe(true);
+  it('is configured by the private bucket, without a public URL or the public bucket', () => {
     vi.stubEnv('R2_BUCKET', '');
+    expect(r2PrivateConfigured()).toBe(true);
+    vi.stubEnv('R2_PRIVATE_BUCKET', '');
     expect(r2PrivateConfigured()).toBe(false);
+  });
+
+  it('never falls back to the public bucket when the private one is unset', async () => {
+    vi.stubEnv('R2_PRIVATE_BUCKET', '');
+    const send = vi.spyOn(S3Client.prototype, 'send').mockResolvedValue({} as never);
+    await expect(putPrivateObject('users/abc/exercise/1', new Uint8Array([1]), 'image/jpeg')).rejects.toThrow(/R2_PRIVATE_BUCKET/);
+    await expect(signPrivateRead('users/abc/exercise/1', 300)).rejects.toThrow(/R2_PRIVATE_BUCKET/);
+    await expect(deletePrivateObject('users/abc/exercise/1')).rejects.toThrow(/R2_PRIVATE_BUCKET/);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('deletes legacy PWA keys from the public bucket', async () => {
+    const send = vi.spyOn(S3Client.prototype, 'send').mockResolvedValue({} as never);
+    await deleteLegacyObject('user_1/e1/x.jpg');
+    const [del] = send.mock.calls[0] as unknown as [DeleteObjectCommand];
+    expect(del.input).toEqual({ Bucket: 'gymlog-public-test', Key: 'user_1/e1/x.jpg' });
+    expect(r2MediaStorage.removeLegacy).toBe(deleteLegacyObject);
   });
 
   it('signs a short-lived GET locally, without any network call', async () => {

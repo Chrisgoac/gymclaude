@@ -77,6 +77,9 @@ function fakeStorage() {
     putPrivate: async (key, bytes, contentType) => void objects.set(key, { bytes, contentType }),
     signRead: async (key, ttl) => `https://r2.test/${key}?X-Amz-Expires=${ttl}&X-Amz-Signature=fake`,
     remove: async (key) => void objects.delete(key),
+    removeLegacy: async () => {
+      throw new Error('legacy bucket must not be touched by v1 media');
+    },
   };
   return storage;
 }

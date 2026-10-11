@@ -59,6 +59,7 @@ function fakeStorage() {
     remove: vi.fn(async (key: string) => {
       objects.delete(key);
     }),
+    removeLegacy: vi.fn(async () => {}),
   };
   return storage;
 }
@@ -505,6 +506,26 @@ describe.skipIf(!url)('media service (integration)', () => {
     expect(vi.mocked(storage.remove).mock.calls.filter(([k]) => k === up.objectKey)).toHaveLength(1);
     // La fila sigue como tombstone para que la sync lo propague.
     expect(await row('progress_photos', up.mediaId)).toMatchObject({ deleted_at: String(NOW) });
+  });
+
+  it('deletes v1 keys from the private bucket and legacy PWA keys from the public bucket', async () => {
+    const userId = newUser();
+    const { storage, service, setNow } = setup();
+    const up = await service.upload(userId, { kind: 'exercise', fields: { exerciseId: 'e1' }, bytes: jpeg(10, 10), declaredMime: 'image/jpeg' });
+    await service.delete(userId, up.mediaId);
+    const legacyId = `legacy-${randomUUID()}`;
+    const legacyKey = `${userId}/e1/${randomUUID()}.jpg`;
+    await db.execute(sql`INSERT INTO exercise_photos (id, user_id, updated_at, server_updated_at, exercise_id, url, key)
+      VALUES (${legacyId}, ${userId}, ${NOW}, ${NOW}, 'e1', 'https://pub.example/x.jpg', ${legacyKey})`);
+    await service.delete(userId, legacyId);
+
+    setNow(NOW + MEDIA_DELETION_DELAY_MS);
+    await service.processDeletions();
+    expect(storage.remove).toHaveBeenCalledWith(up.objectKey);
+    expect(storage.remove).not.toHaveBeenCalledWith(legacyKey);
+    expect(storage.removeLegacy).toHaveBeenCalledWith(legacyKey);
+    expect(storage.removeLegacy).not.toHaveBeenCalledWith(up.objectKey);
+    expect(await pending(legacyKey)).toBeUndefined();
   });
 
   it("is not cancelled by another user's live row that copies the key", async () => {
