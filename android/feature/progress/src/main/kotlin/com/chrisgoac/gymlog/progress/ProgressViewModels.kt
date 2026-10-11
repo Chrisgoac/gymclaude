@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transform
@@ -132,7 +133,7 @@ class ProgressViewModel(
         }
 
     private val sideInputs: Flow<Triple<List<Gym>, Boolean, List<Exercise>>> = combine(
-        workouts.observeGyms().catch { emit(emptyList()) },
+        workouts.observeGyms().onEach(::dropMissingGym).catch { emit(emptyList()) },
         entitlements.observeIsPro().catch { emit(false) },
         results,
     ) { gyms, pro, found -> Triple(gyms, pro, found) }
@@ -165,6 +166,12 @@ class ProgressViewModel(
     fun onGym(gym: GymFilter) {
         savedState[KEY_GYM] = gym.gymId ?: GymFilter.ALL_WIRE
         filter.update { it.copy(gym = gym) }
+    }
+
+    /** A saved/selected gym that is no longer offered (deleted or archived) falls back to every gym. */
+    private fun dropMissingGym(gyms: List<Gym>) {
+        val selected = filter.value.gym as? GymFilter.Gym ?: return
+        if (gyms.none { it.id == selected.id }) onGym(GymFilter.All)
     }
 
     fun onExerciseQuery(text: String) {

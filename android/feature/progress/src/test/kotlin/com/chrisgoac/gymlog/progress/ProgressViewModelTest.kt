@@ -61,8 +61,9 @@ class ProgressViewModelTest {
     private fun TestScope.viewModel(
         handle: SavedStateHandle = SavedStateHandle(),
         ticks: Flow<Unit> = flowOf(Unit),
+        gyms: GymsOnly = GymsOnly(),
     ): ProgressViewModel {
-        val vm = ProgressViewModel(stats, GymsOnly(), exercises, pro, handle, ticks, { clock })
+        val vm = ProgressViewModel(stats, gyms, exercises, pro, handle, ticks, { clock })
         backgroundScope.launch(dispatcher) { vm.state.collect {} }
         runCurrent()
         return vm
@@ -110,6 +111,30 @@ class ProgressViewModelTest {
         assertEquals(Period.YEAR, restored.state.value.period)
         assertEquals(GymFilter.Gym("g2"), restored.state.value.gym)
         assertEquals(StatsFilter(Period.YEAR, GymFilter.Gym("g2")), stats.volumeFilters.last())
+    }
+
+    @Test
+    fun `a saved gym that no longer exists falls back to every gym`() = runTest(dispatcher) {
+        val handle = SavedStateHandle(mapOf("gym" to "gone"))
+        val vm = viewModel(handle)
+        advanceUntilIdle()
+        assertEquals(GymFilter.All, vm.state.value.gym)
+        assertEquals(GymFilter.All, stats.weeklyGyms.last())
+        assertEquals(GymFilter.ALL_WIRE, handle.get<String>("gym"))
+    }
+
+    @Test
+    fun `the selected gym deleted while the screen is open falls back to every gym`() = runTest(dispatcher) {
+        val gyms = GymsOnly()
+        val vm = viewModel(gyms = gyms)
+        vm.onGym(GymFilter.Gym("g2"))
+        advanceUntilIdle()
+        assertEquals(GymFilter.Gym("g2"), vm.state.value.gym)
+
+        gyms.gyms.value = gyms.gyms.value.filterNot { it.id == "g2" }
+        advanceUntilIdle()
+        assertEquals(GymFilter.All, vm.state.value.gym)
+        assertEquals(GymFilter.All, stats.weeklyGyms.last())
     }
 
     @Test

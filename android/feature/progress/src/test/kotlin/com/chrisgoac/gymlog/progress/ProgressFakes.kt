@@ -87,10 +87,10 @@ internal class FakeEntitlements(initial: Boolean = false) : EntitlementReader {
     override fun observeIsPro(): Flow<Boolean> = pro
 }
 
-internal class GymsOnly(val gyms: List<Gym> = listOf(Gym("g1", "Casa"), Gym("g2", "Fitness"))) : WorkoutRepository {
+internal class GymsOnly(val gyms: MutableStateFlow<List<Gym>> = MutableStateFlow(listOf(Gym("g1", "Casa"), Gym("g2", "Fitness")))) : WorkoutRepository {
     override fun observeActiveWorkout(): Flow<WorkoutAggregate?> = flowOf(null)
     override fun observeWorkout(sessionId: String): Flow<WorkoutAggregate?> = flowOf(null)
-    override fun observeGyms(): Flow<List<Gym>> = flowOf(gyms)
+    override fun observeGyms(): Flow<List<Gym>> = gyms
     override fun observeTrainingSummary(): Flow<TrainingSummary> = flowOf(TrainingSummary(0, 3, 0))
     override suspend fun startFreeWorkout(gymId: String?) = StartedWorkout("x", false)
     override suspend fun startRoutineWorkout(routineId: String, gymId: String?) = StartedWorkout("x", false)

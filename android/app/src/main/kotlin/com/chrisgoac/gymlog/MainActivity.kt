@@ -19,8 +19,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val container = (application as GymLogApplication).container
         takeWorkoutRequest(intent)
+        // One flow for the activity: calling observe() inside the composition would build a new flow,
+        // and restart its collection, on every recomposition.
+        val deviceSettings = container.deviceSettings.observe()
         setContent {
-            val device by container.deviceSettings.observe().collectAsState(DeviceSettings())
+            val device by deviceSettings.collectAsState(DeviceSettings())
             GymLogTheme(
                 darkTheme = when (device.theme) {
                     ThemeMode.SYSTEM -> isSystemInDarkTheme()
