@@ -34,7 +34,7 @@ import java.util.Date
 
 /** One finished workout: ordered exercises and sets, gym (changeable), notes and deletion with confirmation. */
 @Composable
-fun HistoryDetailScreen(viewModel: HistoryDetailViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun HistoryDetailScreen(viewModel: HistoryDetailViewModel, onBack: () -> Unit, modifier: Modifier = Modifier, onEdit: (() -> Unit)? = null) {
     val state by viewModel.state.collectAsState()
     val deleted by viewModel.deleted.collectAsState()
     LaunchedEffect(deleted) { if (deleted) onBack() }
@@ -49,6 +49,7 @@ fun HistoryDetailScreen(viewModel: HistoryDetailViewModel, onBack: () -> Unit, m
         onCancelDelete = viewModel::cancelDelete,
         onConfirmDelete = viewModel::confirmDelete,
         modifier = modifier,
+        onEdit = onEdit,
     )
 }
 
@@ -64,6 +65,8 @@ internal fun HistoryDetailContent(
     onCancelDelete: () -> Unit,
     onConfirmDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Opens the full editor; null hides the action. */
+    onEdit: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize()) {
         HierroScreenHeader(stringResource(R.string.history_detail_title)) { HierroHeaderAction(stringResource(R.string.history_back), onBack) }
@@ -81,7 +84,7 @@ internal fun HistoryDetailContent(
                         title = stringResource(R.string.history_detail_error_title),
                     )
                 }
-                is HistoryDetailUiState.Found -> foundItems(state, onOpenGymPicker, onCloseGymPicker, onChangeGym, onRequestDelete, onCancelDelete, onConfirmDelete)
+                is HistoryDetailUiState.Found -> foundItems(state, onOpenGymPicker, onCloseGymPicker, onChangeGym, onRequestDelete, onCancelDelete, onConfirmDelete, onEdit)
             }
         }
     }
@@ -95,6 +98,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.foundItems(
     onRequestDelete: () -> Unit,
     onCancelDelete: () -> Unit,
     onConfirmDelete: () -> Unit,
+    onEdit: (() -> Unit)?,
 ) {
     val detail = state.detail
     val session = detail.workout.session
@@ -114,6 +118,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.foundItems(
                 stringResource(R.string.history_volume, SetValidation.formatWeight(Math.round(detail.summary.volume * 10) / 10.0)),
                 color = HierroTheme.colors.textMuted,
             )
+            if (onEdit != null) {
+                HierroButton(stringResource(R.string.history_detail_edit), onEdit, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
+            }
         }
     }
     item(key = "gym") {

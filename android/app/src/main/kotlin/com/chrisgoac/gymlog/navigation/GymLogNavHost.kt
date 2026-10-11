@@ -49,6 +49,10 @@ import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.history.HistoryDetailScreen
 import com.chrisgoac.gymlog.history.HistoryDetailViewModel
+import com.chrisgoac.gymlog.history.HistoryEditorScreen
+import com.chrisgoac.gymlog.history.HistoryEditorViewModel
+import com.chrisgoac.gymlog.domain.history.SaveWorkoutDraftUseCase
+import androidx.activity.compose.BackHandler
 import com.chrisgoac.gymlog.history.HistoryListScreen
 import com.chrisgoac.gymlog.history.HistoryListViewModel
 import com.chrisgoac.gymlog.domain.SyncUiState
@@ -92,6 +96,9 @@ import com.chrisgoac.gymlog.R
 /** What the Settings routes need; null keeps them as smoke screens (shell tests). */
 class SettingsServices(val sync: SyncUseCases, val signOut: SignOutUseCase)
 
+/** What the history editor needs: the atomic save and the server-corrected clock (future-date check). */
+class HistoryEditServices(val save: SaveWorkoutDraftUseCase, val now: () -> Long)
+
 /** Five-tab shell. Route content is smoke-only except Settings; real feature screens replace it in later tasks. */
 @Composable
 fun GymLogApp(
@@ -104,6 +111,7 @@ fun GymLogApp(
     restTimer: RestTimerController? = null,
     finishWorkout: FinishWorkoutUseCase? = null,
     history: HistoryRepository? = null,
+    historyEditing: HistoryEditServices? = null,
     syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
     onOpenWorkoutHandled: () -> Unit = {},
@@ -126,7 +134,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, syncState)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, syncState)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -160,6 +168,7 @@ private fun GymLogNavHost(
     restTimer: RestTimerController?,
     finishWorkout: FinishWorkoutUseCase?,
     history: HistoryRepository?,
+    historyEditing: HistoryEditServices?,
     syncState: Flow<SyncUiState>?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
@@ -341,7 +350,32 @@ private fun GymLogNavHost(
                     SmokeScreen(GymLogDestination.History, navController, secondary = true)
                 } else {
                     val viewModel = viewModel(key = sessionId) { HistoryDetailViewModel(history, workouts, sessionId) }
-                    HistoryDetailScreen(viewModel, onBack = { navController.popBackStack() })
+                    HistoryDetailScreen(
+                        viewModel,
+                        onBack = { navController.popBackStack() },
+                        onEdit = if (historyEditing != null && exercises != null) {
+                            { navController.navigate(GymLogDestination.HistoryEditor(sessionId)) { launchSingleTop = true } }
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
+            composable<GymLogDestination.HistoryEditor> { entry ->
+                val sessionId = entry.toRoute<GymLogDestination.HistoryEditor>().sessionId
+                if (history == null || workouts == null || exercises == null || historyEditing == null) {
+                    SmokeScreen(GymLogDestination.History, navController, secondary = true)
+                } else {
+                    // The draft (and the original it came from) live in the entry's SavedStateHandle: rotation and
+                    // process death keep the edit; nothing is written until "Guardar cambios".
+                    val viewModel = viewModel(key = "edit:$sessionId") {
+                        HistoryEditorViewModel(
+                            sessionId, history, workouts, exercises, historyEditing.save, createSavedStateHandle(), now = historyEditing.now,
+                        )
+                    }
+                    // System back asks before discarding changes, like the Cancel action.
+                    BackHandler { viewModel.requestExit() }
+                    HistoryEditorScreen(viewModel, onExit = { navController.popBackStack() })
                 }
             }
         }

@@ -123,14 +123,15 @@ class OfflineHistoryRepository(
                     val session = database.workoutSessionDao().findById(sessionId)?.takeIf { it.deletedAt == null } ?: return@withTransaction null
                     val setsByExercise = database.workoutHistoryDao().liveSetsForSession(sessionId).groupBy { it.loggedExerciseId }
                     val aggregate = WorkoutAggregate(
-                        session = WorkoutSession(session.id, session.routineId, session.gymId, session.fecha, session.duracionSegundos, session.notas),
+                        session = WorkoutSession(session.id, session.routineId, session.gymId, session.fecha, session.duracionSegundos, session.notas, session.updatedAt),
                         exercises = database.loggedExerciseDao().liveForSession(sessionId).map { row ->
                             WorkoutExercise(
                                 id = row.id,
                                 exerciseId = row.exerciseId,
                                 exerciseName = names[row.exerciseId],
                                 position = row.orden,
-                                sets = setsByExercise[row.id].orEmpty().map { WorkoutSet(it.id, it.orden, it.peso, it.reps, it.esCalentamiento == true) },
+                                sets = setsByExercise[row.id].orEmpty().map { WorkoutSet(it.id, it.orden, it.peso, it.reps, it.esCalentamiento == true, it.updatedAt) },
+                                updatedAt = row.updatedAt,
                             )
                         },
                     )

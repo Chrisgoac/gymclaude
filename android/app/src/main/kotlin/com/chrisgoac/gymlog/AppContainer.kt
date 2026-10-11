@@ -15,6 +15,9 @@ import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
 import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
 import com.chrisgoac.gymlog.data.workout.OfflineHistoryRepository
+import com.chrisgoac.gymlog.data.workout.OfflineWorkoutEditRepository
+import com.chrisgoac.gymlog.domain.history.DefaultSaveWorkoutDraftUseCase
+import com.chrisgoac.gymlog.navigation.HistoryEditServices
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
@@ -162,6 +165,12 @@ class AppContainer(private val application: Application) {
     /** Finished-workout history (filters, detail, change gym, delete) of the open account; writes are local (outbox). */
     val historyRepository: HistoryRepository =
         OfflineHistoryRepository(databases, ::localMutationRunner, exerciseRepository, routineRepository, now = syncClock::nowMillis)
+
+    /** Full edit of a past workout: validation against the server clock, then ONE local mutation (conflict-checked). */
+    val historyEditing: HistoryEditServices = HistoryEditServices(
+        save = DefaultSaveWorkoutDraftUseCase(OfflineWorkoutEditRepository(databases, ::localMutationRunner), now = syncClock::nowMillis),
+        now = syncClock::nowMillis,
+    )
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)

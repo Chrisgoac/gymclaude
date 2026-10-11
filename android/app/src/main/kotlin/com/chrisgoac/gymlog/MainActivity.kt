@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
                     restTimer = container.restTimer,
                     finishWorkout = container.finishWorkout,
                     history = container.historyRepository,
+                    historyEditing = container.historyEditing,
                     syncState = container.syncUiState,
                     openWorkoutRequest = container.openWorkoutRequest.collectAsState().value,
                     onOpenWorkoutHandled = { container.openWorkoutRequest.value = null },

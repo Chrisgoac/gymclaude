@@ -39,6 +39,10 @@ sealed interface GymLogDestination {
     @Serializable data class HistoryDetail(val sessionId: String) : GymLogDestination {
         override val title: Int get() = R.string.nav_history_detail
     }
+    /** Full editor of a finished workout, above its detail in the History graph. */
+    @Serializable data class HistoryEditor(val sessionId: String) : GymLogDestination {
+        override val title: Int get() = R.string.nav_history_editor
+    }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 

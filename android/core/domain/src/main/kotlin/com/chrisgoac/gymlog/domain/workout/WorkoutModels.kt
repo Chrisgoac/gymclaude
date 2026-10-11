@@ -14,6 +14,8 @@ data class WorkoutSession(
     val startedAt: Long,
     val durationSeconds: Int?,
     val notes: String?,
+    /** Local row version (`updatedAt`); 0 = unknown. Lets an editor detect that the row changed since it was read. */
+    val updatedAt: Long = 0L,
 )
 
 data class WorkoutSet(
@@ -22,6 +24,8 @@ data class WorkoutSet(
     val weight: Double,
     val reps: Int,
     val warmup: Boolean,
+    /** Local row version (`updatedAt`); 0 = unknown. */
+    val updatedAt: Long = 0L,
 )
 
 /** An exercise inside a session with its ordered sets. [exerciseName] is null if the exercise no longer exists. */
@@ -31,6 +35,8 @@ data class WorkoutExercise(
     val exerciseName: String?,
     val position: Int,
     val sets: List<WorkoutSet>,
+    /** Local row version (`updatedAt`); 0 = unknown. */
+    val updatedAt: Long = 0L,
 )
 
 /** The session with its ordered exercises and their ordered sets, built from live rows only. */

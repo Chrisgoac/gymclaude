@@ -41,6 +41,7 @@ import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
 import kotlinx.coroutines.flow.Flow
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.navigation.GymLogApp
+import com.chrisgoac.gymlog.navigation.HistoryEditServices
 import com.chrisgoac.gymlog.navigation.SettingsServices
 import kotlin.math.roundToInt
 
@@ -58,6 +59,7 @@ fun GymLogRoot(
     restTimer: RestTimerController? = null,
     finishWorkout: FinishWorkoutUseCase? = null,
     history: HistoryRepository? = null,
+    historyEditing: HistoryEditServices? = null,
     syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
     onOpenWorkoutHandled: () -> Unit = {},
@@ -79,6 +81,7 @@ fun GymLogRoot(
                 restTimer = restTimer,
                 finishWorkout = finishWorkout,
                 history = history,
+                historyEditing = historyEditing,
                 syncState = syncState,
                 openWorkoutRequest = openWorkoutRequest,
                 onOpenWorkoutHandled = onOpenWorkoutHandled,
