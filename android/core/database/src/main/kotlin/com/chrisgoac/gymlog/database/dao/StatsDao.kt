@@ -116,14 +116,20 @@ interface StatsDao {
     @Query("SELECT COUNT(*) FROM mesocycles WHERE deletedAt IS NULL AND fechaInicio + semanas * 604800000 < :now")
     suspend fun completedMesocycles(now: Long): Int
 
-    /** Per exercise: its heaviest live set weight and the earliest session date lifting it. */
+    /**
+     * Per exercise: its heaviest live set weight and the earliest session date lifting it. The maxima
+     * are computed once (one grouped pass over every live set), then joined back for the dates; no
+     * window functions (SQLite 3.18 on API 26), no per-row correlated subquery.
+     */
     @Query(
-        "SELECT le.exerciseId AS exerciseId, ls.peso AS peso, MIN(s.fecha) AS startedAt $FROM_SETS " +
-            "WHERE s.deletedAt IS NULL AND le.deletedAt IS NULL AND ls.deletedAt IS NULL AND ls.peso = (" +
-            "SELECT MAX(ls2.peso) FROM logged_sets AS ls2 JOIN logged_exercises AS le2 ON le2.id = ls2.loggedExerciseId " +
-            "JOIN workout_sessions AS s2 ON s2.id = le2.sessionId " +
-            "WHERE s2.deletedAt IS NULL AND le2.deletedAt IS NULL AND ls2.deletedAt IS NULL AND le2.exerciseId = le.exerciseId) " +
-            "GROUP BY le.exerciseId",
+        "SELECT m.exerciseId AS exerciseId, m.peso AS peso, MIN(s.fecha) AS startedAt " +
+            "FROM (SELECT le.exerciseId AS exerciseId, MAX(ls.peso) AS peso $FROM_SETS " +
+            "WHERE s.deletedAt IS NULL AND le.deletedAt IS NULL AND ls.deletedAt IS NULL GROUP BY le.exerciseId) AS m " +
+            "JOIN logged_exercises AS le ON le.exerciseId = m.exerciseId " +
+            "JOIN workout_sessions AS s ON s.id = le.sessionId " +
+            "JOIN logged_sets AS ls ON ls.loggedExerciseId = le.id " +
+            "WHERE s.deletedAt IS NULL AND le.deletedAt IS NULL AND ls.deletedAt IS NULL AND ls.peso = m.peso " +
+            "GROUP BY m.exerciseId",
     )
     suspend fun personalRecords(): List<StatPersonalRecordRow>
 

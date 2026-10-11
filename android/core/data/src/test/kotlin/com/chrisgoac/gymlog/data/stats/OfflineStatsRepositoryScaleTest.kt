@@ -4,8 +4,10 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
+import com.chrisgoac.gymlog.data.achievement.OfflineAchievementRepository
 import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.OpenUserDatabase
+import com.chrisgoac.gymlog.database.RoomLocalMutationRunner
 import com.chrisgoac.gymlog.database.UserDatabaseManager
 import com.chrisgoac.gymlog.database.entity.ExerciseEntity
 import com.chrisgoac.gymlog.database.entity.LoggedExerciseEntity
@@ -15,6 +17,7 @@ import com.chrisgoac.gymlog.domain.exercise.MuscleGroup
 import com.chrisgoac.gymlog.domain.stats.GymFilter
 import com.chrisgoac.gymlog.domain.stats.StatsFilter
 import com.chrisgoac.gymlog.domain.time.Period
+import com.chrisgoac.gymlog.model.DeviceId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -26,14 +29,16 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
 /**
  * Scale check for the Progress screen: ~20k sets (2 years, ~800 sessions) in Room, then the first
- * emission of every flow the screen subscribes to. Timings print to stdout (see the task report);
- * the bounds are deliberately generous (Robolectric on a loaded CI box), they catch accidental
- * quadratic behaviour or a whole-history read per row, not microbenchmark regressions.
+ * emission of every flow the screen subscribes to, plus the achievement evidence (personal records
+ * and the reconcile metrics). Timings print to stdout (see the task report); the bounds are
+ * deliberately generous (Robolectric on a loaded CI box), they catch accidental quadratic behaviour
+ * or a whole-history read per row, not microbenchmark regressions.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -109,5 +114,20 @@ class OfflineStatsRepositoryScaleTest {
         assertEquals(800, volume.summary.sessions)
         assertTrue("some exercises plateau", stalls.isNotEmpty())
         timings.forEach { (name, ms) -> assertTrue("$name took $ms ms", ms < 20_000) }
+
+        // Achievement evidence: one grouped pass each, so a realistic (tighter) bound.
+        val achievements = OfflineAchievementRepository(Manager(db)) { RoomLocalMutationRunner(it, DeviceId("scale"), clock = { now }) }
+        val evidence = linkedMapOf<String, Long>()
+        suspend fun <T> evidenceTimed(name: String, block: suspend () -> T): T {
+            val start = System.nanoTime()
+            return withTimeout(60_000) { block() }.also { evidence[name] = (System.nanoTime() - start) / 1_000_000 }
+        }
+        val records = evidenceTimed("personalRecords") { achievements.observePersonalRecords().first() }
+        val metrics = evidenceTimed("reconcile metrics") { achievements.transaction { metrics(Instant.ofEpochMilli(now), zone) } }
+        println("SCALE achievement evidence ms: $evidence")
+        assertEquals(40, records.size)
+        assertEquals(40, metrics.personalRecords)
+        assertEquals(800, metrics.sessions)
+        evidence.forEach { (name, ms) -> assertTrue("$name took $ms ms", ms < 2_000) }
     }
 }
