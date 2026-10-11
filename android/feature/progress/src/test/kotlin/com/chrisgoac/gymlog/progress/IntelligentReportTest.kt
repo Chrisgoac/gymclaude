@@ -145,11 +145,11 @@ class IntelligentReportScreenTest {
     @get:Rule val rule = createComposeRule()
     private val log = mutableListOf<String>()
 
-    private fun show(state: IntelligentReportUiState) {
+    private fun show(state: IntelligentReportUiState, onOpenPro: (() -> Unit)? = null) {
         rule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
-                GymLogTheme { IntelligentReportContent(state, ZoneId.of("Europe/Madrid"), onBack = { log += "back" }, onRefresh = { log += "refresh" }) }
+                GymLogTheme { IntelligentReportContent(state, ZoneId.of("Europe/Madrid"), onBack = { log += "back" }, onRefresh = { log += "refresh" }, onOpenPro = onOpenPro) }
             }
         }
         rule.waitForIdle()
@@ -163,6 +163,17 @@ class IntelligentReportScreenTest {
         rule.onNodeWithText("Actualizar informe").assertDoesNotExist()
         scrollTo("no consejo médico")
         rule.onNodeWithText("no consejo médico", substring = true).assertIsDisplayed()
+    }
+
+    @Test fun `locked offers Ver GymLog Pro when the app can open it, and nothing otherwise`() {
+        show(IntelligentReportUiState(access = ReportAccess.LOCKED), onOpenPro = { log += "pro" })
+        rule.onNodeWithText("Ver GymLog Pro").assertIsEnabled().performClick()
+        assertEquals(listOf("pro"), log)
+    }
+
+    @Test fun `locked without a Pro destination shows no button`() {
+        show(IntelligentReportUiState(access = ReportAccess.LOCKED))
+        rule.onNodeWithText("Ver GymLog Pro").assertDoesNotExist()
     }
 
     @Test fun `the report shows its sections, date in the device zone, cache note and disclaimer`() {

@@ -41,7 +41,7 @@ class CoachScreenTest {
     @get:Rule val rule = createComposeRule()
 
     private val log = mutableListOf<String>()
-    private val actions = CoachActions(
+    private fun actions(onOpenPro: (() -> Unit)? = null) = CoachActions(
         onBack = { log += "back" },
         onDraftChange = { log += "draft:$it" },
         onSend = { log += "send" },
@@ -53,12 +53,13 @@ class CoachScreenTest {
         onReportCategory = { log += "category:$it" },
         onSubmitReport = { log += "submitReport" },
         onCloseReport = { log += "closeReport" },
+        onOpenPro = onOpenPro,
     )
 
-    private fun show(state: CoachUiState) {
+    private fun show(state: CoachUiState, onOpenPro: (() -> Unit)? = null) {
         rule.setContent {
             val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) { GymLogTheme { CoachContent(state, actions) } }
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) { GymLogTheme { CoachContent(state, actions(onOpenPro)) } }
         }
         rule.waitForIdle()
     }
@@ -79,6 +80,17 @@ class CoachScreenTest {
         rule.onNodeWithText("Necesitas una suscripción Pro activa", substring = true).assertIsDisplayed()
         rule.onNodeWithContentDescription("Enviar").assertDoesNotExist()
         rule.onNodeWithText("Analiza mi semana").assertDoesNotExist()
+    }
+
+    @Test fun `not Pro offers Ver GymLog Pro only when the app can open it`() {
+        show(CoachUiState(access = CoachAccess.LOCKED))
+        rule.onNodeWithText("Ver GymLog Pro").assertDoesNotExist()
+    }
+
+    @Test fun `not Pro can open the Pro screen from the locked state`() {
+        show(CoachUiState(access = CoachAccess.LOCKED), onOpenPro = { log += "pro" })
+        rule.onNodeWithText("Ver GymLog Pro").assertIsEnabled().performClick()
+        assertEquals(listOf("pro"), log)
     }
 
     @Test fun `empty thread offers the suggestions, the disclaimer and a big enough send`() {

@@ -197,6 +197,7 @@
     <string name="progress_ai_report_title">Informe inteligente</string>
     <string name="progress_ai_report_back">Volver</string>
     <string name="progress_ai_report_locked_title">INFORME PRO</string>
+    <string name="progress_ai_report_locked_action">Ver GymLog Pro</string>
     <string name="progress_ai_report_locked_message">Necesitas una suscripción Pro activa para el informe inteligente. Tus estadísticas siguen disponibles en Progreso.</string>
     <string name="progress_ai_report_checking">Comprobando tu suscripción…</string>
     <string name="progress_ai_report_loading">Analizando tu progreso…</string>

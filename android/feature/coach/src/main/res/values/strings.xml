@@ -5,6 +5,7 @@
     <string name="coach_loading">Cargando el coach</string>
 
     <string name="coach_locked_title">Coach Pro</string>
+    <string name="coach_locked_action">Ver GymLog Pro</string>
     <string name="coach_locked_message">El coach con IA es parte de GymLog Pro: analiza tu semana, tus estancamientos y tus medidas para orientarte. Necesitas una suscripción Pro activa para usarlo.</string>
 
     <string name="coach_empty_title">Pregúntale a tu coach</string>

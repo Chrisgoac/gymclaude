@@ -50,9 +50,11 @@ data class MesocycleActions(
     val onSave: () -> Unit,
     val onRegenerate: () -> Unit,
     val onDiscard: () -> Unit,
+    /** Opens the Pro screen from the locked state; null hides the offer. */
+    val onOpenPro: (() -> Unit)? = null,
 ) {
     companion object {
-        fun of(viewModel: MesocycleGeneratorViewModel, onBack: () -> Unit) = MesocycleActions(
+        fun of(viewModel: MesocycleGeneratorViewModel, onBack: () -> Unit, onOpenPro: (() -> Unit)? = null) = MesocycleActions(
             onBack = onBack,
             onGoal = viewModel::onGoal,
             onDays = viewModel::onDays,
@@ -67,6 +69,7 @@ data class MesocycleActions(
             onSave = viewModel::save,
             onRegenerate = viewModel::regenerate,
             onDiscard = viewModel::discard,
+            onOpenPro = onOpenPro,
         )
     }
 }
@@ -81,10 +84,11 @@ fun MesocycleGeneratorScreen(
     onBack: () -> Unit,
     onSaved: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenPro: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsState()
     LaunchedEffect(state.savedMesocycleId) { state.savedMesocycleId?.let(onSaved) }
-    MesocycleContent(state, MesocycleActions.of(viewModel, onBack), modifier)
+    MesocycleContent(state, MesocycleActions.of(viewModel, onBack, onOpenPro), modifier)
 }
 
 @Composable
@@ -111,6 +115,7 @@ internal fun MesocycleFormContent(state: MesocycleGeneratorUiState, actions: Mes
                     HierroCard {
                         HierroText(stringResource(R.string.routines_meso_locked_title), Modifier.semantics { heading() }, HierroTheme.typography.label)
                         HierroText(stringResource(R.string.routines_meso_locked_message))
+                        actions.onOpenPro?.let { HierroButton(stringResource(R.string.routines_meso_locked_action), it) }
                     }
                 }
                 MesocycleAccess.AVAILABLE -> {

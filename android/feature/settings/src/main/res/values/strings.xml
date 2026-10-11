@@ -189,4 +189,82 @@
         <item quantity="other">%d registros sin cambios</item>
         <item quantity="many">%d registros sin cambios</item>
     </plurals>
+
+    <!-- Subscription card (Settings) -->
+    <string name="settings_sub_title">Suscripción</string>
+    <string name="settings_sub_free">Plan gratuito. Rutinas, entrenamientos, historial y progreso son siempre tuyos.</string>
+    <string name="settings_sub_unverified">No hemos podido comprobar tu plan ahora. Se verificará cuando haya conexión; tus datos siguen disponibles.</string>
+    <string name="settings_sub_active">GymLog Pro · %1$s</string>
+    <string name="settings_sub_renews">Se renueva el %1$s</string>
+    <string name="settings_sub_grace">GymLog Pro activo hasta el %1$s. No pudimos cobrar el último pago: arréglalo en Google Play.</string>
+    <string name="settings_sub_grace_nodate">GymLog Pro activo. No pudimos cobrar el último pago: arréglalo en Google Play.</string>
+    <string name="settings_sub_canceled">GymLog Pro hasta el %1$s. No se renovará.</string>
+    <string name="settings_sub_canceled_nodate">GymLog Pro hasta que acabe el periodo ya pagado. No se renovará.</string>
+    <string name="settings_sub_paused">Suscripción en pausa o retenida en Google Play. Sin Pro hasta que la reanudes allí. Tus datos siguen disponibles.</string>
+    <string name="settings_sub_ended">Tu suscripción Pro terminó el %1$s. Tus datos siguen disponibles.</string>
+    <string name="settings_sub_ended_nodate">Tu suscripción Pro terminó. Tus datos siguen disponibles.</string>
+    <string name="settings_sub_view_pro">Ver GymLog Pro</string>
+    <string name="settings_sub_manage">Gestionar en Google Play</string>
+    <string name="settings_sub_plan_monthly">plan mensual</string>
+    <string name="settings_sub_plan_annual">plan anual</string>
+    <string name="settings_sub_plan_unknown">plan de pago</string>
+
+    <!-- Pro screen -->
+    <string name="settings_pro_title">GymLog Pro</string>
+    <string name="settings_pro_back">Atrás</string>
+    <string name="settings_pro_status_title">Tu plan</string>
+    <string name="settings_pro_includes_title">Qué incluye Pro</string>
+    <string name="settings_pro_include_coach">Coach con IA: te orienta con tu semana, tus estancamientos y tus medidas.</string>
+    <string name="settings_pro_include_mesocycle">Mesociclos con IA: un plan de varias semanas listo para guardar como rutinas.</string>
+    <string name="settings_pro_include_report">Informe inteligente de tu progreso.</string>
+    <string name="settings_pro_free_title">Lo demás sigue siendo gratis</string>
+    <string name="settings_pro_free_message">Rutinas, entrenamientos, historial, progreso, medidas, logros, fotos y copia de seguridad no dependen de Pro. Si cancelas, tus datos siguen siendo tuyos y puedes verlos y exportarlos.</string>
+    <string name="settings_pro_plans_title">Elige tu plan</string>
+    <string name="settings_pro_plans_loading">Consultando precios en Google Play…</string>
+    <string name="settings_pro_plans_retry">Reintentar</string>
+    <string name="settings_pro_unavailable_play">Google Play no está disponible en este dispositivo o cuenta, así que no podemos mostrar los planes.</string>
+    <string name="settings_pro_unavailable_product">Este plan no está disponible ahora mismo en tu país o cuenta.</string>
+    <string name="settings_pro_unavailable_network">No pudimos consultar los precios. Revisa tu conexión e inténtalo de nuevo.</string>
+    <string name="settings_pro_plan_monthly">Plan mensual</string>
+    <string name="settings_pro_plan_annual">Plan anual</string>
+    <string name="settings_pro_price_month">%1$s al mes</string>
+    <string name="settings_pro_price_year">%1$s al año</string>
+    <string name="settings_pro_price_other">%1$s por periodo de facturación</string>
+    <string name="settings_pro_renewal_month">Se renueva automáticamente cada mes hasta que canceles en Google Play.</string>
+    <string name="settings_pro_renewal_year">Se renueva automáticamente cada año hasta que canceles en Google Play.</string>
+    <string name="settings_pro_renewal_other">Se renueva automáticamente cada periodo hasta que canceles en Google Play.</string>
+    <string name="settings_pro_subscribe">Suscribirse</string>
+    <string name="settings_pro_subscribe_description">Suscribirse al %1$s, %2$s</string>
+    <string name="settings_pro_switch">Cambiar a este plan</string>
+    <string name="settings_pro_switch_description">Cambiar al %1$s, %2$s</string>
+    <string name="settings_pro_current_plan">Tu plan actual</string>
+    <string name="settings_pro_current_plan_description">%1$s, tu plan actual</string>
+    <string name="settings_pro_no_trial">Sin periodo de prueba: el cobro se hace al suscribirte. Cancelas cuando quieras en Google Play y mantienes Pro hasta el final del periodo ya pagado.</string>
+    <string name="settings_pro_switch_note">Al cambiar de plan, Google Play ajusta el cobro según el tiempo que te quede.</string>
+    <string name="settings_pro_offline">Sin conexión. Para suscribirte o restaurar compras necesitas conexión a internet.</string>
+    <string name="settings_pro_restore">Restaurar compras</string>
+    <string name="settings_pro_manage">Gestionar en Google Play</string>
+    <string name="settings_pro_working">En curso</string>
+    <string name="settings_pro_manage_hint">Desde Google Play puedes cancelar, pausar o cambiar la forma de pago.</string>
+
+    <string name="settings_pro_notice_awaiting">Completa la compra en Google Play.</string>
+    <string name="settings_pro_notice_verifying">Verificando tu compra…</string>
+    <string name="settings_pro_notice_pending">Tu pago está pendiente en Google Play. Pro se activará cuando se complete; mientras tanto no se te dará acceso.</string>
+    <string name="settings_pro_notice_completed">Listo: GymLog Pro está activo.</string>
+    <string name="settings_pro_notice_canceled">Compra cancelada. No se ha cobrado nada.</string>
+    <string name="settings_pro_notice_dismiss">Entendido</string>
+    <string name="settings_pro_fail_play">Google Play no está disponible en este dispositivo o cuenta.</string>
+    <string name="settings_pro_fail_product">Este plan no está disponible ahora mismo.</string>
+    <string name="settings_pro_fail_network">No pudimos conectar con Google Play. Revisa tu conexión e inténtalo de nuevo.</string>
+    <string name="settings_pro_fail_verification">Google Play tiene tu compra, pero no pudimos verificarla ahora. Lo reintentaremos al abrir la app; también puedes pulsar Restaurar compras.</string>
+    <string name="settings_pro_fail_invalid">No pudimos validar esa compra como una suscripción de GymLog.</string>
+    <string name="settings_pro_fail_other_account">Esa compra se hizo para otra cuenta de GymLog. Inicia sesión con esa cuenta para usarla.</string>
+    <string name="settings_pro_fail_bound">Esa compra ya está vinculada a otra cuenta de GymLog.</string>
+    <string name="settings_pro_fail_elsewhere">Tu cuenta de Google Play ya tiene una suscripción a GymLog Pro que no está vinculada a esta cuenta de GymLog. No puedes contratar otra encima: gestiónala en Google Play.</string>
+    <string name="settings_pro_fail_signed_out">Inicia sesión para suscribirte.</string>
+    <string name="settings_pro_fail_unknown">Algo falló con la compra. No se ha cobrado nada que no veas en Google Play; inténtalo de nuevo.</string>
+    <string name="settings_pro_restore_working">Buscando tus compras en Google Play…</string>
+    <string name="settings_pro_restore_done">Compra restaurada. GymLog Pro está activo.</string>
+    <string name="settings_pro_restore_nothing">No encontramos una suscripción de GymLog vinculada a esta cuenta. Si la contrataste desde la tienda de Google Play sin pasar por la app, o con otra cuenta de GymLog, no podemos restaurarla aquí: gestiónala en Google Play o contrátala desde esta pantalla.</string>
+    <string name="settings_pro_restore_pending">Tienes un pago pendiente en Google Play. Pro se activará cuando se complete.</string>
 </resources>

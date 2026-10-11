@@ -34,9 +34,15 @@ import java.util.Locale
 
 /** The Pro intelligent report: summary, strengths, what to improve and recommendations, with its date and disclaimer. */
 @Composable
-fun IntelligentReportScreen(viewModel: IntelligentReportViewModel, zone: () -> ZoneId, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun IntelligentReportScreen(
+    viewModel: IntelligentReportViewModel,
+    zone: () -> ZoneId,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onOpenPro: (() -> Unit)? = null,
+) {
     val state by viewModel.state.collectAsState()
-    IntelligentReportContent(state, zone(), onBack, viewModel::refresh, modifier)
+    IntelligentReportContent(state, zone(), onBack, viewModel::refresh, modifier, onOpenPro)
 }
 
 private val REPORT_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", Locale.forLanguageTag("es-ES"))
@@ -48,6 +54,7 @@ internal fun IntelligentReportContent(
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenPro: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize()) {
         HierroScreenHeader(stringResource(R.string.progress_ai_report_title)) {
@@ -60,6 +67,7 @@ internal fun IntelligentReportContent(
                     HierroCard {
                         HierroText(stringResource(R.string.progress_ai_report_locked_title), Modifier.semantics { heading() }, HierroTheme.typography.label)
                         HierroText(stringResource(R.string.progress_ai_report_locked_message))
+                        onOpenPro?.let { HierroButton(stringResource(R.string.progress_ai_report_locked_action), it) }
                     }
                 }
                 ReportAccess.AVAILABLE -> {

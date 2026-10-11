@@ -33,6 +33,9 @@ fun SettingsScreen(
     onGyms: (() -> Unit)? = null,
     onTraining: (() -> Unit)? = null,
     onBackup: (() -> Unit)? = null,
+    /** Null hides the subscription card (billing is not wired). */
+    onOpenPro: (() -> Unit)? = null,
+    onOpenUri: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
     Column(modifier.fillMaxSize()) {
@@ -43,6 +46,11 @@ fun SettingsScreen(
             if (onTraining != null) HierroButton(stringResource(R.string.settings_training), onTraining, variant = HierroButtonVariant.Secondary)
             if (onGyms != null) HierroButton(stringResource(R.string.settings_gyms), onGyms, variant = HierroButtonVariant.Secondary)
             if (onBackup != null) HierroButton(stringResource(R.string.settings_backup), onBackup, variant = HierroButtonVariant.Secondary)
+            state.plan?.let { plan ->
+                if (onOpenPro != null) {
+                    SubscriptionCard(plan, onOpenPro, onManage = { viewModel.managementUri()?.let(onOpenUri) })
+                }
+            }
             SyncStatusCard(state.sync, onSyncNow = viewModel::syncNow, onDetails = onSyncDetails)
             AccountCard(state.signOut, viewModel)
         }

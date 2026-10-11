@@ -64,10 +64,12 @@ class CoachActions(
     val onReportCategory: (CoachReportCategory) -> Unit,
     val onSubmitReport: () -> Unit,
     val onCloseReport: () -> Unit,
+    /** Opens the Pro screen from the locked state; null hides the offer. */
+    val onOpenPro: (() -> Unit)? = null,
 )
 
 @Composable
-fun CoachScreen(viewModel: CoachViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun CoachScreen(viewModel: CoachViewModel, onBack: () -> Unit, modifier: Modifier = Modifier, onOpenPro: (() -> Unit)? = null) {
     val state by viewModel.state.collectAsState()
     CoachContent(
         state,
@@ -83,6 +85,7 @@ fun CoachScreen(viewModel: CoachViewModel, onBack: () -> Unit, modifier: Modifie
             onReportCategory = viewModel::selectReportCategory,
             onSubmitReport = viewModel::submitReport,
             onCloseReport = viewModel::closeReport,
+            onOpenPro = onOpenPro,
         ),
         modifier,
     )
@@ -100,6 +103,8 @@ internal fun CoachContent(state: CoachUiState, actions: CoachActions, modifier: 
                 title = stringResource(R.string.coach_locked_title),
                 message = stringResource(R.string.coach_locked_message),
                 modifier = Modifier.padding(16.dp),
+                actionLabel = actions.onOpenPro?.let { stringResource(R.string.coach_locked_action) },
+                onAction = actions.onOpenPro,
             )
             CoachAccess.AVAILABLE -> Conversation(state, actions)
         }

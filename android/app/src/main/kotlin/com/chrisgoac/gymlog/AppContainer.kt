@@ -525,6 +525,8 @@ class AppContainer(private val application: Application) {
             SettingsServices(
                 syncUseCases, signOutUseCase, gyms = gymRepository, training = settingsRepository, device = deviceSettings,
                 backup = BackupServices(backupRepository, ContentResolverBackupDocuments(application.contentResolver), syncClock::nowMillis, ZoneId::systemDefault),
+                billing = billing,
+                online = connectivity.online,
             )
         } else {
             null

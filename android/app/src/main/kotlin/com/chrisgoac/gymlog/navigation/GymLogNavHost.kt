@@ -102,6 +102,9 @@ import com.chrisgoac.gymlog.settings.TrainingSettingsViewModel
 import com.chrisgoac.gymlog.domain.settings.DeviceSettingsRepository
 import com.chrisgoac.gymlog.domain.settings.GymRepository
 import com.chrisgoac.gymlog.domain.settings.SettingsRepository
+import com.chrisgoac.gymlog.domain.billing.BillingRepository
+import com.chrisgoac.gymlog.settings.ProScreen
+import com.chrisgoac.gymlog.settings.ProViewModel
 import com.chrisgoac.gymlog.settings.SettingsScreen
 import com.chrisgoac.gymlog.settings.SettingsUiState
 import com.chrisgoac.gymlog.settings.SettingsViewModel
@@ -157,6 +160,9 @@ class SettingsServices(
     val training: SettingsRepository? = null,
     val device: DeviceSettingsRepository? = null,
     val backup: BackupServices? = null,
+    /** Google Play Billing of the account (server-verified Pro); null hides the subscription UI. */
+    val billing: BillingRepository? = null,
+    val online: Flow<Boolean> = flowOf(true),
 )
 
 /** Backup export/import: the repository, the SAF document opener and the clock/zone for the file name and dates. */
@@ -347,7 +353,10 @@ private fun GymLogNavHost(
             }
         }
     }
-    val settingsViewModel = settings?.let { services -> viewModel { SettingsViewModel(services.sync, services.signOut) } }
+    val settingsViewModel = settings?.let { services -> viewModel { SettingsViewModel(services.sync, services.signOut, services.billing) } }
+    // Free accounts reach the Pro screen from Settings and from the locked AI entry points (null: billing not wired).
+    val openPro: (() -> Unit)? = settings?.billing?.let { { navController.navigate(GymLogDestination.Pro) { launchSingleTop = true } } }
+    val context = LocalContext.current
     // An unanswered sign-out confirmation survives Settings -> diagnostics and rotation (it lives in
     // the ViewModel); it is dropped, and sync resumes, once the user is on any other destination.
     // The back stack is null until the graph is set (also right after a rotation): that is "not
@@ -378,6 +387,7 @@ private fun GymLogNavHost(
                             } else {
                                 null
                             },
+                            onOpenPro = if (coach != null) openPro else null,
                         )
                     }
                 }
@@ -425,6 +435,7 @@ private fun GymLogNavHost(
                             onSettings = { navController.navigate(GymLogDestination.Settings) },
                             onGenerateMesocycle = aiPlans?.let { { navController.navigate(GymLogDestination.MesocycleGenerator) { launchSingleTop = true } } },
                             mesocycleIsPro = aiPlansIsPro,
+                            onOpenPro = if (aiPlans != null) openPro else null,
                         )
                     }
                 }
@@ -514,6 +525,7 @@ private fun GymLogNavHost(
                                 navController.navigate(GymLogDestination.ProgressExercise(id, filter.period.wire, filter.gym.gymId ?: GymFilter.ALL_WIRE))
                             },
                             onOpenReport = aiPlans?.let { { navController.navigate(GymLogDestination.IntelligentReport) { launchSingleTop = true } } },
+                            onOpenPro = if (aiPlans != null) openPro else null,
                             onOpenBody = body?.let { { navController.navigate(GymLogDestination.Body) { launchSingleTop = true } } },
                             onOpenAchievements = achievements?.let { { navController.navigate(GymLogDestination.Achievements) { launchSingleTop = true } } },
                             onOpenPhotos = media?.let { { navController.navigate(GymLogDestination.ProgressPhotos()) { launchSingleTop = true } } },
@@ -592,7 +604,7 @@ private fun GymLogNavHost(
                     // Entry-scoped: the turn survives rotation; leaving the Coach stops it, and the unanswered
                     // question is offered for retry (same message id) when the Coach is opened again.
                     val viewModel = viewModel { CoachViewModel(coach.repository, coach.entitlements, coach.online, createSavedStateHandle()) }
-                    CoachScreen(viewModel, onBack = { navController.popBackStack() })
+                    CoachScreen(viewModel, onBack = { navController.popBackStack() }, onOpenPro = openPro)
                 }
             }
             composable<GymLogDestination.MesocycleGenerator> {
@@ -601,7 +613,7 @@ private fun GymLogNavHost(
                 } else {
                     // Entry-scoped: the draft survives rotation; the pending request id survives process death.
                     val viewModel = viewModel { MesocycleGeneratorViewModel(aiPlans.mesocycles, aiPlans.entitlements, aiPlans.online, createSavedStateHandle()) }
-                    MesocycleGeneratorScreen(viewModel, onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() })
+                    MesocycleGeneratorScreen(viewModel, onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() }, onOpenPro = openPro)
                 }
             }
             composable<GymLogDestination.IntelligentReport> {
@@ -609,7 +621,7 @@ private fun GymLogNavHost(
                     SmokeScreen(GymLogDestination.Progress, navController, secondary = true)
                 } else {
                     val viewModel = viewModel { IntelligentReportViewModel(aiPlans.reports, aiPlans.entitlements, aiPlans.online) }
-                    IntelligentReportScreen(viewModel, aiPlans.zone, onBack = { navController.popBackStack() })
+                    IntelligentReportScreen(viewModel, aiPlans.zone, onBack = { navController.popBackStack() }, onOpenPro = openPro)
                 }
             }
             composable<GymLogDestination.Body> {
@@ -661,6 +673,22 @@ private fun GymLogNavHost(
                         onGyms = settings?.takeIf { it.gyms != null && it.device != null }?.let { { navController.navigate(GymLogDestination.Gyms) } },
                         onTraining = settings?.takeIf { it.training != null && it.device != null }?.let { { navController.navigate(GymLogDestination.TrainingSettings) } },
                         onBackup = settings?.backup?.let { { navController.navigate(GymLogDestination.Backup) } },
+                        onOpenPro = openPro,
+                        onOpenUri = { uri -> openExternalUri(context, uri) },
+                    )
+                }
+            }
+            composable<GymLogDestination.Pro> {
+                val billing = settings?.billing
+                if (billing == null) {
+                    SmokeScreen(GymLogDestination.Settings, navController, secondary = true)
+                } else {
+                    val viewModel = viewModel { ProViewModel(billing, settings.online) }
+                    ProScreen(
+                        viewModel,
+                        onBack = { navController.popBackStack() },
+                        activity = { context.findActivity() },
+                        onOpenUri = { uri -> openExternalUri(context, uri) },
                     )
                 }
             }

@@ -10,6 +10,7 @@
 
     <string name="nav_coach">Coach Pro</string>
     <string name="nav_mesocycle_generator">Mesociclo IA</string>
+    <string name="nav_pro">GymLog Pro</string>
     <string name="nav_intelligent_report">Informe inteligente</string>
     <string name="nav_body">Cuerpo</string>
     <string name="nav_achievements">Logros</string>

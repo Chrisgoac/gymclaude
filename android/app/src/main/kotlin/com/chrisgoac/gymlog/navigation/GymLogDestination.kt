@@ -58,6 +58,7 @@ sealed interface GymLogDestination {
     @Serializable data object MesocycleGenerator : GymLogDestination { override val title = R.string.nav_mesocycle_generator }
     /** Pro: intelligent report, above Progress. */
     @Serializable data object IntelligentReport : GymLogDestination { override val title = R.string.nav_intelligent_report }
+    @Serializable data object Pro : GymLogDestination { override val title = R.string.nav_pro }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 

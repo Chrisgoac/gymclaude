@@ -45,6 +45,8 @@ fun RoutineListScreen(
     onGenerateMesocycle: (() -> Unit)? = null,
     mesocycleIsPro: Boolean = false,
     modifier: Modifier = Modifier,
+    /** Free accounts: the locked mesocycle action opens the Pro screen instead of staying disabled. */
+    onOpenPro: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsState()
     RoutineListContent(
@@ -61,6 +63,7 @@ fun RoutineListScreen(
         modifier = modifier,
         onGenerateMesocycle = onGenerateMesocycle,
         mesocycleIsPro = mesocycleIsPro,
+        onOpenPro = onOpenPro,
     )
 }
 
@@ -79,6 +82,7 @@ internal fun RoutineListContent(
     onGenerateMesocycle: (() -> Unit)? = null,
     mesocycleIsPro: Boolean = false,
     modifier: Modifier = Modifier,
+    onOpenPro: (() -> Unit)? = null,
 ) {
     val newDescription = stringResource(R.string.routines_new_description)
     Column(modifier.fillMaxSize()) {
@@ -99,7 +103,7 @@ internal fun RoutineListContent(
                 }
                 LoadStatus.Ready -> {
                     if (onGenerateMesocycle != null) {
-                        item(key = "mesocycle") { MesocycleAction(mesocycleIsPro, onGenerateMesocycle) }
+                        item(key = "mesocycle") { MesocycleAction(mesocycleIsPro, onGenerateMesocycle, onOpenPro) }
                     }
                     if (state.reorderFailed) {
                         item(key = "action-failed") {
@@ -214,12 +218,12 @@ private fun ArchivedRoutineCard(routine: RoutineSummary, onEdit: () -> Unit, onR
 
 /** AI mesocycle entry: always visible, enabled only with Pro (presentation only: the server decides). */
 @Composable
-internal fun MesocycleAction(isPro: Boolean, onGenerate: () -> Unit) {
+internal fun MesocycleAction(isPro: Boolean, onGenerate: () -> Unit, onOpenPro: (() -> Unit)? = null) {
     HierroButton(
         text = stringResource(if (isPro) R.string.routines_meso_action else R.string.routines_meso_action_locked),
-        onClick = onGenerate,
+        onClick = if (isPro) onGenerate else (onOpenPro ?: onGenerate),
         modifier = Modifier.fillMaxWidth(),
         variant = HierroButtonVariant.Secondary,
-        enabled = isPro,
+        enabled = isPro || onOpenPro != null,
     )
 }

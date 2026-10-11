@@ -7,11 +7,13 @@ import com.chrisgoac.gymlog.domain.SignOutOutcome
 import com.chrisgoac.gymlog.domain.SignOutUseCase
 import com.chrisgoac.gymlog.domain.SyncUiState
 import com.chrisgoac.gymlog.domain.SyncUseCases
+import com.chrisgoac.gymlog.domain.billing.BillingRepository
 import com.chrisgoac.gymlog.domain.toUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -31,11 +33,14 @@ data class SettingsUiState(
     val sync: SyncUiState = SyncUiState.Synced,
     val diagnostics: List<OutboxDiagnostic> = emptyList(),
     val signOut: SignOutPhase = SignOutPhase.Idle,
+    /** The subscription for the Settings card; null when billing is not wired. */
+    val plan: PlanStatus? = null,
 )
 
 class SettingsViewModel(
     private val sync: SyncUseCases,
     private val signOutUseCase: SignOutUseCase,
+    private val billing: BillingRepository? = null,
 ) : ViewModel() {
     private val signOutPhase = MutableStateFlow<SignOutPhase>(SignOutPhase.Idle)
 
@@ -43,8 +48,12 @@ class SettingsViewModel(
         sync.observeStatus().map { it.toUiState() },
         sync.observeDiagnostics(),
         signOutPhase,
-    ) { status, diagnostics, phase -> SettingsUiState(status, diagnostics, phase) }
+        billing?.entitlement?.map { PlanStatus.of(it) } ?: flowOf(null),
+    ) { status, diagnostics, phase, plan -> SettingsUiState(status, diagnostics, phase, plan) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), SettingsUiState())
+
+    /** Play's subscription management page. */
+    fun managementUri(): String? = billing?.managementUri()
 
     fun syncNow() {
         viewModelScope.launch { sync.requestSync() }

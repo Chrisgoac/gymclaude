@@ -299,6 +299,11 @@ class MesocycleScreensTest {
         rule.onNodeWithText("Generar propuesta").assertDoesNotExist()
     }
 
+    @Test fun `locked offers Ver GymLog Pro only when the app can open it`() {
+        show(MesocycleGeneratorUiState(access = MesocycleAccess.LOCKED))
+        rule.onNodeWithText("Ver GymLog Pro").assertDoesNotExist()
+    }
+
     @Test fun `the form has labelled 48dp steppers, the goal choice and the disclaimer`() {
         show(available)
         rule.onNodeWithContentDescription("Más Días por semana").performClick()
@@ -357,6 +362,20 @@ class MesocycleScreensTest {
     @Test fun `while saving the edit actions are gone`() {
         show(available.copy(phase = MesocyclePhase.SAVING, draft = draft()))
         rule.onNodeWithContentDescription("Quitar Remo").assertDoesNotExist()
+    }
+
+    @Test fun `locked Ver GymLog Pro calls the Pro destination`() {
+        rule.setContent {
+            GymLogTheme { MesocycleContent(MesocycleGeneratorUiState(access = MesocycleAccess.LOCKED), actions.copy(onOpenPro = { log += "pro" })) }
+        }
+        rule.onNodeWithText("Ver GymLog Pro").assertIsEnabled().performClick()
+        assertEquals(listOf("pro"), log)
+    }
+
+    @Test fun `without Pro the routine list entry opens the Pro screen when there is one, and stays disabled otherwise`() {
+        rule.setContent { GymLogTheme { MesocycleAction(isPro = false, onGenerate = { log += "open" }, onOpenPro = { log += "pro" }) } }
+        rule.onNodeWithText("Mesociclo con IA · Pro").assertIsEnabled().performClick()
+        assertEquals(listOf("pro"), log)
     }
 
     @Test fun `the routine list entry is locked without Pro`() {

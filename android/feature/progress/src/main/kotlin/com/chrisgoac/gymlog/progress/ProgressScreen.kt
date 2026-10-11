@@ -59,6 +59,8 @@ fun ProgressScreen(
     onOpenAchievements: (() -> Unit)? = null,
     onOpenPhotos: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /** Free accounts: the locked report action opens the Pro screen instead of staying disabled. */
+    onOpenPro: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     ProgressContent(
@@ -73,6 +75,7 @@ fun ProgressScreen(
         onOpenAchievements = onOpenAchievements,
         onOpenPhotos = onOpenPhotos,
         modifier = modifier,
+        onOpenPro = onOpenPro,
     )
 }
 
@@ -89,6 +92,7 @@ internal fun ProgressContent(
     onOpenAchievements: (() -> Unit)? = null,
     onOpenPhotos: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onOpenPro: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize()) {
         HierroScreenHeader(stringResource(R.string.progress_title))
@@ -134,7 +138,7 @@ internal fun ProgressContent(
                     HierroButton(stringResource(R.string.progress_photos_action), onOpenPhotos, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
                 }
             }
-            item(key = "report") { ReportAction(state.isPro, onOpenReport) }
+            item(key = "report") { ReportAction(state.isPro, onOpenReport, onOpenPro) }
         }
     }
 }
@@ -304,8 +308,8 @@ private fun ExerciseResult(exercise: Exercise, onOpenExercise: (String) -> Unit)
 
 /** Intelligent report: visible always; enabled only with Pro and a destination (wired in Plan 5). */
 @Composable
-internal fun ReportAction(isPro: Boolean, onOpenReport: (() -> Unit)?) {
-    val enabled = isPro && onOpenReport != null
+internal fun ReportAction(isPro: Boolean, onOpenReport: (() -> Unit)?, onOpenPro: (() -> Unit)? = null) {
+    val enabled = if (isPro) onOpenReport != null else onOpenPro != null
     val label = stringResource(if (isPro) R.string.progress_report_action else R.string.progress_report_action_locked)
     val reason = when {
         !isPro -> stringResource(R.string.progress_report_locked_state)
@@ -314,7 +318,7 @@ internal fun ReportAction(isPro: Boolean, onOpenReport: (() -> Unit)?) {
     }
     HierroButton(
         text = label,
-        onClick = { onOpenReport?.invoke() },
+        onClick = { if (isPro) onOpenReport?.invoke() else onOpenPro?.invoke() },
         modifier = Modifier.fillMaxWidth(),
         variant = HierroButtonVariant.Secondary,
         enabled = enabled,

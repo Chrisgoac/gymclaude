@@ -87,6 +87,7 @@
     <string name="routines_meso_title">Mesociclo IA</string>
     <string name="routines_meso_back">Volver</string>
     <string name="routines_meso_locked_title">MESOCICLO PRO</string>
+    <string name="routines_meso_locked_action">Ver GymLog Pro</string>
     <string name="routines_meso_locked_message">Necesitas una suscripción Pro activa para generar mesociclos con IA. Tus rutinas siguen disponibles.</string>
     <string name="routines_meso_checking">Comprobando tu suscripción…</string>
     <string name="routines_meso_intro">La IA propone un plan con tus datos y tu catálogo de ejercicios. Lo revisas y editas antes de guardarlo.</string>

@@ -44,6 +44,8 @@ fun TrainHomeScreen(
     onSettings: (() -> Unit)? = null,
     onOpenCoach: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /** Free accounts: the locked Coach card opens the Pro screen instead of staying disabled. */
+    onOpenPro: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsState()
     TrainHomeContent(
@@ -59,6 +61,7 @@ fun TrainHomeScreen(
         onSettings = onSettings,
         onOpenCoach = onOpenCoach,
         modifier = modifier,
+        onOpenPro = onOpenPro,
     )
 }
 
@@ -77,6 +80,7 @@ internal fun TrainHomeContent(
     /** Null while the account is not Pro (presentation only): the entry is shown locked. */
     onOpenCoach: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onOpenPro: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize()) {
         HierroScreenHeader(stringResource(R.string.train_title)) {
@@ -153,7 +157,7 @@ internal fun TrainHomeContent(
                             }
                         }
                     }
-                    item(key = "coach") { CoachEntry(onOpenCoach) }
+                    item(key = "coach") { CoachEntry(onOpenCoach, onOpenPro) }
                     item(key = "body") {
                         HierroCard(onClick = onOpenBody) { HierroText(stringResource(R.string.train_body), style = HierroTheme.typography.title) }
                     }
@@ -222,13 +226,19 @@ private fun GymOption(name: String, selected: Boolean, selectedLabel: String, on
 
 /** Opens the Coach for Pro accounts; otherwise visibly Pro and inert (the server re-checks Pro anyway). */
 @Composable
-private fun CoachEntry(onOpen: (() -> Unit)?) {
+private fun CoachEntry(onOpen: (() -> Unit)?, onOpenPro: (() -> Unit)? = null) {
     val title = stringResource(R.string.train_coach_title)
     if (onOpen != null) {
         val description = stringResource(R.string.train_coach_open)
         HierroCard(onClick = onOpen, contentDescription = "$title. $description") {
             HierroText(title, style = HierroTheme.typography.title)
             HierroText(description, color = HierroTheme.colors.textMuted)
+        }
+    } else if (onOpenPro != null) {
+        val pro = stringResource(R.string.train_coach_pro)
+        HierroCard(onClick = onOpenPro, contentDescription = "$title, $pro") {
+            HierroText(title, style = HierroTheme.typography.title, color = HierroTheme.colors.textMuted)
+            HierroText(pro, style = HierroTheme.typography.label, color = HierroTheme.colors.accent)
         }
     } else {
         val pro = stringResource(R.string.train_coach_pro)
