@@ -186,6 +186,26 @@ class GymsAndTrainingViewModelTest {
         assertNull(vm.state.value.defaultGymId)
     }
 
+    @Test fun `archive then unarchive does not bring the default back, even with the screen state not collected`() = runTest {
+        gyms.items.value = listOf(GymItem("g1", "Box", false, 0), GymItem("g2", "Casa", false, 0))
+        device.state.value = DeviceSettings(defaultGymId = "g2")
+        val vm = GymsViewModel(gyms, device) // nobody collects vm.state: its default is the empty initial one
+
+        vm.setArchived("g2", true)
+        assertNull(device.state.value.defaultGymId)
+        vm.setArchived("g2", false)
+        assertNull(device.state.value.defaultGymId)
+
+        // Deleting compares the stored id too: a default hidden because its gym was archived elsewhere is cleared.
+        gyms.items.value = listOf(GymItem("g1", "Box", true, 0))
+        device.state.value = DeviceSettings(defaultGymId = "g1")
+        val collected = gymsVm(this)
+        assertNull("an archived default is not shown", collected.state.value.defaultGymId)
+        collected.requestDelete("g1")
+        collected.confirmDelete()
+        assertNull(device.state.value.defaultGymId)
+    }
+
     @Test fun `moving a gym reorders by id and ignores the edges`() = runTest {
         gyms.items.value = listOf(GymItem("a", "A", false, 0), GymItem("b", "B", false, 0), GymItem("c", "C", false, 0))
         val vm = gymsVm(this)

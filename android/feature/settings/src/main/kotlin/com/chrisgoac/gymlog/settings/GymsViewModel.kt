@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -94,7 +95,7 @@ class GymsViewModel(
     fun setArchived(id: String, archived: Boolean) = write {
         gyms.setArchived(id, archived)
         // An archived gym is no longer offered to start workouts, so it cannot stay the default.
-        if (archived && state.value.defaultGymId == id) device.setDefaultGym(null)
+        if (archived) clearDefaultIf(id)
     }
 
     /** Moves [id] one place up (-1) or down (+1) in the manual order. */
@@ -121,8 +122,16 @@ class GymsViewModel(
         pendingDelete.value = null
         write {
             gyms.delete(pending.id)
-            if (state.value.defaultGymId == pending.id) device.setDefaultGym(null)
+            clearDefaultIf(pending.id)
         }
+    }
+
+    /**
+     * Compares the RAW stored default, not [state]'s (which hides a default naming an archived or
+     * missing gym, and may not be collected at all): otherwise un-archiving would bring it back.
+     */
+    private suspend fun clearDefaultIf(id: String) {
+        if (device.observe().first().defaultGymId == id) device.setDefaultGym(null)
     }
 
     fun dismissWriteFailed() { writeFailed.value = false }
