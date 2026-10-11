@@ -159,6 +159,8 @@ fun HierroButton(
 fun HierroCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    /** Single spoken label for a clickable card whose visible text is split over several lines. */
+    contentDescription: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = HierroTheme.colors
@@ -178,6 +180,7 @@ fun HierroCard(
                         Modifier
                             .heightIn(min = HierroShape.minTouchTarget)
                             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+                            .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier)
                     } else Modifier,
                 )
                 .padding(16.dp),

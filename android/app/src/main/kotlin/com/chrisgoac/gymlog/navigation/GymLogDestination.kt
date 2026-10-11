@@ -43,6 +43,10 @@ sealed interface GymLogDestination {
     @Serializable data class HistoryEditor(val sessionId: String) : GymLogDestination {
         override val title: Int get() = R.string.nav_history_editor
     }
+    /** Per-exercise drill-down of Progress; [period] and [gym] are the wire values of the filter it was opened with. */
+    @Serializable data class ProgressExercise(val exerciseId: String, val period: String, val gym: String) : GymLogDestination {
+        override val title: Int get() = R.string.nav_progress_exercise
+    }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 

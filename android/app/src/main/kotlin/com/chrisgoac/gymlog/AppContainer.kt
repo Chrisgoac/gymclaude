@@ -22,6 +22,9 @@ import com.chrisgoac.gymlog.domain.stats.InvalidatingSaveWorkoutDraftUseCase
 import com.chrisgoac.gymlog.domain.stats.StatsInvalidation
 import com.chrisgoac.gymlog.domain.stats.StatsRepository
 import com.chrisgoac.gymlog.navigation.HistoryEditServices
+import com.chrisgoac.gymlog.navigation.ProgressServices
+import com.chrisgoac.gymlog.domain.entitlement.EntitlementReader
+import com.chrisgoac.gymlog.domain.time.DayRollover
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
@@ -78,6 +81,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.async
@@ -189,6 +193,23 @@ class AppContainer(private val application: Application) {
     /** Progress statistics of the open account (server-corrected clock, device time zone); read-only. */
     val statsRepository: StatsRepository =
         OfflineStatsRepository(databases, now = syncClock::nowMillis, zone = ZoneId::systemDefault)
+
+    /**
+     * Pro entitlement. TODO(Plan 5): replace with the Play Billing + server entitlement reader; until then
+     * nobody is Pro, so the intelligent-report action shows locked.
+     */
+    val entitlements: EntitlementReader = object : EntitlementReader {
+        override fun observeIsPro(): Flow<Boolean> = flowOf(false)
+    }
+
+    /** Progress screens: stats, entitlement, local-midnight ticker and the server-corrected clock in the device zone. */
+    val progressServices: ProgressServices = ProgressServices(
+        stats = statsRepository,
+        entitlements = entitlements,
+        ticks = DayRollover.ticks(syncClock::nowMillis, ZoneId::systemDefault),
+        now = syncClock::nowMillis,
+        zone = ZoneId::systemDefault,
+    )
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)

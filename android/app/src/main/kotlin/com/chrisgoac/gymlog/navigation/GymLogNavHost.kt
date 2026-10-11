@@ -94,12 +94,38 @@ import com.chrisgoac.gymlog.designsystem.component.HierroTabBar
 import com.chrisgoac.gymlog.designsystem.component.HierroText
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.R
+import androidx.lifecycle.createSavedStateHandle
+import com.chrisgoac.gymlog.domain.entitlement.EntitlementReader
+import com.chrisgoac.gymlog.domain.stats.GymFilter
+import com.chrisgoac.gymlog.domain.stats.StatsFilter
+import com.chrisgoac.gymlog.domain.stats.StatsRepository
+import com.chrisgoac.gymlog.domain.time.Period
+import com.chrisgoac.gymlog.progress.ExerciseProgressScreen
+import com.chrisgoac.gymlog.progress.ExerciseProgressViewModel
+import com.chrisgoac.gymlog.progress.ProgressClock
+import com.chrisgoac.gymlog.progress.ProgressScreen
+import com.chrisgoac.gymlog.progress.ProgressViewModel
+import java.time.ZoneId
 
 /** What the Settings routes need; null keeps them as smoke screens (shell tests). */
 class SettingsServices(val sync: SyncUseCases, val signOut: SignOutUseCase)
 
 /** What the history editor needs: the atomic save and the server-corrected clock (future-date check). */
 class HistoryEditServices(val save: SaveWorkoutDraftUseCase, val now: () -> Long)
+
+/**
+ * What the Progress routes need: derived statistics, the Pro entitlement (report action), the day-rollover
+ * ticker and the server-corrected clock + device zone the numbers are computed with.
+ */
+class ProgressServices(
+    val stats: StatsRepository,
+    val entitlements: EntitlementReader,
+    val ticks: Flow<Unit>,
+    val now: () -> Long,
+    val zone: () -> ZoneId,
+) {
+    fun clock(): ProgressClock = ProgressClock(now(), zone())
+}
 
 /** Five-tab shell. Route content is smoke-only except Settings; real feature screens replace it in later tasks. */
 @Composable
@@ -114,6 +140,7 @@ fun GymLogApp(
     finishWorkout: FinishWorkoutUseCase? = null,
     history: HistoryRepository? = null,
     historyEditing: HistoryEditServices? = null,
+    progress: ProgressServices? = null,
     syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
     onOpenWorkoutHandled: () -> Unit = {},
@@ -136,7 +163,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, syncState)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, syncState)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -171,6 +198,7 @@ private fun GymLogNavHost(
     finishWorkout: FinishWorkoutUseCase?,
     history: HistoryRepository?,
     historyEditing: HistoryEditServices?,
+    progress: ProgressServices?,
     syncState: Flow<SyncUiState>?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
@@ -333,7 +361,41 @@ private fun GymLogNavHost(
                 }
             }
             navigation<GymLogGraph.Progress>(startDestination = GymLogDestination.Progress) {
-                composable<GymLogDestination.Progress> { SmokeScreen(GymLogDestination.Progress, navController) }
+                composable<GymLogDestination.Progress> {
+                    if (progress == null || exercises == null || workouts == null) {
+                        SmokeScreen(GymLogDestination.Progress, navController)
+                    } else {
+                        val viewModel = viewModel {
+                            ProgressViewModel(
+                                progress.stats, workouts, exercises, progress.entitlements,
+                                createSavedStateHandle(), progress.ticks, progress::clock,
+                            )
+                        }
+                        ProgressScreen(
+                            viewModel = viewModel,
+                            onOpenExercise = { id, filter ->
+                                navController.navigate(GymLogDestination.ProgressExercise(id, filter.period.wire, filter.gym.gymId ?: GymFilter.ALL_WIRE))
+                            },
+                            // TODO(Plan 5): navigate to the intelligent report once it exists; null keeps the action disabled.
+                            onOpenReport = null,
+                        )
+                    }
+                }
+                composable<GymLogDestination.ProgressExercise> { entry ->
+                    val args = entry.toRoute<GymLogDestination.ProgressExercise>()
+                    if (progress == null || exercises == null || workouts == null) {
+                        SmokeScreen(GymLogDestination.Progress, navController, secondary = true)
+                    } else {
+                        val viewModel = viewModel(key = args.exerciseId) {
+                            ExerciseProgressViewModel(
+                                args.exerciseId, progress.stats, exercises, workouts,
+                                createSavedStateHandle(), progress.ticks, progress::clock,
+                                StatsFilter(Period.fromWire(args.period) ?: Period.THREE_MONTHS, GymFilter.fromWire(args.gym)),
+                            )
+                        }
+                        ExerciseProgressScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+                    }
+                }
             }
             navigation<GymLogGraph.History>(startDestination = GymLogDestination.History) {
                 composable<GymLogDestination.History> {
