@@ -172,10 +172,20 @@ class ExerciseScreensTest {
             ) { GymLogTheme { ExerciseDetailScreen(viewModel, onBack = {}, onEdit = {}, photos = photosViewModel("c1")) } }
         }
         waitForIdle()
-        onNodeWithText("Elegir de la galería").performScrollTo().assertExists()
-        onNodeWithText("Hacer una foto").performScrollTo().assertExists()
+        // With a photo already there, picking replaces it (one photo per exercise).
+        onNodeWithText("Cada ejercicio tiene una foto: la nueva sustituye a la actual.").performScrollTo().assertExists()
+        onNodeWithText("Cambiar foto desde la galería").performScrollTo().assertExists()
+        onNodeWithText("Cambiar foto con la cámara").performScrollTo().assertExists()
         onNodeWithContentDescription("Foto 1 de 2. Guardada en este dispositivo, pendiente de subir").performScrollTo().assertExists()
         onNodeWithContentDescription("Foto 2 de 2. Rechazada: la foto es demasiado grande").performScrollTo().assertExists()
+    }
+
+    @Test fun customDetailWithoutAPhotoOffersPickerAndCamera(): Unit = with(rule) {
+        val viewModel = ExerciseDetailViewModel(repository, "c1")
+        setContent { GymLogTheme { ExerciseDetailScreen(viewModel, onBack = {}, onEdit = {}, photos = photosViewModel("c1")) } }
+        waitForIdle()
+        onNodeWithText("Elegir de la galería").performScrollTo().assertExists()
+        onNodeWithText("Hacer una foto").performScrollTo().assertExists()
     }
 
     @Test fun aRefusedPhotoCanBeRetriedOrDiscardedAfterConfirming(): Unit = with(rule) {
