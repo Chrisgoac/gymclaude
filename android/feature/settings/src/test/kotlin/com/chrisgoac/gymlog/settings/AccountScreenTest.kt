@@ -94,7 +94,7 @@ class AccountScreenTest {
     private fun showAccount(): AccountViewModel {
         val vm = AccountViewModel(
             sync, signOut,
-            AccountDeletion({ "u" }, { _, fresh -> serverCalls += fresh; ServerDeletionOutcome.ReauthRequired }, { _, _ -> }),
+            AccountDeletion({ "u" }, { _, fresh -> serverCalls += fresh; ServerDeletionOutcome.ReauthRequired }, NoLocalDeletion),
             reauth, billing = null, online = online,
         )
         rule.setContent {
@@ -154,4 +154,10 @@ class AccountScreenTest {
         rule.onNodeWithText("correo de contacto del desarrollador", substring = true).performScrollTo().assertIsDisplayed()
         assertEquals(listOf(links.privacyPolicy, links.subscriptions(), links.accountDeletion), opened)
     }
+}
+
+private object NoLocalDeletion : com.chrisgoac.gymlog.domain.account.LocalAccountDeletion {
+    override suspend fun intend(userId: String) = Unit
+    override suspend fun withdraw(userId: String) = Unit
+    override suspend fun begin(userId: String, subscription: com.chrisgoac.gymlog.domain.account.LiveSubscription?) = Unit
 }

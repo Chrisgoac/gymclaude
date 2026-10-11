@@ -37,8 +37,12 @@ sealed interface RootState {
      */
     data class DeletingAccount(val failed: Boolean) : RootState
 
-    /** The account and its local data are gone; [subscription] is a Play subscription still to cancel in Play. */
-    data class AccountDeleted(val subscription: LiveSubscription?) : RootState
+    /**
+     * The account and its local data are gone; [subscription] is a Play subscription still to cancel in Play.
+     * [serverConfirmed] false: the server never confirmed the request (its answer was lost and the session then
+     * ended), so the user is pointed to the web page to make sure it is complete.
+     */
+    data class AccountDeleted(val subscription: LiveSubscription?, val serverConfirmed: Boolean = true) : RootState
 
     /**
      * Cannot continue: `config` (no publishable key) or `bootstrap`. [canRetry] is true when the
@@ -78,6 +82,8 @@ class RootStateMachine(
     private val startupGate: suspend () -> Unit = {},
     /** The device side of an account deletion; overrides the auth state until it is [AccountDeletionStatus.None]. */
     private val deletion: StateFlow<AccountDeletionStatus> = MutableStateFlow(AccountDeletionStatus.None),
+    /** An account wiped by this process whose session the provider restored late: never opened again (it is signed out). */
+    private val isDeletedAccount: (userId: String) -> Boolean = { false },
 ) {
     private val mutableState = MutableStateFlow<RootState>(if (configured) RootState.Loading else RootState.Fatal(CONFIG))
     val state: StateFlow<RootState> = mutableState.asStateFlow()
@@ -105,7 +111,7 @@ class RootStateMachine(
         mutableState.value = when (status) {
             AccountDeletionStatus.Running -> RootState.DeletingAccount(failed = false)
             AccountDeletionStatus.Failed -> RootState.DeletingAccount(failed = true)
-            is AccountDeletionStatus.Done -> RootState.AccountDeleted(status.subscription)
+            is AccountDeletionStatus.Done -> RootState.AccountDeleted(status.subscription, status.serverConfirmed)
             AccountDeletionStatus.None -> error("not a deletion state")
         }
     }
@@ -128,6 +134,13 @@ class RootStateMachine(
     }
 
     private suspend fun onSignedIn(userId: String) {
+        if (isDeletedAccount(userId)) {
+            cancelBootstrap()
+            bootstrappedUserId = null
+            databases.close()
+            mutableState.value = RootState.SignedOut
+            return
+        }
         val openUserId = databases.current.value?.userId
         if (openUserId != null && openUserId != userId) {
             cancelBootstrap()

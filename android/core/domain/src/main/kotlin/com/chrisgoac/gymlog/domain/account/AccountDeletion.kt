@@ -1,5 +1,6 @@
 package com.chrisgoac.gymlog.domain.account
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
@@ -35,11 +36,16 @@ fun interface AccountDeletionServer {
 }
 
 /**
- * The device side of a deletion the server accepted: durably remembers it (so the app never returns to the
- * product, even after process death), stops the account's work, ends the session and removes every local
- * file of that account. Implemented in `:app`.
+ * The device side of an account deletion. Implemented in `:app`.
+ * - [intend]: durably records, BEFORE the request is sent, that a deletion may be accepted by the server
+ *   (an answer can be lost). An intent alone never wipes anything; later evidence resolves it.
+ * - [withdraw]: the server definitively did not accept it (nothing was locked).
+ * - [begin]: the server accepted it: durably remembers it (the app never returns to the product, even after
+ *   process death), stops the account's work, ends the session and removes every local file of that account.
  */
-fun interface LocalAccountDeletion {
+interface LocalAccountDeletion {
+    suspend fun intend(userId: String)
+    suspend fun withdraw(userId: String)
     suspend fun begin(userId: String, subscription: LiveSubscription?)
 }
 
@@ -68,16 +74,40 @@ class AccountDeletion(
     suspend fun request(typedConfirmation: String, afterReauth: Boolean = false): AccountDeletionOutcome {
         if (typedConfirmation.trim() != CONFIRMATION) return AccountDeletionOutcome.ConfirmationMismatch
         val userId = currentUserId() ?: return AccountDeletionOutcome.SessionEnded
-        return when (val answer = server.requestDeletion(userId, freshToken = afterReauth)) {
-            is ServerDeletionOutcome.Accepted -> {
-                // Once the server holds the deletion there is no way back: finish locally even if the screen goes away.
-                withContext(NonCancellable) { local.begin(userId, answer.subscription) }
-                AccountDeletionOutcome.Started
+        // Recorded before sending: if the answer is lost, the device still knows the server may hold a deletion.
+        try {
+            local.intend(userId)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return AccountDeletionOutcome.Failed(retryable = true) // nothing was sent
+        }
+        val answer = server.requestDeletion(userId, freshToken = afterReauth)
+        return withContext(NonCancellable) {
+            when (answer) {
+                is ServerDeletionOutcome.Accepted -> {
+                    // Once the server holds the deletion there is no way back: finish locally even if the screen goes away.
+                    local.begin(userId, answer.subscription)
+                    AccountDeletionOutcome.Started
+                }
+                // Definitive refusals: nothing was locked on the server.
+                ServerDeletionOutcome.ReauthRequired -> AccountDeletionOutcome.ReauthRequired.also { withdrawQuietly(userId) }
+                ServerDeletionOutcome.SessionEnded -> AccountDeletionOutcome.SessionEnded.also { withdrawQuietly(userId) }
+                is ServerDeletionOutcome.Failed -> {
+                    if (!answer.retryable) withdrawQuietly(userId) // a retryable failure may have locked it: keep the intent
+                    AccountDeletionOutcome.Failed(answer.retryable)
+                }
+                // Ambiguous (the request may have arrived): the intent stays until evidence resolves it.
+                ServerDeletionOutcome.Offline -> AccountDeletionOutcome.Offline
             }
-            ServerDeletionOutcome.ReauthRequired -> AccountDeletionOutcome.ReauthRequired
-            ServerDeletionOutcome.Offline -> AccountDeletionOutcome.Offline
-            ServerDeletionOutcome.SessionEnded -> AccountDeletionOutcome.SessionEnded
-            is ServerDeletionOutcome.Failed -> AccountDeletionOutcome.Failed(answer.retryable)
+        }
+    }
+
+    /** A leftover intent is harmless (later evidence clears it), so a failure to clear it is not reported. */
+    private suspend fun withdrawQuietly(userId: String) {
+        try {
+            local.withdraw(userId)
+        } catch (_: Exception) {
         }
     }
 

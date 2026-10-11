@@ -23,12 +23,12 @@ class AccountApiTest {
     private class FakeAuth : AuthSessionProvider {
         override val state = MutableStateFlow<AuthState>(AuthState.SignedIn(USER))
         val refreshes = mutableListOf<Boolean>()
-        val deleting = mutableListOf<String>()
+        val signals = mutableListOf<Pair<String, AccountSignal>>()
         override suspend fun accessToken(expectedUserId: String, forceRefresh: Boolean): String? {
             refreshes += forceRefresh
             return if (expectedUserId != USER) null else "tok"
         }
-        override fun onAccountDeleting(userId: String) { deleting += userId }
+        override fun onAccountSignal(userId: String, signal: AccountSignal) { signals += userId to signal }
     }
 
     private val auth = FakeAuth()
@@ -76,6 +76,7 @@ class AccountApiTest {
         assertEquals(true, result.activeSubscription?.willRenew)
         assertEquals(1798761600000L, result.activeSubscription?.validUntil)
         assertEquals(listOf(false), auth.refreshes)
+        assertTrue("a 2xx of the delete route is not an 'account active' signal", auth.signals.isEmpty())
     }
 
     @Test
@@ -102,7 +103,7 @@ class AccountApiTest {
             assertEquals(403, e.httpStatus)
             assertEquals("REAUTH_REQUIRED", e.rawCode)
         }
-        assertTrue(auth.deleting.isEmpty())
+        assertTrue(auth.signals.isEmpty())
     }
 
     @Test
@@ -120,7 +121,33 @@ class AccountApiTest {
             assertEquals("ACCOUNT_DELETING", e.rawCode)
             assertFalse(e.retryable)
         }
-        assertEquals(listOf(USER), auth.deleting)
+        assertEquals(listOf(USER to AccountSignal.DELETING), auth.signals)
+    }
+
+    @Test
+    fun aSuccessfulOrdinaryCallReportsTheAccountActive() = runTest {
+        val billing = BillingApiImpl(
+            engine(mutableListOf(), mutableListOf()) {
+                respond("""{"tier":"FREE","productId":null,"state":"NONE","validUntil":null,"serverTime":5}""", HttpStatusCode.OK, json)
+            },
+            "https://example.test/", auth, ServerClock(), requestIdFactory = { "req-1" },
+        )
+        billing.entitlement(USER)
+        assertEquals(listOf(USER to AccountSignal.ACTIVE), auth.signals)
+    }
+
+    @Test
+    fun aRejectedActiveSessionIsReported() = runTest {
+        val billing = BillingApiImpl(
+            engine(mutableListOf(), mutableListOf()) { respond("", HttpStatusCode.Unauthorized, json) },
+            "https://example.test/", auth, ServerClock(), requestIdFactory = { "req-1" },
+        )
+        try {
+            billing.entitlement(USER)
+            fail("expected a session failure")
+        } catch (_: SyncApiException.SessionRejected) {
+        }
+        assertEquals(listOf(USER to AccountSignal.SESSION_REJECTED), auth.signals)
     }
 
     private companion object {

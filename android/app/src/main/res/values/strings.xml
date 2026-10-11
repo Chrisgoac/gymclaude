@@ -43,6 +43,8 @@
     <string name="root_deleting_failed_message">Tu cuenta ya se está eliminando en el servidor, pero quedan datos en este dispositivo. Vuelve a intentarlo; no podrás usar la app hasta que terminen de borrarse.</string>
     <string name="root_deleted_title">Cuenta eliminada</string>
     <string name="root_deleted_message">Tu cuenta y sus datos se han borrado de este dispositivo. En el servidor se completa en minutos.</string>
+    <string name="root_deleted_unconfirmed_message">Hemos borrado los datos de tu cuenta de este dispositivo. No pudimos confirmar que la solicitud de eliminación llegara al servidor: compruébalo o complétala desde la web.</string>
+    <string name="root_deleted_web">Abrir la página de eliminación de cuenta</string>
     <string name="root_deleted_subscription">Tu suscripción de GymLog Pro en Google Play sigue activa y se renovará: eliminar la cuenta no la cancela. Cancélala en Google Play.</string>
     <string name="root_deleted_manage">Cancelar en Google Play</string>
     <string name="root_deleted_continue">Continuar</string>

@@ -13,6 +13,7 @@ import com.chrisgoac.gymlog.domain.auth.ReauthGateway
 import com.chrisgoac.gymlog.domain.auth.ReauthStep
 import com.chrisgoac.gymlog.domain.billing.BillingRepository
 import com.chrisgoac.gymlog.domain.billing.SubscriptionState
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -89,6 +90,10 @@ data class AccountUiState(
     val canDelete: Boolean
         get() = online && confirmation.trim() == AccountDeletion.CONFIRMATION &&
             (deletion is DeletionPhase.Idle || deletion is DeletionPhase.Failed)
+
+    /** No sign-out while a deletion request is in flight or accepted: it would race the deletion's own cleanup. */
+    val canSignOut: Boolean
+        get() = deletion != DeletionPhase.Working && deletion != DeletionPhase.Started
 }
 
 /**
@@ -106,6 +111,7 @@ class AccountViewModel(
     private val syncWaitMillis: Long = SYNC_WAIT_MILLIS,
 ) : ViewModel() {
     private val local = MutableStateFlow(AccountUiState())
+    private var syncThenSignOut: Job? = null
 
     val state: StateFlow<AccountUiState> = combine(
         local,
@@ -137,9 +143,9 @@ class AccountViewModel(
      * disabled offline). If changes remain (offline, rejected, session problem) the decision is offered again.
      */
     fun syncNowThenSignOut() {
-        if (local.value.signOut !is SignOutPhase.Confirm || !state.value.online) return
+        if (local.value.signOut !is SignOutPhase.Confirm || !state.value.online || !local.value.canSignOut) return
         setSignOut(SignOutPhase.Syncing)
-        viewModelScope.launch {
+        syncThenSignOut = viewModelScope.launch {
             signOutUseCase.cancel() // resumes triggers and asks for a sync
             var sawRun = false
             withTimeoutOrNull(syncWaitMillis) {
@@ -156,11 +162,22 @@ class AccountViewModel(
         }
     }
 
-    /** The account screens went away: an unanswered confirmation is dropped and sync resumes. */
+    /**
+     * The account screens went away: an unanswered confirmation is dropped and sync resumes; a "sync now, then
+     * sign out" still waiting stops waiting (the user did not watch it finish, so it never signs out behind them).
+     */
     fun onAccountLeft() {
-        if (local.value.signOut is SignOutPhase.Confirm) {
-            signOutUseCase.abandon()
-            setSignOut(SignOutPhase.Idle)
+        when (local.value.signOut) {
+            is SignOutPhase.Confirm -> {
+                signOutUseCase.abandon()
+                setSignOut(SignOutPhase.Idle)
+            }
+            SignOutPhase.Syncing -> {
+                syncThenSignOut?.cancel()
+                syncThenSignOut = null
+                setSignOut(SignOutPhase.Idle) // triggers were already resumed by "sync now"
+            }
+            else -> Unit
         }
     }
 
@@ -170,7 +187,7 @@ class AccountViewModel(
 
     private fun runSignOut(action: suspend () -> SignOutOutcome) {
         val phase = local.value.signOut
-        if (phase == SignOutPhase.Working || phase == SignOutPhase.Syncing) return
+        if (phase == SignOutPhase.Working || phase == SignOutPhase.Syncing || !local.value.canSignOut) return
         setSignOut(SignOutPhase.Working)
         viewModelScope.launch {
             setSignOut(
@@ -251,7 +268,10 @@ class AccountViewModel(
                 ReauthStep.Completed -> requestDeletion(afterReauth = true)
                 ReauthStep.CodeSent -> setDeletion(current.copy(codeSent = true, failure = null))
                 is ReauthStep.Choose -> setDeletion(current.copy(failure = null))
-                is ReauthStep.Failed -> setDeletion(current.copy(failure = step.reason))
+                // A step this app cannot do (second factor, another account's session): the web page can.
+                is ReauthStep.Failed ->
+                    if (step.reason == AuthFailure.Unsupported) setDeletion(DeletionPhase.ReauthUnavailable)
+                    else setDeletion(current.copy(failure = step.reason))
             }
         }
     }

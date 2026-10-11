@@ -13,6 +13,8 @@ import com.chrisgoac.gymlog.domain.account.AccountDeletion
 import com.chrisgoac.gymlog.domain.auth.AuthStep
 import com.chrisgoac.gymlog.navigation.AccountServices
 import com.chrisgoac.gymlog.network.createAccountApi
+import com.chrisgoac.gymlog.network.AccountSignal
+import com.chrisgoac.gymlog.domain.LocalAccountCleaner
 import com.chrisgoac.gymlog.settings.AccountLinks
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
 import com.chrisgoac.gymlog.data.achievement.OfflineAchievementRepository
@@ -207,13 +209,14 @@ class AppContainer(private val application: Application) {
     private val clerkSession: ClerkAuthSessionProvider? = if (clerkConfigured) ClerkAuthSessionProvider(appScope) else null
 
     /**
-     * The session every API client uses. A `403 ACCOUNT_DELETING` from any route starts the local side of the
-     * deletion, but only for the account that is still signed in (a stale request of a previous account is ignored).
+     * The session every API client uses. What answers reveal about the account (`ACCOUNT_DELETING`, an ordinary 2xx,
+     * a rejected session) goes to [accountDeletion], only for the account that is still signed in (a stale request
+     * of a previous account is ignored).
      */
     val authSession: AuthSessionProvider = clerkSession?.let { clerk ->
         object : AuthSessionProvider by clerk {
-            override fun onAccountDeleting(userId: String) {
-                if (clerk.state.value == AuthState.SignedIn(userId)) accountDeletion.onAccountDeleting(userId)
+            override fun onAccountSignal(userId: String, signal: AccountSignal) {
+                if (clerk.state.value == AuthState.SignedIn(userId)) accountDeletion.onAccountSignal(userId, signal)
             }
         }
     } ?: UnconfiguredAuthSession
@@ -495,7 +498,9 @@ class AppContainer(private val application: Application) {
                 syncScheduler.cancelForHash(hash)
                 mediaScheduler.cancelAll(hash)
             },
-            endSession = { authGateway.signOut() == AuthStep.Completed },
+            auth = authSession.state,
+            identityReady = { clerkConfigured && Clerk.isInitialized.value },
+            signOut = { authGateway.signOut() == AuthStep.Completed },
             wipe = accountCleaner::deleteAccountData,
             scope = appScope,
         )
@@ -509,9 +514,10 @@ class AppContainer(private val application: Application) {
         authSession, databases, bootstrapRunner, appScope, clerkConfigured,
         startupGate = {
             startupSweep.await()
-            if (clerkConfigured) accountDeletion.resumePending()
+            if (clerkConfigured) accountDeletion.start()
         },
         deletion = accountDeletion.status,
+        isDeletedAccount = accountDeletion::isWiped,
     ).also { it.start() }
 
     /**
@@ -561,7 +567,14 @@ class AppContainer(private val application: Application) {
         SignOutUseCase(
             currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId },
             scheduler = syncScheduler,
-            cleaner = accountCleaner,
+            // A deliberate sign-out first withdraws any unconfirmed deletion intent of the account (its data goes
+            // with the sign-out anyway), so the session ending is not read as evidence of a deletion.
+            cleaner = object : LocalAccountCleaner by accountCleaner {
+                override suspend fun markPendingDeletion(userId: String) {
+                    accountDeletion.withdraw(userId)
+                    accountCleaner.markPendingDeletion(userId)
+                }
+            },
             auth = authGateway,
         )
     }
@@ -577,7 +590,7 @@ class AppContainer(private val application: Application) {
                 account = AccountServices(
                     deletion = AccountDeletion(
                         currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId },
-                        server = ServerAccountDeletion(createAccountApi(BuildConfig.API_BASE_URL, authSession, serverClock)),
+                        server = ServerAccountDeletion(createAccountApi(BuildConfig.API_BASE_URL, authSession, serverClock), billing::managementUri),
                         local = accountDeletion,
                     ),
                     reauth = ClerkReauthGateway(currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId }),

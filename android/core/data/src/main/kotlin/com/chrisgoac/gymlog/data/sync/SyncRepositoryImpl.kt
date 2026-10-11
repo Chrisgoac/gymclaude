@@ -105,6 +105,9 @@ class SyncRepositoryImpl(
         // Another account is open now (switch after the run was scheduled): never touch its database.
         if (open.userId != userId) return SyncResult.Failed(ACCOUNT_MISMATCH, quarantined = 0)
         return locks.forUser(open.userId).withLock {
+            // Re-checked under the lock: a sign-out or account deletion may have closed and deleted this database
+            // while the run waited (a closed Room database would silently reopen, recreating the files).
+            if (databases.current.value?.database !== open.database) return@withLock SyncResult.SessionRequired(quarantined = 0)
             runningUsers.update { it + open.userId }
             val run = RunCounters()
             try {

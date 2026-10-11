@@ -31,13 +31,15 @@ internal class AuthorizedCalls(
      * A 401/403 that persists is [SyncApiException.SessionRejected] while the identity provider still
      * holds an active session for [expectedUserId], otherwise [SyncApiException.SessionRequired].
      * [freshToken] skips the token cache from the first attempt (e.g. right after a reverification, whose
-     * new factor age only a newly minted token carries).
+     * new factor age only a newly minted token carries). [reportsActivity] false: a 2xx is NOT an
+     * [AccountSignal.ACTIVE] (the account-deletion route itself answers 2xx while locking the account).
      */
     suspend fun <T> execute(
         expectedUserId: String,
         configure: HttpRequestBuilder.() -> Unit,
         decode: (String) -> T,
         freshToken: Boolean = false,
+        reportsActivity: Boolean = true,
     ): T {
         var sent = send(expectedUserId, forceRefresh = freshToken, configure)
         if (sent.response.status.value == HTTP_UNAUTHORIZED) {
@@ -53,6 +55,7 @@ internal class AuthorizedCalls(
         }
         // 401/403 → session problem, except a 403 with a route-level code (e.g. PRO_REQUIRED), as in [stream].
         if (response.status.value !in 200..299) throw failure(expectedUserId, response, text, sent.requestId)
+        if (reportsActivity) auth.onAccountSignal(expectedUserId, AccountSignal.ACTIVE)
         return try {
             decode(text)
         } catch (e: SerializationException) {
@@ -118,7 +121,10 @@ internal class AuthorizedCalls(
                     when {
                         status == HTTP_UNAUTHORIZED && !forceRefresh -> StreamOutcome.RetryWithFreshToken
                         status !in 200..299 -> throw failure(expectedUserId, response, response.bodyAsText(), requestId)
-                        else -> StreamOutcome.Done(consume(response))
+                        else -> {
+                            auth.onAccountSignal(expectedUserId, AccountSignal.ACTIVE)
+                            StreamOutcome.Done(consume(response))
+                        }
                     }
                 }
             } catch (e: CancellationException) {
@@ -151,11 +157,12 @@ internal class AuthorizedCalls(
         val reqId = response.headers["x-request-id"] ?: requestId
         if (status == HTTP_FORBIDDEN) {
             val routeError = NetworkErrorMapper.mapApiError(status, retryAfter, text, reqId)
-            if (routeError.rawCode == AccountWire.ACCOUNT_DELETING) auth.onAccountDeleting(expectedUserId)
+            if (routeError.rawCode == AccountWire.ACCOUNT_DELETING) auth.onAccountSignal(expectedUserId, AccountSignal.DELETING)
             if (routeError.rawCode in ROUTE_FORBIDDEN_CODES) return routeError
         }
         if (status == HTTP_UNAUTHORIZED || status == HTTP_FORBIDDEN) {
             return if (auth.state.value == AuthState.SignedIn(expectedUserId)) {
+                auth.onAccountSignal(expectedUserId, AccountSignal.SESSION_REJECTED)
                 SyncApiException.SessionRejected("HTTP $status with an active session")
             } else {
                 SyncApiException.SessionRequired("HTTP $status")

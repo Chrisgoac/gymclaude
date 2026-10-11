@@ -9,6 +9,7 @@ import com.chrisgoac.gymlog.domain.SyncStatus
 import com.chrisgoac.gymlog.domain.SyncUseCases
 import com.chrisgoac.gymlog.domain.account.AccountDeletion
 import com.chrisgoac.gymlog.domain.account.LiveSubscription
+import com.chrisgoac.gymlog.domain.account.LocalAccountDeletion
 import com.chrisgoac.gymlog.domain.account.ServerDeletionOutcome
 import com.chrisgoac.gymlog.domain.auth.AuthFailure
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
@@ -95,14 +96,24 @@ class AccountViewModelTest {
     private val serverAnswers = ArrayDeque<ServerDeletionOutcome>()
     private val serverCalls = mutableListOf<Boolean>() // freshToken per call
     private val begun = mutableListOf<Pair<String, LiveSubscription?>>()
+    private val intents = mutableSetOf<String>()
+    private var serverGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     private val deletion = AccountDeletion(
         currentUserId = { USER },
         server = { userId, fresh ->
             assertEquals(USER, userId)
             serverCalls += fresh
+            serverGate?.await()
             serverAnswers.removeFirst()
         },
-        local = { userId, subscription -> begun += userId to subscription },
+        local = object : LocalAccountDeletion {
+            override suspend fun intend(userId: String) { intents += userId }
+            override suspend fun withdraw(userId: String) { intents -= userId }
+            override suspend fun begin(userId: String, subscription: LiveSubscription?) {
+                intents -= userId
+                begun += userId to subscription
+            }
+        },
     )
 
     private val reauthSteps = ArrayDeque<ReauthStep>()
@@ -238,6 +249,70 @@ class AccountViewModelTest {
         signOutFlowTo(vm) { syncNowThenSignOut() }
         assertEquals(SignOutPhase.Confirm(2), vm.state.value.signOut)
         assertEquals(listOf("suspend"), events)
+    }
+
+    @Test fun `leaving while sync now waits never signs out behind the user`() = runTest(dispatcher) {
+        unsynced = 1
+        status.value = SyncStatus(false, 1, 0, true, null)
+        val vm = viewModel()
+        signOutFlowTo(vm) { signOut() }
+        vm.syncNowThenSignOut()
+        runCurrent()
+        vm.onAccountLeft()
+        unsynced = 0
+        status.value = SyncStatus(false, 0, 0, true, SyncResult.Success(1, 0, 0))
+        advanceUntilIdle()
+        assertEquals(SignOutPhase.Idle, vm.state.value.signOut)
+        assertFalse(events.contains("signOut"))
+    }
+
+    @Test fun `sign-out is blocked while a deletion request is in flight`() = runTest(dispatcher) {
+        serverGate = kotlinx.coroutines.CompletableDeferred()
+        serverAnswers += ServerDeletionOutcome.Accepted(completed = true, subscription = null)
+        val vm = viewModel()
+        vm.onConfirmationChanged("ELIMINAR")
+        vm.deleteAccount()
+        advanceUntilIdle()
+        assertEquals(DeletionPhase.Working, vm.state.value.deletion)
+        assertFalse(vm.state.value.canSignOut)
+
+        vm.signOut()
+        advanceUntilIdle()
+        assertTrue(events.isEmpty())
+
+        serverGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(DeletionPhase.Started, vm.state.value.deletion)
+        assertFalse(vm.state.value.canSignOut)
+    }
+
+    @Test fun `a second factor during reverification sends the user to the web page`() = runTest(dispatcher) {
+        serverAnswers += ServerDeletionOutcome.ReauthRequired
+        reauthSteps += ReauthStep.Choose(password = true, emailCodeTo = null)
+        reauthSteps += ReauthStep.Failed(AuthFailure.Unsupported)
+        val vm = viewModel()
+        vm.onConfirmationChanged("ELIMINAR")
+        vm.deleteAccount()
+        advanceUntilIdle()
+        vm.verifyReauthPassword("right")
+        advanceUntilIdle()
+        assertEquals(DeletionPhase.ReauthUnavailable, vm.state.value.deletion)
+        assertTrue(begun.isEmpty())
+    }
+
+    @Test fun `an offline answer keeps the deletion intent and a reauth request clears it`() = runTest(dispatcher) {
+        serverAnswers += ServerDeletionOutcome.Offline
+        serverAnswers += ServerDeletionOutcome.ReauthRequired
+        reauthSteps += ReauthStep.Choose(password = true, emailCodeTo = null)
+        val vm = viewModel()
+        vm.onConfirmationChanged("ELIMINAR")
+        vm.deleteAccount()
+        advanceUntilIdle()
+        assertEquals(setOf(USER), intents)
+
+        vm.deleteAccount()
+        advanceUntilIdle()
+        assertTrue(intents.isEmpty())
     }
 
     @Test fun `leaving the account screens while asking keeps everything`() = runTest(dispatcher) {

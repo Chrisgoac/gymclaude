@@ -72,6 +72,17 @@ class RootStateMachineDeletionTest {
         assertTrue(bootstrap.runs.isEmpty())
     }
 
+    @Test fun `a wiped account whose session comes back is never opened again`() = runTest(UnconfinedTestDispatcher()) {
+        val machine = RootStateMachine(
+            auth, databases, bootstrap, backgroundScope, true,
+            deletion = deletion, isDeletedAccount = { it == USER },
+        ).also { it.start() }
+        auth.state.value = AuthState.SignedIn(USER)
+        assertEquals(RootState.SignedOut, machine.state.value)
+        assertNull(databases.current.value)
+        assertTrue(bootstrap.runs.isEmpty())
+    }
+
     private companion object {
         const val USER = "user_deleting"
     }

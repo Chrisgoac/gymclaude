@@ -65,6 +65,8 @@ fun GymLogRoot(
     onRetryDeletion: () -> Unit = {},
     onDeletionAcknowledged: () -> Unit = {},
     onOpenUri: (String) -> Unit = {},
+    /** Public account-deletion page, offered when the server never confirmed a deletion. */
+    accountDeletionUrl: String? = null,
     settings: SettingsServices? = null,
     exercises: ExerciseRepository? = null,
     routines: RoutineRepository? = null,
@@ -128,7 +130,13 @@ fun GymLogRoot(
         is RootState.AccountDeleted -> CenteredStatus {
             HierroCard {
                 HierroText(stringResource(R.string.root_deleted_title).uppercase(), style = HierroTheme.typography.title)
-                HierroText(stringResource(R.string.root_deleted_message), color = HierroTheme.colors.textMuted)
+                HierroText(
+                    stringResource(if (state.serverConfirmed) R.string.root_deleted_message else R.string.root_deleted_unconfirmed_message),
+                    color = HierroTheme.colors.textMuted,
+                )
+                if (!state.serverConfirmed && accountDeletionUrl != null) {
+                    HierroButton(stringResource(R.string.root_deleted_web), { onOpenUri(accountDeletionUrl) }, variant = HierroButtonVariant.Secondary)
+                }
                 val subscription = state.subscription?.takeIf { it.willRenew }
                 if (subscription != null) {
                     HierroText(stringResource(R.string.root_deleted_subscription), color = HierroTheme.colors.error)

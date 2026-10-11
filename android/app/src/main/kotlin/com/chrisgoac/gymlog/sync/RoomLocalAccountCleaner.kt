@@ -55,10 +55,24 @@ class RoomLocalAccountCleaner(
 
     /**
      * Account deletion: removes everything local of the account [hash] (database, private files, caches and the
-     * per-account stores released by [onLocalDataDeleted]) and any sign-out mark it had. Only the hash is known
-     * after process death; the caller has already stopped the account's work and ended its session.
+     * per-account stores released by [onLocalDataDeleted]) and any sign-out mark it had. The caller has already
+     * stopped the account's work and ended its session.
+     *
+     * With [userId] (deletion started in this process) it waits for the account's sync lock first, like
+     * [deleteLocalData]: an in-flight sync, bootstrap or photo run holds it, and every one of them re-checks
+     * under that lock that the account's database is still the open one before writing, so once the database
+     * is closed and deleted here nothing can recreate its files. Without [userId] (resumed after process death)
+     * no work of the account has run in this process: the root never became Ready for it.
      */
-    suspend fun deleteAccountData(hash: String) {
+    suspend fun deleteAccountData(hash: String, userId: String?) {
+        if (userId != null) {
+            locks.forUser(userId).withLock { wipe(hash) }
+        } else {
+            wipe(hash)
+        }
+    }
+
+    private suspend fun wipe(hash: String) {
         deleteByHash(hash)
         marks.clear(hash)
     }

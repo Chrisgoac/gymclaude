@@ -22,8 +22,20 @@ interface AuthSessionProvider {
     suspend fun accessToken(expectedUserId: String, forceRefresh: Boolean = false): String?
 
     /**
-     * A v1 route answered `403 ACCOUNT_DELETING` for [userId]: the server has started deleting that account.
-     * The app stops using it and removes its local data. Called from any API client, on any thread.
+     * What a v1 answer revealed about [userId]'s account (see [AccountSignal]). Called from every API client,
+     * on any thread, after the response; implementations must return quickly.
      */
-    fun onAccountDeleting(userId: String) {}
+    fun onAccountSignal(userId: String, signal: AccountSignal) {}
+}
+
+/** Facts about an account learned from v1 answers, used to resolve an unconfirmed account deletion. */
+enum class AccountSignal {
+    /** A 2xx from an ordinary route: the account is not locked for deletion. */
+    ACTIVE,
+
+    /** `403 ACCOUNT_DELETING`: the server has started deleting the account. */
+    DELETING,
+
+    /** 401/403 even with a fresh token while the identity provider still holds the session. */
+    SESSION_REJECTED,
 }

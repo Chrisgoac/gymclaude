@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
                     onRetryDeletion = container.accountDeletion::retry,
                     onDeletionAcknowledged = container.accountDeletion::acknowledge,
                     onOpenUri = { uri -> openExternalUri(this, uri) },
+                    accountDeletionUrl = BuildConfig.ACCOUNT_DELETION_URL,
                     settings = container.settingsServices,
                     exercises = container.exerciseRepository,
                     routines = container.routineRepository,

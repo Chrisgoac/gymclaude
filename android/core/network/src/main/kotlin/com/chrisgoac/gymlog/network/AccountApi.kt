@@ -43,6 +43,7 @@ class AccountApiImpl internal constructor(
             },
             decode = { ResponseJson.decodeFromString(DeleteAccountResponseDto.serializer(), it) },
             freshToken = freshToken,
+            reportsActivity = false, // a 2xx here means "deletion started", never "account active"
         )
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -64,9 +65,9 @@ private fun SignOutCard(state: AccountUiState, viewModel: AccountViewModel) {
                 HierroText(pluralStringResource(R.plurals.settings_sign_out_confirm_message, phase.unsyncedChanges, phase.unsyncedChanges))
                 if (phase.syncFailed) HierroText(stringResource(R.string.settings_sign_out_sync_failed), color = HierroTheme.colors.error)
                 if (!state.online) HierroText(stringResource(R.string.settings_sign_out_offline), color = HierroTheme.colors.textMuted)
-                HierroButton(stringResource(R.string.settings_sign_out_sync_now), viewModel::syncNowThenSignOut, Modifier.fillMaxWidth(), enabled = state.online)
+                HierroButton(stringResource(R.string.settings_sign_out_sync_now), viewModel::syncNowThenSignOut, Modifier.fillMaxWidth(), enabled = state.online && state.canSignOut)
                 HierroButton(stringResource(R.string.settings_sign_out_keep), viewModel::staySignedIn, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
-                HierroButton(stringResource(R.string.settings_sign_out_discard), viewModel::confirmDiscard, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Destructive)
+                HierroButton(stringResource(R.string.settings_sign_out_discard), viewModel::confirmDiscard, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Destructive, enabled = state.canSignOut)
             }
             SignOutPhase.Syncing -> {
                 HierroText(stringResource(R.string.settings_sign_out_syncing))
@@ -79,6 +80,7 @@ private fun SignOutCard(state: AccountUiState, viewModel: AccountViewModel) {
                     viewModel::signOut,
                     Modifier.fillMaxWidth(),
                     variant = HierroButtonVariant.Secondary,
+                    enabled = state.canSignOut,
                     loading = phase == SignOutPhase.Working,
                 )
             }
@@ -158,7 +160,8 @@ private fun ConfirmationForm(state: AccountUiState, viewModel: AccountViewModel,
 
 @Composable
 private fun ReauthForm(phase: DeletionPhase.Reauth, viewModel: AccountViewModel) {
-    var password by rememberSaveable { mutableStateOf("") }
+    // Not saveable: a password must never land in the saved-instance state written on process death.
+    var password by remember { mutableStateOf("") }
     var code by rememberSaveable { mutableStateOf("") }
     HierroText(stringResource(R.string.settings_delete_reauth_title).uppercase(), style = HierroTheme.typography.label)
     HierroText(stringResource(R.string.settings_delete_reauth_message))
