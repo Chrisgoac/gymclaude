@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.chrisgoac.gymlog.domain.exercise.Equipment
 import com.chrisgoac.gymlog.domain.exercise.MuscleGroup
-import com.chrisgoac.gymlog.domain.math.WeightUnit
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
 import com.chrisgoac.gymlog.domain.settings.DeviceSettings
 import com.chrisgoac.gymlog.domain.settings.DeviceSettingsRepository
@@ -77,7 +76,6 @@ class TrainingSettingsViewModel(
 
     fun setTheme(theme: ThemeMode) = write { device.setTheme(theme) }
 
-    fun setWeightUnit(unit: WeightUnit) = write { device.setWeightUnit(unit) }
 
     /** Moves routine [id] one place up (-1) or down (+1); this is the order the rotation follows. */
     fun moveRoutine(id: String, delta: Int) {

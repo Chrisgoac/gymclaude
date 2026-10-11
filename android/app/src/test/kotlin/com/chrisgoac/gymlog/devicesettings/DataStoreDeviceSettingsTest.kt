@@ -2,6 +2,8 @@ package com.chrisgoac.gymlog.devicesettings
 
 import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chrisgoac.gymlog.data.settings.OfflineSettingsRepository
@@ -9,7 +11,6 @@ import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.OpenUserDatabase
 import com.chrisgoac.gymlog.database.RoomLocalMutationRunner
 import com.chrisgoac.gymlog.database.UserDatabaseManager
-import com.chrisgoac.gymlog.domain.math.WeightUnit
 import com.chrisgoac.gymlog.domain.settings.DeviceSettings
 import com.chrisgoac.gymlog.domain.settings.NotificationChoice
 import com.chrisgoac.gymlog.domain.settings.ThemeMode
@@ -53,11 +54,20 @@ class DataStoreDeviceSettingsTest {
         return DataStoreDeviceSettings(device, stores, user) to stores
     }
 
+    @Test fun `a weight unit stored by an earlier build is ignored`() = runTest {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO).also { scopes += it }
+        val legacy = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "device_settings.preferences_pb") }
+        legacy.edit { it[stringPreferencesKey("weightUnit")] = "lb" }
+        scope.cancel()
+
+        val (settings, _) = open()
+        assertEquals(DeviceSettings(), settings.observe().first())
+    }
+
     @Test fun `defaults then values persist across a restart`() = runTest {
         val (first, firstStores) = open()
         assertEquals(DeviceSettings(), first.observe().first())
         first.setTheme(ThemeMode.DARK)
-        first.setWeightUnit(WeightUnit.LB)
         first.setNotificationChoice(NotificationChoice.DECLINED)
         first.setDefaultGym("g1")
         first.setOnboardingDone(true)
@@ -69,7 +79,7 @@ class DataStoreDeviceSettingsTest {
 
         val (second, _) = open()
         assertEquals(
-            DeviceSettings(ThemeMode.DARK, WeightUnit.LB, NotificationChoice.DECLINED, "g1", true, mapOf("progress.period" to "90d")),
+            DeviceSettings(ThemeMode.DARK, NotificationChoice.DECLINED, "g1", true, mapOf("progress.period" to "90d")),
             second.observe().first(),
         )
     }
@@ -124,7 +134,6 @@ class DataStoreDeviceSettingsTest {
             val (device, _) = open()
 
             device.setTheme(ThemeMode.DARK)
-            device.setWeightUnit(WeightUnit.LB)
             device.setNotificationChoice(NotificationChoice.ALLOWED)
             device.setDefaultGym("g1")
             device.setOnboardingDone(true)

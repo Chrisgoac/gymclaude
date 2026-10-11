@@ -2,7 +2,6 @@ package com.chrisgoac.gymlog.settings
 
 import com.chrisgoac.gymlog.domain.exercise.Equipment
 import com.chrisgoac.gymlog.domain.exercise.MuscleGroup
-import com.chrisgoac.gymlog.domain.math.WeightUnit
 import com.chrisgoac.gymlog.domain.routine.Routine
 import com.chrisgoac.gymlog.domain.routine.RoutineInput
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
@@ -75,7 +74,6 @@ private class FakeDevice : DeviceSettingsRepository {
     val state = MutableStateFlow(DeviceSettings())
     override fun observe() = state
     override suspend fun setTheme(theme: ThemeMode) { state.value = state.value.copy(theme = theme) }
-    override suspend fun setWeightUnit(unit: WeightUnit) { state.value = state.value.copy(weightUnit = unit) }
     override suspend fun setNotificationChoice(choice: NotificationChoice) { state.value = state.value.copy(notifications = choice) }
     override suspend fun setDefaultGym(gymId: String?) { state.value = state.value.copy(defaultGymId = gymId) }
     override suspend fun setOnboardingDone(done: Boolean) { state.value = state.value.copy(onboardingDone = done) }
@@ -234,13 +232,11 @@ class GymsAndTrainingViewModelTest {
         assertTrue(settings.state.value.volumeGoals.isEmpty())
     }
 
-    @Test fun `theme and unit go to the device store, never to synced settings`() = runTest {
+    @Test fun `theme goes to the device store, never to synced settings`() = runTest {
         val settings = FakeSettings()
         val vm = trainingVm(settings, scope = this)
         vm.setTheme(ThemeMode.DARK)
-        vm.setWeightUnit(WeightUnit.LB)
         assertEquals(ThemeMode.DARK, vm.state.value.device.theme)
-        assertEquals(WeightUnit.LB, vm.state.value.device.weightUnit)
         assertEquals(TrainingSettings(), settings.state.value)
     }
 

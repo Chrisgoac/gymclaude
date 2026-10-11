@@ -6,7 +6,6 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.chrisgoac.gymlog.domain.math.WeightUnit
 import com.chrisgoac.gymlog.domain.settings.DeviceSettings
 import com.chrisgoac.gymlog.domain.settings.DeviceSettingsRepository
 import com.chrisgoac.gymlog.domain.settings.NotificationChoice
@@ -48,7 +47,7 @@ class UserScopedPreferenceStores(private val filesDir: File, private val fileNam
 
 /**
  * Settings that never sync: nothing here touches Room or the outbox. [deviceStore] holds what
- * belongs to the device (theme, units, notification answer); [accountStores] what belongs to the
+ * belongs to the device (theme, notification answer; a legacy `weightUnit` key is never read); [accountStores] what belongs to the
  * signed-in account on this device (default gym, onboarding, last filters). With no account the
  * account part reads defaults and drops writes.
  */
@@ -64,7 +63,6 @@ class DataStoreDeviceSettings(
         return combine(deviceStore.data, account) { device, acct ->
             DeviceSettings(
                 theme = ThemeMode.fromWire(device[THEME]),
-                weightUnit = WeightUnit.fromWire(device[UNIT]),
                 notifications = NotificationChoice.fromWire(device[NOTIFICATIONS]),
                 defaultGymId = acct?.get(DEFAULT_GYM),
                 onboardingDone = acct?.get(ONBOARDING) ?: false,
@@ -77,8 +75,6 @@ class DataStoreDeviceSettings(
     }
 
     override suspend fun setTheme(theme: ThemeMode) { deviceStore.edit { it[THEME] = theme.wire } }
-
-    override suspend fun setWeightUnit(unit: WeightUnit) { deviceStore.edit { it[UNIT] = unit.wire } }
 
     override suspend fun setNotificationChoice(choice: NotificationChoice) { deviceStore.edit { it[NOTIFICATIONS] = choice.wire } }
 
@@ -98,7 +94,6 @@ class DataStoreDeviceSettings(
 
     private companion object {
         val THEME = stringPreferencesKey("theme")
-        val UNIT = stringPreferencesKey("weightUnit")
         val NOTIFICATIONS = stringPreferencesKey("notifications")
         val DEFAULT_GYM = stringPreferencesKey("defaultGymId")
         val ONBOARDING = booleanPreferencesKey("onboardingDone")

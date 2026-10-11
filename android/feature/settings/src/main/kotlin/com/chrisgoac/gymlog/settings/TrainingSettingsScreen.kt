@@ -23,7 +23,6 @@ import com.chrisgoac.gymlog.designsystem.component.HierroText
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.domain.exercise.Equipment
 import com.chrisgoac.gymlog.domain.exercise.MuscleGroup
-import com.chrisgoac.gymlog.domain.math.WeightUnit
 import com.chrisgoac.gymlog.domain.settings.ThemeMode
 import com.chrisgoac.gymlog.domain.workout.ProgressionMode
 import com.chrisgoac.gymlog.domain.workout.SetValidation
@@ -63,7 +62,6 @@ private fun AppearanceCard(state: TrainingSettingsUiState, vm: TrainingSettingsV
             labelOf = { stringResource(when (it) { ThemeMode.SYSTEM -> R.string.settings_training_theme_system; ThemeMode.LIGHT -> R.string.settings_training_theme_light; ThemeMode.DARK -> R.string.settings_training_theme_dark }) },
             onSelect = vm::setTheme,
         )
-        ChoiceRow(stringResource(R.string.settings_training_units), WeightUnit.entries, state.device.weightUnit, labelOf = { it.symbol }, onSelect = vm::setWeightUnit)
         HierroText(stringResource(R.string.settings_training_device_only), color = HierroTheme.colors.textMuted)
     }
 }

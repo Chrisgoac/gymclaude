@@ -299,13 +299,13 @@ class AppContainer(private val application: Application) {
         }
     }
 
-    /** Body route; weights are shown in the device's unit (storage stays kilograms). */
+    /** Body route; weights are always shown in kilograms (PWA parity; there is no unit setting). */
     val bodyServices: BodyServices by lazy {
         BodyServices(
             repository = bodyRepository,
             now = syncClock::nowMillis,
             zone = ZoneId::systemDefault,
-            weightUnit = deviceSettings.observe().map { it.weightUnit }.distinctUntilChanged().stateIn(appScope, SharingStarted.Eagerly, WeightUnit.KG),
+            weightUnit = MutableStateFlow(WeightUnit.KG),
         )
     }
 

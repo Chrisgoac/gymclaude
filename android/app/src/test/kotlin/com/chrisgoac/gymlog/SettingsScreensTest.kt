@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.Density
 import com.chrisgoac.gymlog.designsystem.theme.GymLogTheme
 import com.chrisgoac.gymlog.domain.exercise.Equipment
 import com.chrisgoac.gymlog.domain.exercise.MuscleGroup
-import com.chrisgoac.gymlog.domain.math.WeightUnit
 import com.chrisgoac.gymlog.domain.routine.Routine
 import com.chrisgoac.gymlog.domain.routine.RoutineInput
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
@@ -62,7 +61,6 @@ private class ScreenDevice : DeviceSettingsRepository {
     val state = MutableStateFlow(DeviceSettings())
     override fun observe() = state
     override suspend fun setTheme(theme: ThemeMode) { state.value = state.value.copy(theme = theme) }
-    override suspend fun setWeightUnit(unit: WeightUnit) { state.value = state.value.copy(weightUnit = unit) }
     override suspend fun setNotificationChoice(choice: NotificationChoice) = Unit
     override suspend fun setDefaultGym(gymId: String?) { state.value = state.value.copy(defaultGymId = gymId) }
     override suspend fun setOnboardingDone(done: Boolean) = Unit

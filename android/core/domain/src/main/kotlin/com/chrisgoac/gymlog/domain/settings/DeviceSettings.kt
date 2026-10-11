@@ -1,6 +1,5 @@
 package com.chrisgoac.gymlog.domain.settings
 
-import com.chrisgoac.gymlog.domain.math.WeightUnit
 import kotlinx.coroutines.flow.Flow
 
 enum class ThemeMode(val wire: String) {
@@ -22,13 +21,13 @@ enum class NotificationChoice(val wire: String) {
 
 /**
  * Settings that never leave the device (the PWA has no synced key for any of them, and nothing
- * here ever reaches the outbox). Theme, units and the notification answer belong to the device;
- * the rest belong to the signed-in account on this device and are deleted with its local data.
+ * here ever reaches the outbox). Theme and the notification answer belong to the device; the rest
+ * belong to the signed-in account on this device and are deleted with its local data. Weights are
+ * always shown in kilograms (PWA parity): there is no unit setting, and a `weightUnit` value stored
+ * by an earlier build is ignored.
  */
 data class DeviceSettings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
-    /** Display only: storage is always kilograms. */
-    val weightUnit: WeightUnit = WeightUnit.KG,
     val notifications: NotificationChoice = NotificationChoice.UNDECIDED,
     /** Gym preselected on the Train tab; null = none. May name a gym that no longer exists (readers validate). */
     val defaultGymId: String? = null,
@@ -40,7 +39,6 @@ data class DeviceSettings(
 interface DeviceSettingsRepository {
     fun observe(): Flow<DeviceSettings>
     suspend fun setTheme(theme: ThemeMode)
-    suspend fun setWeightUnit(unit: WeightUnit)
     suspend fun setNotificationChoice(choice: NotificationChoice)
     suspend fun setDefaultGym(gymId: String?)
     suspend fun setOnboardingDone(done: Boolean)

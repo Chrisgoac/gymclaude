@@ -99,8 +99,7 @@
     <string name="settings_training_theme_system">Sistema</string>
     <string name="settings_training_theme_light">Claro</string>
     <string name="settings_training_theme_dark">Oscuro</string>
-    <string name="settings_training_units">Unidad de peso</string>
-    <string name="settings_training_device_only">Tema y unidad solo cambian cómo se muestra en este dispositivo; los pesos se guardan siempre en kg.</string>
+    <string name="settings_training_device_only">El tema solo cambia cómo se ve la app en este dispositivo. Los pesos se muestran y se guardan siempre en kg.</string>
     <string name="settings_training_goals">Objetivos</string>
     <string name="settings_training_weekly_target">Sesiones objetivo por semana</string>
     <string name="settings_training_weekly_target_error">Escribe un número entero entre 1 y 14.</string>
