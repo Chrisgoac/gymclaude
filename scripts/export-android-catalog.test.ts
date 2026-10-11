@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { EQUIPMENTS, MUSCLE_GROUPS } from '@/lib/db/types';
 import { CATALOG_SEED } from '@/lib/db/seed';
-// @ts-expect-error plain .mjs script without type declarations
 import {
   buildCatalogAsset,
   catalogContentHash,
