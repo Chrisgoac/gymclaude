@@ -5,8 +5,8 @@ generado el 2026-10-11 con:
 
 ```bash
 cd android
-JAVA_HOME=/home/chrisgoac/android-studio/jbr ANDROID_HOME=/home/chrisgoac/Android/Sdk \
-  ./gradlew :app:processReleaseMainManifest
+# JAVA_HOME = JDK 17+ con javac (p. ej. el JBR de Android Studio); ANDROID_HOME = Android SDK
+JAVA_HOME="$JAVA_HOME" ANDROID_HOME="$ANDROID_HOME" ./gradlew :app:processReleaseMainManifest
 ```
 
 El origen de cada línea sale de

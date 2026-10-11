@@ -16,9 +16,10 @@ Borrador pendiente de aprobación del dueño. Derivado del código de `feat/andr
   `lib/api/v1/ai/contracts.ts`; los registros del servidor solo llevan ids y códigos, nunca el texto).
 - Acceso: solo con GymLog Pro activo en Android (`requirePro`, falla cerrado) y con cupo por usuario (20/min y
   200/día, `enforceAiBudget`).
-- ⚠️ La versión web (PWA) tiene un Coach antiguo (`POST /api/coach`) que llama a DeepSeek **sin** exigir Pro y
-  con el historial que manda el navegador. No afecta a la app Android, pero sí a la política de privacidad (que ya
-  no dice "solo Pro") y a la descripción "Pro = IA". [confirmar por el dueño] (mantenerlo, exigir Pro o retirarlo).
+- ⚠️ La versión web (PWA) tiene dos rutas antiguas que llaman a DeepSeek **sin** exigir Pro: el Coach
+  (`POST /api/coach`, con el historial que manda el navegador) y el generador de mesociclos
+  (`POST /api/coach/mesociclo`, con `params`, `snapshot` y `catalogo` del cliente sin validación estricta). No afecta a la app Android, pero sí a la política de privacidad (que ya
+  no dice "solo Pro") y a la descripción "Pro = IA". [confirmar por el dueño] (mantenerlas, exigir Pro o retirarlas).
 
 ## Salvaguardas
 

@@ -8,7 +8,8 @@
   `PRIVACY_POLICY_APPROVED` (en `app/privacy/status.ts`) sea `false`. Al aprobar: poner `true`, actualizar
   `PRIVACY_POLICY_LAST_UPDATED` y rellenar la sección "Aprobación" de este fichero.
 - **Fuente única:** el texto publicado es el de `app/privacy/page.tsx`. Este fichero es su copia revisable. Si
-  cambias uno, cambia el otro: `app/privacy/page.test.tsx` falla si los títulos de sección no coinciden.
+  cambias uno, cambia el otro: `app/privacy/page.test.tsx` falla si los títulos o el texto de alguna sección no
+  coinciden (compara el texto sin formato Markdown ni espacios).
 
 ## Texto publicado
 
@@ -90,17 +91,19 @@ las transferencias internacionales, como cláusulas contractuales tipo).
 
 Todas las conexiones van cifradas (HTTPS). Las fotos subidas desde la app Android se guardan en un almacenamiento
 privado y solo se pueden ver con enlaces firmados que caducan en minutos. Las fotos subidas con la versión web
-antigua se guardan con una dirección aleatoria difícil de adivinar. Los datos de la app en tu dispositivo no se
-incluyen en las copias de seguridad en la nube de Android.
+antigua se guardan en un almacenamiento público con una dirección aleatoria y permanente: no aparecen en ningún
+listado, pero cualquiera que tenga el enlace puede verlas, sin caducidad. Los datos de la app en tu dispositivo no
+se incluyen en las copias de seguridad en la nube de Android.
 
 ### Cuánto tiempo los conservamos
 
 - Tus datos se conservan mientras tengas la cuenta.
 - Si borras una foto, el archivo se elimina en uno o dos días. Si borras un entreno u otro elemento, se guarda una
   marca de borrado para que tus otros dispositivos también lo quiten; desaparece del todo al borrar la cuenta.
-- Si borras tu cuenta, se bloquea al instante y sus datos se eliminan normalmente en minutos, con una limpieza
-  final de seguridad; un reintento por fallo de algún servicio puede tardar como máximo unos días. Solo queda una
-  huella anónima de que hubo un borrado, sin ningún dato tuyo.
+- Si borras tu cuenta, se bloquea al instante y sus datos se eliminan normalmente en minutos. Una limpieza final
+  de seguridad se hace en la siguiente pasada diaria (hasta unas 24 horas después) y, si algún servicio falla, el
+  borrado se reintenta cada día hasta completarse. Solo queda una huella irreversible (hash) de tu identificador
+  para saber que hubo un borrado, sin tus datos.
 - Al cerrar sesión en la app Android se borran del dispositivo los datos de esa cuenta.
 - Las copias de seguridad de nuestros proveedores (por ejemplo, la recuperación a un momento anterior de la base
   de datos) y sus registros técnicos caducan según sus propios plazos. [confirmar por el dueño] (plazos concretos).
@@ -108,9 +111,9 @@ incluyen en las copias de seguridad en la nube de Android.
 ### Borrar tu cuenta
 
 Puedes borrar tu cuenta y todos sus datos desde la app Android (Ajustes → Cuenta y privacidad → Eliminar cuenta)
-o desde la página de borrado de cuenta (`https://gym.chrisgoac.dev/delete-account`). Borrar la cuenta **no
-cancela** una suscripción a GymLog Pro: cancélala en tus suscripciones de Google Play
-(`https://play.google.com/store/account/subscriptions?package=com.chrisgoac.gymlog`).
+o desde [la página de borrado de cuenta](https://gym.chrisgoac.dev/delete-account). Borrar la cuenta **no
+cancela** una suscripción a GymLog Pro: cancélala en
+[tus suscripciones de Google Play](https://play.google.com/store/account/subscriptions?package=com.chrisgoac.gymlog).
 
 ### Tus derechos
 
@@ -137,7 +140,7 @@ avisaremos en la app.
 | Medidas: peso + perímetros + personalizadas | `lib/body-metrics.ts` (`METRICAS_PREDEF`, `metricasPersonalizadas`) |
 | Fotos sin EXIF, comprimidas | `android/core/data/.../media/ImageCompressor.kt` |
 | Fotos Android en bucket privado, URL firmada breve | `lib/r2/client.ts` (`putPrivateObject`, `signPrivateRead`) |
-| Fotos web antigua: bucket público, clave `<userId>/…/<uuid>.jpg` | `app/api/{progress,exercise}-photos/route.ts` |
+| Fotos web antigua: bucket público, URL permanente `R2_PUBLIC_URL/<userId>/…/<uuid>.jpg` | `app/api/{progress,exercise}-photos/route.ts` |
 | Qué recibe DeepSeek | `lib/api/v1/ai/contracts.ts` (`CoachSnapshotSchema`, `MesocycleRequestSchema`), `lib/api/v1/ai/store.ts` (`loadCoachContext`), `lib/coach-model.ts` |
 | Coach web (PWA) sin Pro | `app/api/coach/route.ts` (sin `requirePro`) |
 | Pro solo para IA | `requirePro` en `app/api/v1/ai/{coach,mesocycles,reports}/route.ts` |

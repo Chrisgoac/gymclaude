@@ -9,7 +9,8 @@ restringidas" → instrucciones). Aquí solo hay marcadores como `<EMAIL_CUENTA_
 1. Crear una cuenta de GymLog **exclusiva para la revisión**, distinta de la cuenta personal del dueño y sin datos
    reales: "Crear cuenta" en la app, con un email del dueño reservado para esto
    (`<EMAIL_CUENTA_REVISION>`) y **contraseña** (`<CONTRASEÑA_CUENTA_REVISION>`). El revisor no puede recibir
-   códigos por email, así que la cuenta debe poder entrar solo con contraseña.
+   códigos por email, así que la cuenta debe poder entrar solo con contraseña. La pantalla de entrada empieza en
+   modo código: para la contraseña hay que pulsar "Usar contraseña" (así lo dice el texto de la sección 2).
 2. En el panel de Clerk, comprobar que esa cuenta no exige segundo factor ni verificación de dispositivo nuevo.
    [confirmar por el dueño] (ajustes de la instancia de Clerk de producción).
 3. Cargar algunos datos de ejemplo con esa cuenta: 1–2 rutinas, 3–4 entrenos, alguna medida corporal, para que
@@ -29,7 +30,9 @@ restringidas" → instrucciones). Aquí solo hay marcadores como `<EMAIL_CUENTA_
 
 > GymLog requires an account. Sign in on the first screen with:
 > Email: <EMAIL_CUENTA_REVISION> — Password: <CONTRASEÑA_CUENTA_REVISION>
-> (tap "Entrar", type the email and the password, then "Entrar"). The app interface is in Spanish.
+> (on the "Entrar" screen type the email, tap "Usar contraseña", type the password, then tap "Entrar"; the
+> screen starts in email-code mode, so the password field only appears after "Usar contraseña").
+> The app interface is in Spanish.
 >
 > Free features (no subscription): tabs "Entrenar" (start a workout from a routine, log sets, rest timer),
 > "Rutinas", "Ejercicios", "Progreso" (charts, records, "Cuerpo" for body measurements and progress photos) and
@@ -51,7 +54,8 @@ restringidas" → instrucciones). Aquí solo hay marcadores como `<EMAIL_CUENTA_
 
 ## 3. Comprobar antes de enviar
 
-- [ ] La cuenta de revisión entra con email + contraseña en un dispositivo limpio, sin pedir código.
+- [ ] La cuenta de revisión entra en un dispositivo limpio siguiendo exactamente la sección 2: email →
+      "Usar contraseña" → contraseña → "Entrar", sin pedir código.
 - [ ] Las rutas de navegación del texto coinciden con la versión subida (nombres de pestañas y botones).
 - [ ] Estado de Pro de la cuenta de revisión según la opción elegida en 1.4.
 - [ ] `/privacy` y `/delete-account` responden 200 sin sesión.

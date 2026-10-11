@@ -66,9 +66,12 @@ Ningún dato se usa para publicidad, marketing ni personalización de anuncios. 
 
 ## 4. Borrado y conservación (coherente con `privacy-policy.md`)
 
-- Borrado de cuenta: bloqueo inmediato → R2 → Postgres (14 tablas sincronizadas + sync, entitlements, IA,
-  reportes, eventos de facturación de sus tokens, cubos de límites) → barrido final de R2 (≥120 s después) →
-  Clerk. Reintento automático diario (cron 04:30 UTC). Queda solo `account_deletion_jobs.user_id_hash`.
+- Borrado de cuenta (`lib/account/deletion.ts`): bloqueo inmediato → `storage` (R2) → `database` (14 tablas
+  sincronizadas + sync, entitlements, IA, reportes, eventos de facturación de sus tokens, cubos de límites) →
+  `storage_sweep` (segundo listado de R2) → `identity` (Clerk) → `database_sweep` (barrido final de Postgres y
+  R2, ≥120 s después de la petición; lo ejecuta el cron diario de las 04:30 UTC, así que puede llegar hasta ~24 h
+  más tarde). Los fallos se reintentan cada día sin límite fijo. Al terminar queda solo
+  `account_deletion_jobs.user_id_hash` (SHA-256 sin clave del id de Clerk: seudónimo, no anónimo).
 - La suscripción de Google Play **no** se cancela al borrar la cuenta (se avisa en app y web).
 - Copias de Neon (point-in-time recovery), versiones/ciclo de vida de R2 y registros de Vercel/Clerk: según cada
   proveedor. [confirmar por el dueño] (ventana de PITR de Neon y retención de registros).

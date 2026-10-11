@@ -147,8 +147,9 @@ export default function PrivacyPage() {
         <p>
           Todas las conexiones van cifradas (HTTPS). Las fotos subidas desde la app Android se guardan en un
           almacenamiento privado y solo se pueden ver con enlaces firmados que caducan en minutos. Las fotos subidas
-          con la versión web antigua se guardan con una dirección aleatoria difícil de adivinar. Los datos de la app
-          en tu dispositivo no se incluyen en las copias de seguridad en la nube de Android.
+          con la versión web antigua se guardan en un almacenamiento público con una dirección aleatoria y
+          permanente: no aparecen en ningún listado, pero cualquiera que tenga el enlace puede verlas, sin caducidad.
+          Los datos de la app en tu dispositivo no se incluyen en las copias de seguridad en la nube de Android.
         </p>
       </Section>
 
@@ -161,9 +162,10 @@ export default function PrivacyPage() {
             borrar la cuenta.
           </li>
           <li>
-            Si borras tu cuenta, se bloquea al instante y sus datos se eliminan normalmente en minutos, con una
-            limpieza final de seguridad; un reintento por fallo de algún servicio puede tardar como máximo unos días.
-            Solo queda una huella anónima de que hubo un borrado, sin ningún dato tuyo.
+            Si borras tu cuenta, se bloquea al instante y sus datos se eliminan normalmente en minutos. Una limpieza
+            final de seguridad se hace en la siguiente pasada diaria (hasta unas 24 horas después) y, si algún
+            servicio falla, el borrado se reintenta cada día hasta completarse. Solo queda una huella irreversible
+            (hash) de tu identificador para saber que hubo un borrado, sin tus datos.
           </li>
           <li>
             Al cerrar sesión en la app Android se borran del dispositivo los datos de esa cuenta.

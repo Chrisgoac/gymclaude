@@ -16,6 +16,15 @@ import PrivacyPage from './page';
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
+/** Compare text ignoring all whitespace (JSX and Markdown wrap lines differently). */
+const squash = (text: string) => text.replace(/\s+/g, '');
+/** The Markdown subset used in the policy: list markers, **bold**, `code` and [text](url) links. */
+const stripMarkdown = (md: string) =>
+  md
+    .replace(/^- /gm, '')
+    .replace(/\*\*/g, '')
+    .replace(/`/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
 
 afterEach(() => {
   cleanup();
@@ -49,14 +58,31 @@ describe('/privacy (public page)', () => {
     );
   });
 
-  it('has the same sections as docs/play/privacy-policy.md', () => {
+  it('has the same sections, word for word, as docs/play/privacy-policy.md', () => {
     render(<PrivacyPage />);
-    const page = screen.getAllByRole('heading', { level: 2 }).map((el) => el.textContent?.trim());
+    const pageSections = screen.getAllByRole('heading', { level: 2 }).map((h2) => ({
+      title: h2.textContent?.trim() ?? '',
+      text: squash((h2.parentElement?.textContent ?? '').slice((h2.textContent ?? '').length)),
+    }));
     const doc = read('docs/play/privacy-policy.md');
-    const published = doc.slice(doc.indexOf('## Texto publicado'), doc.indexOf('\n## ', doc.indexOf('## Texto publicado') + 1));
-    const docSections = [...published.matchAll(/^### (.+)$/gm)].map((m) => m[1].trim());
+    const start = doc.indexOf('## Texto publicado');
+    const published = doc.slice(start, doc.indexOf('\n## ', start + 1));
+    const docSections = published.split(/^### /m).slice(1).map((chunk) => {
+      const [title, ...body] = chunk.split('\n');
+      return { title: title.trim(), text: squash(stripMarkdown(body.join('\n'))) };
+    });
     expect(docSections.length).toBeGreaterThan(0);
-    expect(page).toEqual(docSections);
+    expect(pageSections).toEqual(docSections);
+  });
+
+  it('cannot be marked approved while owner placeholders remain', async () => {
+    // Uses the real constant: flipping PRIVACY_POLICY_APPROVED to true fails here until every
+    // "[confirmar por el dueño]" is filled in.
+    const actual = await vi.importActual<typeof import('./status')>('./status');
+    h.approved = actual.PRIVACY_POLICY_APPROVED;
+    const { container } = render(<PrivacyPage />);
+    if (actual.PRIVACY_POLICY_APPROVED) expect(container.textContent).not.toMatch(/\[confirmar/);
+    else expect(container.textContent).toMatch(/borrador pendiente de aprobación/i);
   });
 
   it('is reachable without a session and is not a network-only (private) path', () => {
