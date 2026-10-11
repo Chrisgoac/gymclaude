@@ -1,5 +1,6 @@
 package com.chrisgoac.gymlog.data.body
 
+import com.chrisgoac.gymlog.domain.settings.SettingsCodec
 import android.util.Log
 import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.LocalMutation
@@ -31,10 +32,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import java.util.UUID
 
 /**
@@ -160,15 +159,7 @@ class OfflineBodyRepository(
 
     private fun parseArray(text: String): JsonArray? = runCatching { Json.parseToJsonElement(text) as? JsonArray }.getOrNull()
 
-    /** Tolerant read: invalid JSON or malformed entries are skipped, never thrown. */
-    private fun parseCustom(text: String?): List<CustomBodyMetric> {
-        val array = text?.let(::parseArray) ?: return emptyList()
-        return array.mapNotNull { element ->
-            val obj = element as? JsonObject ?: return@mapNotNull null
-            val key = obj.string("clave")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            CustomBodyMetric(key, obj.string("label") ?: key, obj.string("unidad").orEmpty())
-        }.distinctBy { it.key }
-    }
+    /** Tolerant read through the shared codec: invalid JSON or malformed entries are skipped, never thrown. */
+    private fun parseCustom(text: String?): List<CustomBodyMetric> = SettingsCodec.customMetrics(text)
 
-    private fun JsonObject.string(name: String): String? = (get(name) as? JsonElement)?.let { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull }
 }

@@ -21,6 +21,7 @@
     <string name="history_period_all">Todo</string>
     <string name="history_gym_all">Todos</string>
     <string name="history_gym_none">Sin gimnasio</string>
+    <string name="history_gym_deleted">Gimnasio eliminado</string>
     <string name="history_selected">seleccionado</string>
     <string name="history_load_more">Ver más</string>
     <string name="history_free_workout">Entrenamiento libre</string>

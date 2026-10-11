@@ -163,6 +163,40 @@ class StartWorkoutTest {
         job.cancel()
     }
 
+    @Test fun `the default gym is preselected, used by a start, and an explicit choice beats it`() = runTest {
+        val repo = FakeWorkouts()
+        val default = MutableStateFlow<String?>("g1")
+        val vm = TrainHomeViewModel(repo, FakeRoutines(), StartWorkoutUseCase(repo), defaultGymId = default)
+        advanceUntilIdle()
+        // Starting works even when the Train state is not collected (the Routines tab starts too).
+        vm.startFree()
+        assertEquals(TrainEvent.OpenWorkout("s1"), vm.eventFlow.first())
+        assertEquals(listOf<String?>("g1"), repo.gymsUsed)
+
+        val job = launch { vm.state.collect { } }
+        advanceUntilIdle()
+        assertEquals("g1", vm.state.value.selectedGymId)
+        vm.selectGym(null) // explicit "Sin gimnasio"
+        advanceUntilIdle()
+        assertNull(vm.state.value.selectedGymId)
+        default.value = "g1"
+        advanceUntilIdle()
+        assertNull(vm.state.value.selectedGymId)
+        job.cancel()
+    }
+
+    @Test fun `a default gym that no longer exists is ignored`() = runTest {
+        val repo = FakeWorkouts().apply { gyms.value = emptyList() }
+        val vm = TrainHomeViewModel(repo, FakeRoutines(), StartWorkoutUseCase(repo), defaultGymId = MutableStateFlow("gone"))
+        val job = launch { vm.state.collect { } }
+        advanceUntilIdle()
+        assertNull(vm.state.value.selectedGymId)
+        vm.startFree()
+        assertEquals(TrainEvent.OpenWorkout("s1"), vm.eventFlow.first())
+        assertEquals(listOf<String?>(null), repo.gymsUsed)
+        job.cancel()
+    }
+
     @Test fun `an archived next routine is not offered`() = runTest {
         val routines = FakeRoutines().apply {
             summaries.value = listOf(RoutineSummary("r1", "Push", null, true, 2, emptyList()))

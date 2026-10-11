@@ -146,6 +146,25 @@ class OfflineHistoryRepositoryTest {
             buildList { while (c.moveToNext()) add(ContractJson.decodeFromString(PushMutation.serializer(), c.getString(0))) }
         }
 
+    @Test fun `a workout whose gym was deleted keeps its gymId and is flagged as deleted gym, not as no gym`() = runTest {
+        val s = memory(); s.seed()
+        s.addGym("g1", "Box")
+        val withGym = s.workout(at = 1_000_000L, gym = "g1")
+        val noGym = s.workout(at = 2_000_000L)
+        now += 10_000
+        val gym = s.db.gymDao().findById("g1")!!
+        s.runner.run(LocalMutation { put(GymRecord(RecordId("g1"), nextTimestamp(SyncTable.GYMS, RecordId("g1")), nextTimestamp(SyncTable.GYMS, RecordId("g1")), gym.nombre, gym.orden, gym.archivada)) })
+
+        val items = s.history.observeHistory(HistoryFilter(), 10).first().items.associateBy { it.sessionId }
+        assertEquals("g1", items.getValue(withGym).gymId)
+        assertNull(items.getValue(withGym).gymName)
+        assertTrue(items.getValue(withGym).gymDeleted)
+        assertFalse(items.getValue(noGym).gymDeleted)
+        val detail = s.history.observeDetail(withGym).first()!!
+        assertTrue(detail.gymDeleted)
+        assertFalse(s.history.observeDetail(noGym).first()!!.gymDeleted)
+    }
+
     // ---- Finish ----
 
     @Test fun `finish stores the rounded duration and notes in ONE outbox row and the session leaves the active slot`() = runTest {

@@ -16,7 +16,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -60,8 +62,18 @@ class TrainHomeViewModel(
     private val workouts: WorkoutRepository,
     private val routines: RoutineRepository,
     private val start: StartWorkoutUseCase,
+    /** The device's default gym (Settings); applies until the user picks a gym (or "Sin gimnasio") here. */
+    private val defaultGymId: Flow<String?> = flowOf(null),
 ) : ViewModel() {
-    private val selectedGym = MutableStateFlow<String?>(null)
+    /** Null = the user has not chosen in this session, so [defaultGymId] applies; [Pick.gymId] null = explicit "Sin gimnasio". */
+    private val pick = MutableStateFlow<Pick?>(null)
+    private class Pick(val gymId: String?)
+    private val lastDefault = MutableStateFlow<String?>(null)
+
+    init {
+        // Starts can come from the Routines tab while the Train state is not collected: track the default here.
+        viewModelScope.launch { defaultGymId.catch { }.collect { lastDefault.value = it } }
+    }
     private val starting = MutableStateFlow(false)
     private val startError = MutableStateFlow<StartError?>(null)
     private val attempt = MutableStateFlow(0)
@@ -87,7 +99,8 @@ class TrainHomeViewModel(
         ) { active, summaries, nextId, gyms, summary ->
             Data(active, summaries.firstOrNull { it.id == nextId && !it.archived }, gyms, summary)
         }
-        return combine(data, selectedGym, starting, startError) { d, gymId, isStarting, error ->
+        return combine(data, pick, defaultGymId, starting, startError) { d, picked, default, isStarting, error ->
+            val gymId = if (picked != null) picked.gymId else default
             TrainHomeUiState(
                 status = TrainLoadStatus.Ready,
                 activeWorkout = d.active,
@@ -107,7 +120,7 @@ class TrainHomeViewModel(
     fun retry() = attempt.update { it + 1 }
 
     fun selectGym(id: String?) {
-        selectedGym.value = id
+        pick.value = Pick(id)
     }
 
     fun dismissError() {
@@ -119,7 +132,10 @@ class TrainHomeViewModel(
     fun startRoutine(routineId: String) = launchStart { start.startRoutine(routineId, currentGym()) }
 
     /** The selected gym; if it vanished meanwhile the repository rejects it and the selection resets. */
-    private fun currentGym(): String? = selectedGym.value
+    private suspend fun currentGym(): String? {
+        pick.value?.let { return it.gymId } // an explicit choice, including "Sin gimnasio", beats the default
+        return lastDefault.value?.takeIf { id -> workouts.observeGyms().first().any { it.id == id } }
+    }
 
     private fun launchStart(block: suspend () -> StartWorkoutResult) {
         // A tap while another start is in flight is dropped (the use case would resume it anyway).
@@ -131,7 +147,7 @@ class TrainHomeViewModel(
                     is StartWorkoutResult.Started ->
                         if (result.resumed) pendingChoice.value = result.sessionId else events.send(TrainEvent.OpenWorkout(result.sessionId))
                     StartWorkoutResult.GymUnavailable -> {
-                        selectedGym.value = null
+                        pick.value = Pick(null)
                         fail(StartError.GymUnavailable)
                     }
                     StartWorkoutResult.RoutineUnavailable -> fail(StartError.RoutineUnavailable)

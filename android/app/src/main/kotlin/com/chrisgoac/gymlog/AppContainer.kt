@@ -28,6 +28,19 @@ import com.chrisgoac.gymlog.data.body.OfflineBodyRepository
 import com.chrisgoac.gymlog.domain.body.BodyRepository
 import com.chrisgoac.gymlog.domain.math.WeightUnit
 import com.chrisgoac.gymlog.data.stats.OfflineStatsRepository
+import com.chrisgoac.gymlog.data.settings.OfflineGymRepository
+import com.chrisgoac.gymlog.data.settings.OfflineSettingsRepository
+import com.chrisgoac.gymlog.devicesettings.DataStoreDeviceSettings
+import com.chrisgoac.gymlog.devicesettings.UserScopedPreferenceStores
+import com.chrisgoac.gymlog.domain.settings.DeviceSettingsRepository
+import com.chrisgoac.gymlog.domain.settings.GymRepository
+import com.chrisgoac.gymlog.domain.settings.SettingsRepository
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import java.io.File
 import com.chrisgoac.gymlog.data.workout.OfflineHistoryRepository
 import com.chrisgoac.gymlog.data.workout.OfflineWorkoutEditRepository
 import com.chrisgoac.gymlog.domain.history.DefaultSaveWorkoutDraftUseCase
@@ -118,7 +131,14 @@ class AppContainer(private val application: Application) {
     private val restTimerDeletionHook = RestTimerDeletionHook(restTimerStore::forget, restTimerNotifier::cancel, ::currentUserHash)
 
     // The hook releases the open DataStore before the directory goes; account changes are handled by RestTimerAccountWatcher.
-    private val accountCleaner = RoomLocalAccountCleaner(application, databaseManager, syncLocks, onLocalDataDeleted = restTimerDeletionHook::onDeleted)
+    private val accountPrefs = UserScopedPreferenceStores(application.filesDir)
+    private val accountCleaner = RoomLocalAccountCleaner(
+        application, databaseManager, syncLocks,
+        onLocalDataDeleted = { hash ->
+            restTimerDeletionHook.onDeleted(hash)
+            accountPrefs.forget(hash)
+        },
+    )
 
     /** The account's durable rest timer (state per user, wake-up by [RestTimerNotifier]). */
     val restTimer = RestTimerController(restTimerStore, restTimerNotifier)
@@ -243,13 +263,37 @@ class AppContainer(private val application: Application) {
     /** Body measurements (+ the PWA's custom-metric setting) of the open account. */
     val bodyRepository: BodyRepository = OfflineBodyRepository(databases, ::localMutationRunner, now = syncClock::nowMillis)
 
-    /** Body route. TODO(Plan 4 Task 6): feed the synced units setting; kilograms until it exists. */
-    val bodyServices: BodyServices = BodyServices(
-        repository = bodyRepository,
-        now = syncClock::nowMillis,
-        zone = ZoneId::systemDefault,
-        weightUnit = MutableStateFlow(WeightUnit.KG),
-    )
+    /** Synced PWA settings (goal, progression, volume goals) of the open account; writes are local (outbox). */
+    val settingsRepository: SettingsRepository = OfflineSettingsRepository(databases, ::localMutationRunner)
+
+    /** Gyms of the open account; writes are local (outbox). */
+    val gymRepository: GymRepository = OfflineGymRepository(databases, ::localMutationRunner)
+
+    /**
+     * Theme, units, default gym, onboarding, notification answer and last filters: DataStore only, never the outbox.
+     * Theme/units live with the device, the rest with the signed-in account under `users/<hash>/`.
+     */
+    val deviceSettings: DeviceSettingsRepository by lazy {
+        val hash = rootStateMachine.state
+            .map { (it as? RootState.Ready)?.userId?.let(UserDatabaseManagerImpl::userHash) }
+            .stateIn(appScope, SharingStarted.Eagerly, currentUserHash())
+        DataStoreDeviceSettings(deviceStore, accountPrefs, hash)
+    }
+    private val deviceStore: DataStore<Preferences> by lazy {
+        PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)) {
+            File(application.filesDir, "device_settings.preferences_pb")
+        }
+    }
+
+    /** Body route; weights are shown in the device's unit (storage stays kilograms). */
+    val bodyServices: BodyServices by lazy {
+        BodyServices(
+            repository = bodyRepository,
+            now = syncClock::nowMillis,
+            zone = ZoneId::systemDefault,
+            weightUnit = deviceSettings.observe().map { it.weightUnit }.distinctUntilChanged().stateIn(appScope, SharingStarted.Eagerly, WeightUnit.KG),
+        )
+    }
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)
@@ -310,7 +354,11 @@ class AppContainer(private val application: Application) {
 
     /** Null when Clerk is not configured: the signed-in shell is unreachable then. */
     val settingsServices: SettingsServices? by lazy {
-        if (clerkConfigured) SettingsServices(syncUseCases, signOutUseCase) else null
+        if (clerkConfigured) {
+            SettingsServices(syncUseCases, signOutUseCase, gyms = gymRepository, training = settingsRepository, device = deviceSettings)
+        } else {
+            null
+        }
     }
 
     /**

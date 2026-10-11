@@ -60,6 +60,8 @@ import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
 import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import com.chrisgoac.gymlog.train.ActiveWorkoutChoice
 import com.chrisgoac.gymlog.train.ActiveWorkoutScreen
 import com.chrisgoac.gymlog.timer.TrackWorkoutScreenVisibility
@@ -82,6 +84,13 @@ import com.chrisgoac.gymlog.exercises.ExerciseListViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chrisgoac.gymlog.domain.SignOutUseCase
 import com.chrisgoac.gymlog.domain.SyncUseCases
+import com.chrisgoac.gymlog.settings.GymsScreen
+import com.chrisgoac.gymlog.settings.GymsViewModel
+import com.chrisgoac.gymlog.settings.TrainingSettingsScreen
+import com.chrisgoac.gymlog.settings.TrainingSettingsViewModel
+import com.chrisgoac.gymlog.domain.settings.DeviceSettingsRepository
+import com.chrisgoac.gymlog.domain.settings.GymRepository
+import com.chrisgoac.gymlog.domain.settings.SettingsRepository
 import com.chrisgoac.gymlog.settings.SettingsScreen
 import com.chrisgoac.gymlog.settings.SettingsUiState
 import com.chrisgoac.gymlog.settings.SettingsViewModel
@@ -117,7 +126,13 @@ import com.chrisgoac.gymlog.progress.ProgressViewModel
 import java.time.ZoneId
 
 /** What the Settings routes need; null keeps them as smoke screens (shell tests). */
-class SettingsServices(val sync: SyncUseCases, val signOut: SignOutUseCase)
+class SettingsServices(
+    val sync: SyncUseCases,
+    val signOut: SignOutUseCase,
+    val gyms: GymRepository? = null,
+    val training: SettingsRepository? = null,
+    val device: DeviceSettingsRepository? = null,
+)
 
 /** What the history editor needs: the atomic save and the server-corrected clock (future-date check). */
 class HistoryEditServices(val save: SaveWorkoutDraftUseCase, val now: () -> Long)
@@ -239,7 +254,12 @@ private fun GymLogNavHost(
     // One Train ViewModel per account shell: the Train tab and the Routines tab's "Empezar" both start
     // workouts through it, so they share the gym selection and the one-active-workout guard.
     val trainViewModel = if (workouts != null && routines != null) {
-        viewModel { TrainHomeViewModel(workouts, routines, StartWorkoutUseCase(workouts)) }
+        viewModel {
+            TrainHomeViewModel(
+                workouts, routines, StartWorkoutUseCase(workouts),
+                defaultGymId = settings?.device?.observe()?.map { it.defaultGymId } ?: flowOf(null),
+            )
+        }
     } else {
         null
     }
@@ -506,7 +526,27 @@ private fun GymLogNavHost(
                         settingsViewModel,
                         onBack = { navController.popBackStack() },
                         onSyncDetails = { navController.navigate(GymLogDestination.SyncDiagnostics) },
+                        onGyms = settings?.takeIf { it.gyms != null && it.device != null }?.let { { navController.navigate(GymLogDestination.Gyms) } },
+                        onTraining = settings?.takeIf { it.training != null && it.device != null }?.let { { navController.navigate(GymLogDestination.TrainingSettings) } },
                     )
+                }
+            }
+            composable<GymLogDestination.Gyms> {
+                val gyms = settings?.gyms
+                val device = settings?.device
+                if (gyms == null || device == null) {
+                    SmokeScreen(GymLogDestination.Gyms, navController, secondary = true)
+                } else {
+                    GymsScreen(viewModel { GymsViewModel(gyms, device) }, onBack = { navController.popBackStack() })
+                }
+            }
+            composable<GymLogDestination.TrainingSettings> {
+                val training = settings?.training
+                val device = settings?.device
+                if (training == null || device == null || routines == null) {
+                    SmokeScreen(GymLogDestination.TrainingSettings, navController, secondary = true)
+                } else {
+                    TrainingSettingsScreen(viewModel { TrainingSettingsViewModel(training, device, routines) }, onBack = { navController.popBackStack() })
                 }
             }
             composable<GymLogDestination.SyncDiagnostics> {

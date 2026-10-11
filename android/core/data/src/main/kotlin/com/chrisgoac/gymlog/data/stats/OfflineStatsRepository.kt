@@ -1,5 +1,7 @@
 package com.chrisgoac.gymlog.data.stats
 
+import com.chrisgoac.gymlog.domain.settings.SettingKeys
+import com.chrisgoac.gymlog.domain.settings.SettingsCodec
 import androidx.room.withTransaction
 import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.UserDatabaseManager
@@ -35,13 +37,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.doubleOrNull
 import java.time.Instant
 import java.time.ZoneId
-import kotlin.math.ceil
 
 /**
  * [StatsRepository] over the open account's Room database. Each flow re-reads on every commit to
@@ -217,9 +214,9 @@ class OfflineStatsRepository(
     }
 
     companion object {
-        const val WEEKLY_TARGET_KEY = "objetivoSemanal"
-        const val VOLUME_GOALS_KEY = "objetivosVolumen"
-        const val DEFAULT_WEEKLY_TARGET = 3
+        const val WEEKLY_TARGET_KEY = SettingKeys.WEEKLY_TARGET
+        const val VOLUME_GOALS_KEY = SettingKeys.VOLUME_GOALS
+        const val DEFAULT_WEEKLY_TARGET = com.chrisgoac.gymlog.domain.settings.DEFAULT_WEEKLY_TARGET
 
         /** Tables whose commits can change a statistic. */
         val STATS_TABLES = arrayOf("workout_sessions", "logged_exercises", "logged_sets", "exercises", "catalog_exercises", "user_settings")
@@ -228,25 +225,10 @@ class OfflineStatsRepository(
         /** Below SQLite's 999 bound-variable limit (API 26). */
         private const val CHUNK = 400
 
-        private fun parse(raw: String?) = raw?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() }
+        /** `objetivoSemanal`, default 3 (decoded by the shared [SettingsCodec]). */
+        internal fun weeklyTarget(raw: String?): Int = SettingsCodec.weeklyTarget(raw)
 
-        /**
-         * `objetivoSemanal` (JSON number), default 3. A week counts when its sessions reach the value;
-         * sessions are whole, so a fractional goal is its ceiling.
-         */
-        internal fun weeklyTarget(raw: String?): Int {
-            val value = (parse(raw) as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.takeIf { it.isFinite() }
-            return value?.let { ceil(it).toInt() } ?: DEFAULT_WEEKLY_TARGET
-        }
-
-        /** `objetivosVolumen` (JSON object group -> kg·rep); unknown groups and non-numbers are ignored. */
-        internal fun volumeGoals(raw: String?): Map<MuscleGroup, Double> {
-            val goals = parse(raw) as? JsonObject ?: return emptyMap()
-            return goals.entries.mapNotNull { (key, value) ->
-                val group = MuscleGroup.entries.firstOrNull { it.wire == key } ?: return@mapNotNull null
-                val number = (value as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.takeIf { it.isFinite() } ?: return@mapNotNull null
-                group to number
-            }.toMap()
-        }
+        /** `objetivosVolumen`, decoded by the shared [SettingsCodec]. */
+        internal fun volumeGoals(raw: String?): Map<MuscleGroup, Double> = SettingsCodec.volumeGoals(raw)
     }
 }

@@ -157,7 +157,13 @@ interface GymDao {
 
     @Query("SELECT * FROM gyms ORDER BY id")
     suspend fun getAll(): List<GymEntity>
+
+    /** Live workouts per gym (index on gymId); gyms without workouts have no row. */
+    @Query("SELECT gymId, COUNT(*) AS sessions FROM workout_sessions WHERE gymId IS NOT NULL AND deletedAt IS NULL GROUP BY gymId")
+    fun observeSessionCounts(): Flow<List<GymSessionCount>>
 }
+
+data class GymSessionCount(val gymId: String, val sessions: Int)
 
 @Dao
 interface ExercisePhotoDao {

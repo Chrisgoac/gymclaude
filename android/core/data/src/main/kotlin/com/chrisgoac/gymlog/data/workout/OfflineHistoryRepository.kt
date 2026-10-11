@@ -104,6 +104,7 @@ class OfflineHistoryRepository(
                                     exerciseCount = total?.exercises ?: 0,
                                     setCount = total?.sets ?: 0,
                                     volume = total?.volume ?: 0.0,
+                                    gymDeleted = row.gymId != null && row.gymId !in gymNames,
                                 )
                             },
                             hasMore = rows.size > limit,
@@ -146,6 +147,7 @@ class OfflineHistoryRepository(
                         gymName = gym?.nombre,
                         routineName = session.routineId?.let(routineNames::get),
                         summary = aggregate.summary(session.duracionSegundos ?: 0),
+                        gymDeleted = session.gymId != null && gym == null,
                     )
                 }
             }

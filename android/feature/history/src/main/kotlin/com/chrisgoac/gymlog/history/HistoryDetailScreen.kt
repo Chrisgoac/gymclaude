@@ -143,7 +143,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.foundItems(
     if (state.unfinished) item(key = "finish") { FinishCard(state, onFinishMinutes, onFinish) }
     item(key = "gym") {
         HierroCard {
-            HierroText(stringResource(R.string.history_detail_gym, detail.gymName ?: stringResource(R.string.history_gym_none)))
+            HierroText(stringResource(R.string.history_detail_gym, detail.gymName ?: stringResource(if (detail.gymDeleted) R.string.history_gym_deleted else R.string.history_gym_none)))
             if (state.gymFailed) HierroText(stringResource(R.string.history_detail_gym_failed), color = HierroTheme.colors.error)
             if (state.choosingGym) {
                 val gymIds = listOf<String?>(null) + state.gyms.map { it.id }

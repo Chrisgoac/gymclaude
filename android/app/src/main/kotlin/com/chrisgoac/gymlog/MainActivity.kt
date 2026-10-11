@@ -5,9 +5,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.chrisgoac.gymlog.designsystem.theme.GymLogTheme
+import com.chrisgoac.gymlog.domain.settings.DeviceSettings
+import com.chrisgoac.gymlog.domain.settings.ThemeMode
 import com.chrisgoac.gymlog.timer.RestTimerNotifier
 
 class MainActivity : ComponentActivity() {
@@ -17,7 +20,14 @@ class MainActivity : ComponentActivity() {
         val container = (application as GymLogApplication).container
         takeWorkoutRequest(intent)
         setContent {
-            GymLogTheme {
+            val device by container.deviceSettings.observe().collectAsState(DeviceSettings())
+            GymLogTheme(
+                darkTheme = when (device.theme) {
+                    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.DARK -> true
+                },
+            ) {
                 val rootState by container.rootStateMachine.state.collectAsState()
                 GymLogRoot(
                     rootState,

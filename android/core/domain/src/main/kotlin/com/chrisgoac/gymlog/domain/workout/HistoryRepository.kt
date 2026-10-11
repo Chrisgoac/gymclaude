@@ -38,6 +38,8 @@ data class HistoryItem(
     val exerciseCount: Int,
     val setCount: Int,
     val volume: Double,
+    /** The session names a gym that was deleted afterwards (it keeps its `gymId`; shown as "deleted gym"). */
+    val gymDeleted: Boolean = false,
 )
 
 /** Newest-first history sessions up to the requested limit; [hasMore] = older matches exist. */
@@ -49,6 +51,8 @@ data class HistoryDetail(
     val gymName: String?,
     val routineName: String?,
     val summary: WorkoutSummary,
+    /** The session names a gym that was deleted afterwards. */
+    val gymDeleted: Boolean = false,
 )
 
 /**

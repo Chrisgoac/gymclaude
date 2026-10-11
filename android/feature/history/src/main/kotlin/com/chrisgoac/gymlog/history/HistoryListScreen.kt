@@ -151,7 +151,7 @@ private fun HistoryRow(item: HistoryItem, onOpen: (String) -> Unit) {
             if (duration == null) counts else stringResource(R.string.history_item_summary, counts, durationText(duration)),
             color = HierroTheme.colors.textMuted,
         )
-        val gym = item.gymName ?: stringResource(R.string.history_gym_none)
+        val gym = item.gymName ?: stringResource(if (item.gymDeleted) R.string.history_gym_deleted else R.string.history_gym_none)
         HierroText(
             gym + " · " + stringResource(R.string.history_volume, SetValidation.formatWeight(Math.round(item.volume * 10) / 10.0)),
             color = HierroTheme.colors.textMuted,

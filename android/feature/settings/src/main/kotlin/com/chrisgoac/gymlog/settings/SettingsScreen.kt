@@ -24,13 +24,23 @@ import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 
 /** Settings: sync status and account actions. */
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit, onSyncDetails: () -> Unit, modifier: Modifier = Modifier) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit,
+    onSyncDetails: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Null hides the entry (the destination is not wired). */
+    onGyms: (() -> Unit)? = null,
+    onTraining: (() -> Unit)? = null,
+) {
     val state by viewModel.state.collectAsState()
     Column(modifier.fillMaxSize()) {
         HierroScreenHeader(stringResource(R.string.settings_title)) {
             HierroHeaderAction(stringResource(R.string.settings_back), onBack)
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (onTraining != null) HierroButton(stringResource(R.string.settings_training), onTraining, variant = HierroButtonVariant.Secondary)
+            if (onGyms != null) HierroButton(stringResource(R.string.settings_gyms), onGyms, variant = HierroButtonVariant.Secondary)
             SyncStatusCard(state.sync, onSyncNow = viewModel::syncNow, onDetails = onSyncDetails)
             AccountCard(state.signOut, viewModel)
         }
