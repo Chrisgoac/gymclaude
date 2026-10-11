@@ -1,5 +1,6 @@
 package com.chrisgoac.gymlog.data.body
 
+import android.util.Log
 import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.LocalMutation
 import com.chrisgoac.gymlog.database.LocalMutationRunner
@@ -15,6 +16,7 @@ import com.chrisgoac.gymlog.domain.body.BodyRepository
 import com.chrisgoac.gymlog.domain.body.BodyValidation
 import com.chrisgoac.gymlog.domain.body.CustomBodyMetric
 import com.chrisgoac.gymlog.domain.body.CustomMetricCheck
+import com.chrisgoac.gymlog.domain.body.CustomMetricStoreUnreadableException
 import com.chrisgoac.gymlog.domain.body.InvalidBodyMeasurementException
 import com.chrisgoac.gymlog.domain.body.InvalidCustomMetricException
 import com.chrisgoac.gymlog.model.BodyMetricRecord
@@ -79,10 +81,10 @@ class OfflineBodyRepository(
     }
 
     override suspend fun updateMeasurement(id: String, value: Double, at: Long) {
-        checkDate(at)
         mutate {
             val row = live(id) ?: throw BodyMeasurementMissingException(id)
-            checkValue(BodyMetrics.resolve(row.tipo, customMetrics()), value)
+            if (at != row.fecha) checkDate(at)
+            if (value != row.valor) checkValue(BodyMetrics.resolve(row.tipo, customMetrics()), value)
             if (row.valor == value && row.fecha == at) return@mutate
             put(row.copy(valor = value, fecha = at, updatedAt = nextTimestamp(SyncTable.BODY_METRICS, row.id)))
         }
@@ -103,7 +105,12 @@ class OfflineBodyRepository(
             is CustomMetricCheck.Existing -> check.metric
             is CustomMetricCheck.New -> {
                 // Append to the stored array untouched so entries/fields this version does not know survive.
-                val items = (liveStored?.valor?.let(::parseArray) ?: JsonArray(emptyList())).toMutableList()
+                val stored = liveStored?.valor?.takeIf { it.isNotBlank() }
+                val array = if (stored == null) JsonArray(emptyList()) else parseArray(stored) ?: run {
+                    Log.w("OfflineBodyRepository", "metricasPersonalizadas is not a JSON array; refusing to overwrite it")
+                    throw CustomMetricStoreUnreadableException()
+                }
+                val items = array.toMutableList()
                 items += JsonObject(
                     mapOf(
                         "clave" to JsonPrimitive(check.metric.key),

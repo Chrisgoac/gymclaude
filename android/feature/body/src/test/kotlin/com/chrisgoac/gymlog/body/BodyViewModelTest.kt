@@ -315,4 +315,55 @@ class BodyViewModelTest {
         advanceUntilIdle()
         assertEquals(BodyStatus.Ready, vm.state.value.status)
     }
+
+    @Test fun `an untouched value keeps the stored number exactly`() = runTest(dispatcher) {
+        val id = repo.seed("peso", 80.123, day(2))
+        val vm = started()
+        vm.onEdit(vm.state.value.history.single())
+        advanceUntilIdle()
+        vm.onEditorDate(TODAY.minusDays(3))
+        vm.onSave()
+        advanceUntilIdle()
+        assertEquals(listOf("update:$id:80.123:${day(3)}"), repo.writes)
+        // Also in pounds: no kg -> lb -> kg drift.
+        unit.value = WeightUnit.LB
+        advanceUntilIdle()
+        vm.onEdit(vm.state.value.history.single())
+        advanceUntilIdle()
+        vm.onEditorDate(TODAY.minusDays(4))
+        vm.onSave()
+        advanceUntilIdle()
+        assertEquals("update:$id:80.123:${day(4)}", repo.writes.last())
+    }
+
+    @Test fun `rows outside the bounds are editable on the untouched field only`() = runTest(dispatcher) {
+        val light = repo.seed("peso", 15.0, day(2))
+        val old = LocalDate.of(1999, 1, 1).atStartOfDay(MADRID).toInstant().toEpochMilli()
+        val vm = started()
+        vm.onEdit(vm.state.value.history.single())
+        advanceUntilIdle()
+        vm.onEditorDate(TODAY.minusDays(3)) // only the date changes
+        vm.onSave()
+        advanceUntilIdle()
+        assertEquals(listOf("update:$light:15.0:${day(3)}"), repo.writes)
+
+        vm.onEdit(vm.state.value.history.single())
+        advanceUntilIdle()
+        vm.onEditorValue("16") // a new bad value is still refused
+        vm.onSave()
+        advanceUntilIdle()
+        assertEquals(BodyValueError.TOO_SMALL, (vm.state.value.editor!!.problem as EditorProblem.Value).error)
+        vm.onEditorCancel()
+
+        vm.onMetric("cintura")
+        advanceUntilIdle()
+        val waist = repo.seed("cintura", 8.0, old)
+        advanceUntilIdle()
+        vm.onEdit(vm.state.value.history.single())
+        advanceUntilIdle()
+        vm.onEditorValue("90") // only the value changes; the 1999 date stays
+        vm.onSave()
+        advanceUntilIdle()
+        assertEquals("update:$waist:90.0:$old", repo.writes.last())
+    }
 }

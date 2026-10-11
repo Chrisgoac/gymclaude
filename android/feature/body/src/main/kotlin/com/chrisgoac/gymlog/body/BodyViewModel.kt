@@ -78,6 +78,9 @@ data class BodyEditorState(
     /** Null creates a measurement. */
     val entryId: String?,
     val originalAt: Long?,
+    /** Stored value and the text it was pre-filled as: untouched text sends the stored value as is (no rounding, no unit drift, no bound check). */
+    val originalValue: Double? = null,
+    val originalText: String? = null,
     val valueText: String,
     val date: LocalDate,
     val problem: EditorProblem? = null,
@@ -227,6 +230,8 @@ class BodyViewModel(
                 editor = BodyEditorState(
                     entryId = measurement.id,
                     originalAt = measurement.at,
+                    originalValue = measurement.value,
+                    originalText = BodyFormat.input(shown),
                     valueText = BodyFormat.input(shown),
                     date = Instant.ofEpochMilli(measurement.at).atZone(now.zone).toLocalDate(),
                 ),
@@ -249,12 +254,23 @@ class BodyViewModel(
         if (editor.saving) return
         val def = state.value.selected
         val now = clock()
-        val parsed = BodyValidation.parseValue(editor.valueText, def, weightUnit.value)
-        if (parsed is BodyParse.Invalid) return updateEditor { it.copy(problem = EditorProblem.Value(parsed.error, parsed.min, parsed.max)) }
+        val untouched = editor.originalValue != null && editor.valueText == editor.originalText
+        val value: Double
+        if (untouched) {
+            value = editor.originalValue!!
+        } else {
+            val parsed = BodyValidation.parseValue(editor.valueText, def, weightUnit.value)
+            if (parsed is BodyParse.Invalid) return updateEditor { it.copy(problem = EditorProblem.Value(parsed.error, parsed.min, parsed.max)) }
+            value = (parsed as BodyParse.Valid).storage
+        }
         val at = storedInstant(editor, now)
-        val dateError = if (editor.date.isAfter(now.today)) BodyDateError.IN_FUTURE else BodyValidation.checkDate(at, now.nowMillis)
+        // An unchanged instant (stored by the PWA, possibly old) is not re-validated.
+        val dateError = when {
+            at == editor.originalAt -> null
+            editor.date.isAfter(now.today) -> BodyDateError.IN_FUTURE
+            else -> BodyValidation.checkDate(at, now.nowMillis)
+        }
         if (dateError != null) return updateEditor { it.copy(problem = EditorProblem.Date(dateError)) }
-        val value = (parsed as BodyParse.Valid).storage
         updateEditor { it.copy(saving = true, problem = null) }
         viewModelScope.launch {
             try {

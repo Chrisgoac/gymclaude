@@ -182,6 +182,9 @@ class InvalidBodyMeasurementException(val problem: BodyProblem) : IllegalArgumen
 
 class InvalidCustomMetricException(val problem: CustomMetricProblem) : IllegalArgumentException("Invalid custom metric: $problem")
 
+/** The stored custom-metric setting is not a JSON array; refusing to overwrite content this version cannot read. */
+class CustomMetricStoreUnreadableException : IllegalStateException("The custom metrics setting is not a JSON array")
+
 /** The measurement to edit or delete is gone (deleted elsewhere / synced away). */
 class BodyMeasurementMissingException(val id: String) : IllegalStateException("Body measurement $id no longer exists")
 
@@ -199,14 +202,19 @@ interface BodyRepository {
     /** Live measurements of [type], chronological: oldest first, same-day ties by write order. */
     fun observeMeasurements(type: String): Flow<List<BodyMeasurement>>
 
-    /** Stores [value] (storage unit) at [at]; returns the new id. */
+    /** Stores [value] (storage unit) at [at]; returns the new id. Bounds apply to new values. */
     suspend fun addMeasurement(type: String, value: Double, at: Long): String
 
+    /** An unchanged [value] or [at] is never re-validated, so rows the PWA stored outside Android's bounds stay editable. */
     suspend fun updateMeasurement(id: String, value: Double, at: Long)
 
     /** Tombstones the measurement; idempotent if it is already gone. */
     suspend fun deleteMeasurement(id: String)
 
-    /** Idempotent by key; throws [InvalidCustomMetricException]. */
+    /**
+     * Idempotent by key; throws [InvalidCustomMetricException], or [CustomMetricStoreUnreadableException]
+     * when the stored setting is not an array. The list is ONE synced row (whole-row last-writer-wins,
+     * same as the PWA): two devices adding different metrics offline keep only the later write's list.
+     */
     suspend fun addCustomMetric(name: String, unit: String): CustomBodyMetric
 }

@@ -229,4 +229,24 @@ class OfflineBodyRepositoryTest {
         assertNull(secondRepo.observeMeasurements("peso").first().firstOrNull())
         assertEquals(3, outbox(second).size)
     }
+
+    @Test fun `rows outside android bounds stay editable on their untouched fields`() = runTest {
+        val old = 915_148_800_000L // 1999-01-01
+        db.bodyMetricDao().upsert(com.chrisgoac.gymlog.database.entity.BodyMetricEntity("w", 5, null, "peso", 15.0, now - DAY, 1))
+        db.bodyMetricDao().upsert(com.chrisgoac.gymlog.database.entity.BodyMetricEntity("c", 5, null, "cintura", 8.0, old, 1))
+        // Date-only edit of the 15 kg row, value-only edit of the 1999 row.
+        body.updateMeasurement("w", 15.0, now - 2 * DAY)
+        body.updateMeasurement("c", 90.0, old)
+        assertEquals(listOf(15.0, 90.0), outbox().map { (it.operations.single() as BodyMetricOperation).record.valor })
+        // Changing the out-of-range field to another bad value is still refused.
+        try { body.updateMeasurement("w", 16.0, now - DAY); fail() } catch (e: InvalidBodyMeasurementException) { assertEquals(BodyProblem.VALUE_OUT_OF_RANGE, e.problem) }
+        try { body.updateMeasurement("c", 90.0, old + DAY); fail() } catch (e: InvalidBodyMeasurementException) { assertEquals(BodyProblem.DATE_TOO_OLD, e.problem) }
+    }
+
+    @Test fun `a non array custom setting is never overwritten`() = runTest {
+        db.userSettingDao().upsert(com.chrisgoac.gymlog.database.entity.UserSettingEntity("metricasPersonalizadas", 5, null, """{"x":1}""", 1))
+        try { body.addCustomMetric("Tobillo", "cm"); fail() } catch (expected: com.chrisgoac.gymlog.domain.body.CustomMetricStoreUnreadableException) { }
+        assertTrue(outbox().isEmpty())
+        assertEquals("""{"x":1}""", db.userSettingDao().findById("metricasPersonalizadas")!!.valor)
+    }
 }
