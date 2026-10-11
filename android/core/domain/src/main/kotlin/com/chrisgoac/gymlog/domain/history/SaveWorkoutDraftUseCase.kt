@@ -19,6 +19,9 @@ sealed interface SaveResult {
 
     /** The workout was deleted meanwhile; nothing was written. */
     data object NotFound : SaveResult
+
+    /** The workout is still in progress (not finished): it is edited from the active-workout screen. */
+    data object NotEditable : SaveResult
 }
 
 /** Saves an edited past workout atomically; [original] is the version the draft was opened from. */
@@ -37,6 +40,7 @@ class DefaultSaveWorkoutDraftUseCase(
 ) : SaveWorkoutDraftUseCase {
     override suspend fun invoke(original: WorkoutAggregate, draft: WorkoutDraft): SaveResult {
         require(draft.sessionId == original.session.id) { "Draft ${draft.sessionId} is not for session ${original.session.id}" }
+        if (original.session.durationSeconds == null) return SaveResult.NotEditable
         val summary = WorkoutDraftValidation.validate(original, draft, now(), repository)
         if (!summary.isValid) return SaveResult.Invalid(summary)
         val edit = WorkoutEdit.between(original, draft)

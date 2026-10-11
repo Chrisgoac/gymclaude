@@ -12,6 +12,9 @@ import com.chrisgoac.gymlog.domain.history.DefaultSaveWorkoutDraftUseCase
 import com.chrisgoac.gymlog.domain.history.EditOutcome
 import com.chrisgoac.gymlog.domain.history.ExerciseRowEdit
 import com.chrisgoac.gymlog.domain.history.InvalidationScope
+import com.chrisgoac.gymlog.domain.history.SaveResult
+import com.chrisgoac.gymlog.domain.history.SaveWorkoutDraftUseCase
+import com.chrisgoac.gymlog.domain.history.WorkoutDraft
 import com.chrisgoac.gymlog.domain.history.SessionEdit
 import com.chrisgoac.gymlog.domain.history.SetRowEdit
 import com.chrisgoac.gymlog.domain.history.WorkoutEdit
@@ -120,6 +123,7 @@ class HistoryEditorViewModelTest {
     private val history = EditorHistory()
     private val storage = EditorStorage(history)
     private var ids = 0
+    private var saveCalls = 0
 
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
 
@@ -127,12 +131,19 @@ class HistoryEditorViewModelTest {
 
     private fun TestScope.editor(handle: SavedStateHandle = SavedStateHandle()): HistoryEditorViewModel {
         val vm = HistoryEditorViewModel(
-            "s1", history, EditorGyms(), EditorExercises(), DefaultSaveWorkoutDraftUseCase(storage) { NOW }, handle,
+            "s1", history, EditorGyms(), EditorExercises(), counting(DefaultSaveWorkoutDraftUseCase(storage) { NOW }), handle,
             now = { NOW }, zone = ZoneOffset.UTC, newId = { "new-${++ids}" },
         )
         backgroundScope.launch(dispatcher) { vm.pickerResults.collect {} }
         advanceUntilIdle()
         return vm
+    }
+
+    private fun counting(inner: SaveWorkoutDraftUseCase) = object : SaveWorkoutDraftUseCase {
+        override suspend fun invoke(original: WorkoutAggregate, draft: WorkoutDraft): SaveResult {
+            saveCalls++
+            return inner(original, draft)
+        }
     }
 
     private fun recreate(handle: SavedStateHandle) = SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) })
@@ -379,5 +390,72 @@ class HistoryEditorViewModelTest {
         history.detail.value = null
         assertEquals(EditorStatus.NotFound, editor().state.value.status)
         assertNull(editor().lastInvalidatedScopes.value)
+    }
+
+    // ---- Fix round 1 ----
+
+    @Test fun `saving a clean draft closes without even calling the save`() = runTest(dispatcher) {
+        val vm = editor()
+        vm.onNotes("cambio")
+        vm.onNotes("Bien") // back to the original
+        vm.save()
+        advanceUntilIdle()
+        assertTrue(vm.exit.value)
+        assertEquals(0, saveCalls)
+        assertTrue(storage.writes.isEmpty())
+    }
+
+    @Test fun `retyping the original minute keeps the original instant`() = runTest(dispatcher) {
+        val vm = editor()
+        vm.onTime(" 08:00 ")
+        vm.onDate("13/01/2027 ")
+        vm.onNotes("x")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(aggregate().session.startedAt, storage.writes.single().session!!.startedAt)
+        assertFalse(InvalidationScope.STREAKS in vm.lastInvalidatedScopes.value!!)
+    }
+
+    @Test fun `after a conflict editing is frozen and leaving does not ask`() = runTest(dispatcher) {
+        val vm = editor()
+        vm.onNotes("mío")
+        history.detail.value = history.detailOf(aggregate(version = 2))
+        vm.save()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.conflict)
+        vm.onNotes("otro")
+        vm.removeExercise("le1")
+        advanceUntilIdle()
+        assertEquals("mío", vm.state.value.notes)
+        assertEquals(2, vm.state.value.exercises.size)
+        vm.requestExit()
+        assertTrue(vm.exit.value)
+        assertFalse(vm.state.value.confirmingExit)
+    }
+
+    @Test fun `an unfinished workout is refused`() = runTest(dispatcher) {
+        val active = aggregate().let { it.copy(session = it.session.copy(durationSeconds = null)) }
+        history.detail.value = history.detailOf(active)
+        val vm = editor()
+        assertEquals(EditorStatus.Unfinished, vm.state.value.status)
+        vm.onNotes("x")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(0, saveCalls)
+    }
+
+    @Test fun `stored values that do not round-trip show no error while untouched`() = runTest(dispatcher) {
+        val odd = aggregate().let { agg ->
+            agg.copy(exercises = agg.exercises.map { e -> e.copy(sets = e.sets.map { if (it.id == "b") it.copy(weight = 62.123456789012, reps = 1500) else it }) })
+        }
+        history.detail.value = history.detailOf(odd)
+        val vm = editor()
+        val b = vm.state.value.exercises[0].sets[1]
+        assertNull(b.weightError)
+        assertNull(b.repsError)
+        vm.onReps("a", "9")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(listOf(SetRowEdit("a", "le1", 0, 60.0, 9, false)), storage.writes.single().upsertSets)
     }
 }

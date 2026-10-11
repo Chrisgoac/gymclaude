@@ -5,6 +5,7 @@ import com.chrisgoac.gymlog.domain.workout.SetFieldError
 import com.chrisgoac.gymlog.domain.workout.SetValidation
 import com.chrisgoac.gymlog.domain.workout.WorkoutAggregate
 import com.chrisgoac.gymlog.domain.workout.WorkoutLimits
+import com.chrisgoac.gymlog.domain.workout.WorkoutSet
 
 /** One reason a draft cannot be saved, tied to the field (and row) it belongs to. */
 sealed interface DraftError {
@@ -51,16 +52,29 @@ object WorkoutDraftValidation {
     /** A start up to 5 minutes ahead of the server clock is accepted (clock skew between devices). */
     const val FUTURE_TOLERANCE_MILLIS = 5L * 60 * 1000
 
-    /** Checks that need no storage: date, notes, weights and reps. */
-    fun validateValues(draft: WorkoutDraft, nowMillis: Long): List<DraftError> = buildList {
+    /** True when [text] is still exactly what [WorkoutDraft.from] showed for [stored]: the stored value is kept as is. */
+    fun weightUntouched(stored: WorkoutSet?, text: String): Boolean = stored != null && text == SetValidation.formatWeight(stored.weight)
+
+    fun repsUntouched(stored: WorkoutSet?, text: String): Boolean = stored != null && text == stored.reps.toString()
+
+    /**
+     * Checks that need no storage: date, notes, weights and reps. With [original], values the user did
+     * not touch are not re-validated (stored data may predate the current bounds or not round-trip).
+     */
+    fun validateValues(draft: WorkoutDraft, nowMillis: Long, original: WorkoutAggregate? = null): List<DraftError> = buildList {
+        val stored = original?.exercises?.flatMap { it.sets }?.associateBy { it.id }.orEmpty()
         val start = draft.startedAt.toEpochMilli()
         if (start < 0) add(DraftError.DateOutOfRange)
         else if (start > nowMillis + FUTURE_TOLERANCE_MILLIS) add(DraftError.DateInFuture)
         if (cleanNotes(draft.notes).orEmpty().length > WorkoutLimits.NOTES_MAX) add(DraftError.NotesTooLong)
         draft.exercises.forEach { exercise ->
             exercise.sets.forEach { set ->
-                (SetValidation.parseWeight(set.weight) as? FieldParse.Invalid)?.let { add(DraftError.InvalidWeight(set.id, it.error)) }
-                (SetValidation.parseReps(set.reps) as? FieldParse.Invalid)?.let { add(DraftError.InvalidReps(set.id, it.error)) }
+                if (!weightUntouched(stored[set.id], set.weight)) {
+                    (SetValidation.parseWeight(set.weight) as? FieldParse.Invalid)?.let { add(DraftError.InvalidWeight(set.id, it.error)) }
+                }
+                if (!repsUntouched(stored[set.id], set.reps)) {
+                    (SetValidation.parseReps(set.reps) as? FieldParse.Invalid)?.let { add(DraftError.InvalidReps(set.id, it.error)) }
+                }
             }
         }
     }
@@ -72,7 +86,7 @@ object WorkoutDraftValidation {
         nowMillis: Long,
         references: WorkoutReferenceChecker,
     ): DraftValidationSummary {
-        val errors = validateValues(draft, nowMillis).toMutableList()
+        val errors = validateValues(draft, nowMillis, original).toMutableList()
         val gymId = draft.gymId
         if (gymId != null && gymId != original.session.gymId && !references.isGymAvailable(gymId)) {
             errors += DraftError.GymUnavailable(gymId)

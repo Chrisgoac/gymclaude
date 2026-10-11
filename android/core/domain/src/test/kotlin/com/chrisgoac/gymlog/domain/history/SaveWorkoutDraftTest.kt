@@ -212,4 +212,80 @@ class SaveWorkoutDraftTest {
         assertNull(WorkoutDraftCodec.decodeDraft("{broken"))
         assertNull(WorkoutDraftCodec.decodeAggregate(null))
     }
+
+    // ---- Fix round 1: stored order and values as the PWA leaves them ----
+
+    /** PWA data: removals never renumber and adds use the live count, so orden has gaps and duplicates. */
+    private val messy = WorkoutAggregate(
+        WorkoutSession("s1", null, "g1", NOW - 2 * DAY, 3600, null, updatedAt = 1),
+        listOf(
+            WorkoutExercise(
+                "le1", "seed-press", "Press", 3,
+                listOf(WorkoutSet("a", 0, 60.0, 8, false), WorkoutSet("b", 2, 62.123456789012, 1500, false), WorkoutSet("c", 2, 65.0, 5, false)),
+            ),
+            WorkoutExercise("le2", "seed-row", "Remo", 3, listOf(WorkoutSet("d", 5, 50.0, 10, false))),
+        ),
+    )
+
+    private suspend fun saveMessy(draft: WorkoutDraft, repo: FakeEdits = FakeEdits()) =
+        DefaultSaveWorkoutDraftUseCase(repo) { NOW }(messy, draft) to repo
+
+    @Test fun `a clean draft of non-compact and duplicate orden writes nothing`() = runTest {
+        val draft = WorkoutDraft.from(messy)
+        assertTrue(WorkoutEdit.between(messy, draft).isEmpty)
+        val (result, repo) = saveMessy(draft)
+        assertEquals(SaveResult.Saved(emptySet()), result)
+        assertTrue(repo.applied.isEmpty())
+    }
+
+    @Test fun `editing one weight in a non-compact parent writes exactly that set at its stored position`() = runTest {
+        val (_, repo) = saveMessy(WorkoutDraft.from(messy).withSet("c") { it.copy(weight = "67,5") })
+        val edit = repo.applied.single()
+        assertNull(edit.session)
+        assertTrue(edit.upsertExercises.isEmpty())
+        assertEquals(listOf(SetRowEdit("c", "le1", 2, 67.5, 5, false)), edit.upsertSets)
+    }
+
+    @Test fun `only a reordered parent is renumbered`() = runTest {
+        val (_, repo) = saveMessy(WorkoutDraft.from(messy).moveSet("c", -1))
+        val edit = repo.applied.single()
+        // a(0) c b → 0 1 2: a and b already hold their new positions; le2's d keeps its 5.
+        assertEquals(listOf(SetRowEdit("c", "le1", 1, 65.0, 5, false)), edit.upsertSets)
+        assertTrue(edit.upsertExercises.isEmpty())
+    }
+
+    @Test fun `untouched values that do not round-trip or exceed today's bounds never block a save`() = runTest {
+        val draft = WorkoutDraft.from(messy)
+        assertEquals("62.123456789012", draft.exercises[0].sets[1].weight) // 15 chars: unparseable as typed text
+        assertTrue(WorkoutDraftValidation.validateValues(draft, NOW, messy).isEmpty())
+        val (result, repo) = saveMessy(draft.withSet("a") { it.copy(reps = "9") })
+        assertTrue(result is SaveResult.Saved)
+        assertEquals(listOf(SetRowEdit("a", "le1", 0, 60.0, 9, false)), repo.applied.single().upsertSets)
+        // Touching such a value validates it like any other.
+        val (invalid, _) = saveMessy(draft.withSet("b") { it.copy(reps = "1501") })
+        assertEquals(listOf(DraftError.InvalidReps("b", SetFieldError.TOO_LARGE)), (invalid as SaveResult.Invalid).summary.errors)
+    }
+
+    @Test fun `a set moved to another exercise counts as a value change`() {
+        val draft = WorkoutDraft.from(original)
+        val moved = draft.exercises[0].sets[0]
+        val edited = draft.copy(
+            exercises = listOf(
+                draft.exercises[0].copy(sets = draft.exercises[0].sets.drop(1)),
+                draft.exercises[1].copy(sets = draft.exercises[1].sets + moved),
+                draft.exercises[2],
+            ),
+        )
+        val edit = WorkoutEdit.between(original, edited)
+        assertEquals(SetRowEdit("a", "le2", 1, 60.0, 8, false), edit.upsertSets.first { it.id == "a" })
+        assertTrue(edit.invalidatedScopes(original).containsAll(setOf(PERSONAL_RECORDS, VOLUME, ONE_REP_MAX)))
+    }
+
+    @Test fun `an unfinished workout is not editable here`() = runTest {
+        val active = original.copy(session = original.session.copy(durationSeconds = null))
+        val repo = FakeEdits()
+        val result = DefaultSaveWorkoutDraftUseCase(repo) { NOW }(active, WorkoutDraft.from(active).copy(notes = "x"))
+        assertEquals(SaveResult.NotEditable, result)
+        assertTrue(repo.applied.isEmpty())
+    }
 }

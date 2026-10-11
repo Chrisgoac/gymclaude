@@ -3,6 +3,8 @@ package com.chrisgoac.gymlog.domain.history
 import com.chrisgoac.gymlog.domain.workout.FieldParse
 import com.chrisgoac.gymlog.domain.workout.SetValidation
 import com.chrisgoac.gymlog.domain.workout.WorkoutAggregate
+import com.chrisgoac.gymlog.domain.workout.WorkoutExercise
+import com.chrisgoac.gymlog.domain.workout.WorkoutSet
 
 /** New values of the session row; only present in a [WorkoutEdit] when one of them changed. */
 data class SessionEdit(val startedAt: Long, val gymId: String?, val notes: String?)
@@ -23,7 +25,8 @@ data class SetRowEdit(
 /**
  * What saving a draft writes, as the difference between the original aggregate and the draft:
  * unchanged rows are absent. Removing an exercise also lists all its original sets in
- * [removedSetIds]. Positions are compact (0..n-1) in draft order.
+ * [removedSetIds]. A parent whose children keep their membership and order keeps their stored
+ * positions (even non-compact ones); a reordered or changed parent is renumbered 0..n-1.
  */
 data class WorkoutEdit(
     val sessionId: String,
@@ -54,22 +57,34 @@ data class WorkoutEdit(
             val draftExerciseIds = draft.exercises.map { it.id }.toSet()
             val draftSetIds = draft.exercises.flatMap { exercise -> exercise.sets.map { it.id } }.toSet()
 
+            // Stored order can be non-compact or even duplicated (PWA data: removals never renumber).
+            // A parent whose children keep the same membership and order keeps their stored positions;
+            // only a parent whose membership or order changed is renumbered 0..n-1.
+            val exercisesUnchangedOrder = draft.exercises.map { it.id } == original.exercises.sortedWith(ORDER_EXERCISES).map { it.id }
             val upsertExercises = draft.exercises.mapIndexedNotNull { index, exercise ->
                 val before = originalExercises[exercise.id]
-                if (before != null && before.position == index && before.exerciseId == exercise.exerciseId) null
-                else ExerciseRowEdit(exercise.id, exercise.exerciseId, index)
+                val position = if (exercisesUnchangedOrder && before != null) before.position else index
+                if (before != null && before.position == position && before.exerciseId == exercise.exerciseId) null
+                else ExerciseRowEdit(exercise.id, exercise.exerciseId, position)
             }
             val upsertSets = draft.exercises.flatMap { exercise ->
+                val originalOrder = originalExercises[exercise.id]?.sets?.sortedWith(ORDER_SETS)?.map { it.id }
+                val setsUnchangedOrder = originalOrder != null && originalOrder == exercise.sets.map { it.id }
                 exercise.sets.mapIndexedNotNull { index, set ->
-                    val weight = (SetValidation.parseWeight(set.weight) as? FieldParse.Valid)?.value
-                        ?: throw IllegalArgumentException("Invalid weight '${set.weight}' in set ${set.id}")
-                    val reps = (SetValidation.parseReps(set.reps) as? FieldParse.Valid)?.value
-                        ?: throw IllegalArgumentException("Invalid reps '${set.reps}' in set ${set.id}")
-                    val row = SetRowEdit(set.id, exercise.id, index, weight, reps, set.warmup)
                     val before = originalSets[set.id]
-                    val unchanged = before != null && before.second == exercise.id && before.first.position == index &&
-                        before.first.weight == weight && before.first.reps == reps && before.first.warmup == set.warmup
-                    if (unchanged) null else row
+                    val storedSet = before?.first
+                    // Untouched values are taken as stored, so data that does not round-trip through the
+                    // text fields (long fractions, legacy out-of-range values) never blocks a save.
+                    val weight = if (WorkoutDraftValidation.weightUntouched(storedSet, set.weight)) storedSet!!.weight
+                    else (SetValidation.parseWeight(set.weight) as? FieldParse.Valid)?.value
+                        ?: throw IllegalArgumentException("Invalid weight '${set.weight}' in set ${set.id}")
+                    val reps = if (WorkoutDraftValidation.repsUntouched(storedSet, set.reps)) storedSet!!.reps
+                    else (SetValidation.parseReps(set.reps) as? FieldParse.Valid)?.value
+                        ?: throw IllegalArgumentException("Invalid reps '${set.reps}' in set ${set.id}")
+                    val position = if (setsUnchangedOrder && storedSet != null) storedSet.position else index
+                    val unchanged = before != null && before.second == exercise.id && storedSet!!.position == position &&
+                        storedSet.weight == weight && storedSet.reps == reps && storedSet.warmup == set.warmup
+                    if (unchanged) null else SetRowEdit(set.id, exercise.id, position, weight, reps, set.warmup)
                 }
             }
             val removedExerciseIds = original.exercises.map { it.id }.filterNot { it in draftExerciseIds }
@@ -92,10 +107,11 @@ data class WorkoutEdit(
     fun invalidatedScopes(original: WorkoutAggregate): Set<InvalidationScope> {
         if (isEmpty) return emptySet()
         val scopes = mutableSetOf(InvalidationScope.COACH_SNAPSHOT)
-        val originalSets = original.exercises.flatMap { it.sets }.associateBy { it.id }
+        val originalSets = original.exercises.flatMap { exercise -> exercise.sets.map { it to exercise.id } }.associateBy { it.first.id }
+        // A set that moved to another exercise changes both exercises' values.
         val setValuesChanged = removedSetIds.isNotEmpty() || upsertSets.any { row ->
-            val before = originalSets[row.id]
-            before == null || before.weight != row.weight || before.reps != row.reps || before.warmup != row.warmup
+            val (before, parent) = originalSets[row.id] ?: return@any true
+            parent != row.loggedExerciseId || before.weight != row.weight || before.reps != row.reps || before.warmup != row.warmup
         }
         val originalExerciseIds = original.exercises.map { it.id }.toSet()
         val exercisesAddedOrRemoved = removedExerciseIds.isNotEmpty() || upsertExercises.any { it.id !in originalExerciseIds }
@@ -107,6 +123,9 @@ data class WorkoutEdit(
         return scopes
     }
 }
+
+private val ORDER_EXERCISES = compareBy<WorkoutExercise>({ it.position }, { it.id })
+private val ORDER_SETS = compareBy<WorkoutSet>({ it.position }, { it.id })
 
 private val SET_VALUE_SCOPES = setOf(
     InvalidationScope.PERSONAL_RECORDS,

@@ -135,4 +135,6 @@
     <string name="history_editor_discard_message">Los cambios de este entreno no se guardarán.</string>
     <string name="history_editor_discard">Descartar</string>
     <string name="history_editor_keep_editing">Seguir editando</string>
+    <string name="history_editor_unfinished_title">Entreno en curso</string>
+    <string name="history_editor_unfinished_message">Termina este entreno antes de editarlo desde el historial.</string>
 </resources>

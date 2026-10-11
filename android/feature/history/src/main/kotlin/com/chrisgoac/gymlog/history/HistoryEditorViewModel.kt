@@ -45,9 +45,11 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.time.format.ResolverStyle
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
-enum class EditorStatus { Loading, Ready, NotFound, Failed }
+/** [Unfinished]: the workout is still in progress; it is edited from the active-workout screen, not here. */
+enum class EditorStatus { Loading, Ready, NotFound, Unfinished, Failed }
 
 /** One problem of the summary shown before saving; rows are named by position for the user. */
 sealed interface EditorIssue {
@@ -191,6 +193,8 @@ class HistoryEditorViewModel(
                 val detail = history.observeDetail(sessionId).first()
                 if (detail == null) {
                     transient.value = Transient(status = EditorStatus.NotFound)
+                } else if (detail.workout.session.durationSeconds == null) {
+                    transient.value = Transient(status = EditorStatus.Unfinished)
                 } else {
                     val start = Instant.ofEpochMilli(detail.workout.session.startedAt).atZone(zone)
                     set(
@@ -302,6 +306,11 @@ class HistoryEditorViewModel(
         val e = editing.value ?: return
         val t = transient.value
         if (t.saving || t.conflict || t.gone || exitFlag.value) return
+        // Nothing changed: close without touching storage at all.
+        if (!isDirty(e)) {
+            exitFlag.value = true
+            return
+        }
         val start = resolveStart(e)
         if (start == null) {
             edit { it.copy(showIssues = true) }
@@ -322,6 +331,7 @@ class HistoryEditorViewModel(
                     }
                     SaveResult.Conflict -> transient.update { it.copy(conflict = true) }
                     SaveResult.NotFound -> transient.update { it.copy(gone = true) }
+                    SaveResult.NotEditable -> transient.update { it.copy(status = EditorStatus.Unfinished) }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -335,15 +345,18 @@ class HistoryEditorViewModel(
 
     // ---- Internals ----
 
-    /** The edited start: the original instant while the texts are untouched (keeps its seconds). */
+    /**
+     * The edited start. While the fields name the original minute (untouched or retyped) the original
+     * instant is kept with its seconds and milliseconds; otherwise the typed minute in [zone].
+     */
     private fun resolveStart(e: Editing): Instant? {
-        val original = Instant.ofEpochMilli(e.original.session.startedAt).atZone(zone)
-        if (e.dateText == original.format(dateFormat) && e.timeText == original.format(timeFormat)) return e.draft.startedAt
-        return try {
-            LocalDate.parse(e.dateText.trim(), dateFormat).atTime(LocalTime.parse(e.timeText.trim(), timeFormat)).atZone(zone).toInstant()
+        val typed = try {
+            LocalDate.parse(e.dateText.trim(), dateFormat).atTime(LocalTime.parse(e.timeText.trim(), timeFormat))
         } catch (_: DateTimeParseException) {
-            null
+            return null
         }
+        val original = Instant.ofEpochMilli(e.original.session.startedAt).atZone(zone).toLocalDateTime().truncatedTo(ChronoUnit.MINUTES)
+        return if (typed == original) Instant.ofEpochMilli(e.original.session.startedAt) else typed.atZone(zone).toInstant()
     }
 
     private fun isDirty(e: Editing): Boolean {
@@ -357,7 +370,7 @@ class HistoryEditorViewModel(
     private fun issuesOf(e: Editing): List<EditorIssue> {
         val start = resolveStart(e)
         val draft = if (start != null) e.draft.copy(startedAt = start) else e.draft
-        val values = WorkoutDraftValidation.validateValues(draft, now()).filterNot { start == null && it.isDateError() }
+        val values = WorkoutDraftValidation.validateValues(draft, now(), e.original).filterNot { start == null && it.isDateError() }
         // Reference errors stay only while the row / gym they name is still in the draft.
         val references = e.referenceErrors.filter { error ->
             when (error) {
@@ -406,6 +419,7 @@ class HistoryEditorViewModel(
             notes = e.draft.notes,
             notesTooLong = (WorkoutDraftValidation.cleanNotes(e.draft.notes)?.length ?: 0) > WorkoutLimits.NOTES_MAX,
             exercises = e.draft.exercises.mapIndexed { index, exercise ->
+                val stored = e.original.exercises.flatMap { it.sets }.associateBy { it.id }
                 EditorExerciseUi(
                     id = exercise.id,
                     name = exercise.exerciseName,
@@ -416,8 +430,11 @@ class HistoryEditorViewModel(
                             weightText = set.weight,
                             repsText = set.reps,
                             warmup = set.warmup,
-                            weightError = (SetValidation.parseWeight(set.weight) as? FieldParse.Invalid)?.error,
-                            repsError = (SetValidation.parseReps(set.reps) as? FieldParse.Invalid)?.error,
+                            // Untouched stored values are kept as they are, so they never show an error.
+                            weightError = if (WorkoutDraftValidation.weightUntouched(stored[set.id], set.weight)) null
+                            else (SetValidation.parseWeight(set.weight) as? FieldParse.Invalid)?.error,
+                            repsError = if (WorkoutDraftValidation.repsUntouched(stored[set.id], set.reps)) null
+                            else (SetValidation.parseReps(set.reps) as? FieldParse.Invalid)?.error,
                         )
                     },
                     isFirst = index == 0,
@@ -441,7 +458,9 @@ class HistoryEditorViewModel(
 
     private fun edit(transform: (Editing) -> Editing) {
         val current = editing.value ?: return
-        if (transient.value.saving) return
+        val t = transient.value
+        // Frozen while saving, and after a conflict / deletion (only reload or close remain).
+        if (t.saving || t.conflict || t.gone) return
         set(transform(current))
     }
 

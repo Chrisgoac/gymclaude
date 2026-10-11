@@ -134,6 +134,9 @@ internal fun HistoryEditorContent(
                     EditorStatus.NotFound -> item(key = "missing") {
                         HierroEmptyState(stringResource(R.string.history_detail_not_found_title), stringResource(R.string.history_detail_not_found_message))
                     }
+                    EditorStatus.Unfinished -> item(key = "unfinished") {
+                        HierroEmptyState(stringResource(R.string.history_editor_unfinished_title), stringResource(R.string.history_editor_unfinished_message))
+                    }
                     EditorStatus.Failed -> item(key = "failed") {
                         HierroErrorState(
                             message = stringResource(R.string.history_error_message),

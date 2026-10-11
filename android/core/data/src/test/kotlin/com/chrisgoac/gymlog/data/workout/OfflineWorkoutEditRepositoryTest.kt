@@ -271,4 +271,28 @@ class OfflineWorkoutEditRepositoryTest {
         assertEquals(before, outbox().size)
         assertEquals(original, original(id))
     }
+
+    @Test fun `non-compact and duplicate stored orden from the PWA is left alone`() = runTest {
+        setUp(); seed()
+        val id = finishedWorkout()
+        // Rewrite orden as the PWA leaves it (as a pull would: no outbox): sets 0, 2, 2 and both exercises at 3.
+        val stored = original(id)
+        stored.exercises[0].sets.zip(listOf(0, 2, 2)).forEach { (set, orden) ->
+            db.loggedSetDao().upsert(db.loggedSetDao().findById(set.id)!!.copy(orden = orden))
+        }
+        stored.exercises.forEach { db.loggedExerciseDao().upsert(db.loggedExerciseDao().findById(it.id)!!.copy(orden = 3)) }
+        val original = original(id)
+        val before = outbox().size
+
+        assertEquals(SaveResult.Saved(emptySet()), save(original, WorkoutDraft.from(original)))
+        assertEquals(before, outbox().size)
+
+        val target = WorkoutDraft.from(original).exercises.first { it.exerciseId == "seed-press" }.sets.last()
+        assertTrue(save(original, WorkoutDraft.from(original).withSet(target.id) { it.copy(weight = "66") }) is SaveResult.Saved)
+        val ops = outbox().drop(before).single().operations
+        val set = (ops.single() as LoggedSetOperation).record
+        assertEquals(target.id, set.id.value)
+        assertEquals(66.0, set.peso, 0.0)
+        assertEquals(2, set.orden)
+    }
 }
