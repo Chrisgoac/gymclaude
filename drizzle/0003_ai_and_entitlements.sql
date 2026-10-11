@@ -36,21 +36,36 @@ CREATE TABLE IF NOT EXISTS "ai_reports" (
 CREATE UNIQUE INDEX IF NOT EXISTS "ai_reports_user_kind_fingerprint_idx" ON "ai_reports" USING btree ("user_id","kind","source_fingerprint");
 
 -- 3. AI response metadata (Coach/mesocycle). One response per (user, clientMessageId).
+--    content: final text of a complete Coach response (NULL while incomplete); the server replays it on
+--    a retry and uses it, never the client-synced copy, as assistant context.
+--    attempt_id + lease_expires_at: the live generation attempt. A retry may take over an incomplete
+--    row only once the lease is gone (released or expired); only the current attempt can complete it.
 CREATE TABLE IF NOT EXISTS "ai_responses" (
 	"id" text PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
 	"client_message_id" text NOT NULL,
+	"kind" text DEFAULT 'coach' NOT NULL,
 	"status" text NOT NULL,
 	"content" text,
+	"attempt_id" text,
+	"lease_expires_at" bigint,
 	"created_at" bigint NOT NULL,
 	"updated_at" bigint NOT NULL,
-	CONSTRAINT "ai_responses_status_check" CHECK ("status" IN ('complete','incomplete'))
+	CONSTRAINT "ai_responses_status_check" CHECK ("status" IN ('complete','incomplete')),
+	CONSTRAINT "ai_responses_kind_check" CHECK ("kind" IN ('coach','mesocycle'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "ai_responses_user_client_message_idx" ON "ai_responses" USING btree ("user_id","client_message_id");
--- Final text of a complete Coach response (NULL while incomplete). The server replays it on a retry
--- of the same clientMessageId and uses it, never the client-synced copy, as assistant context.
--- ADD COLUMN for databases where an earlier revision of this file already created the table.
+-- For databases where an earlier revision of this file already created the table.
+ALTER TABLE "ai_responses" ADD COLUMN IF NOT EXISTS "kind" text DEFAULT 'coach' NOT NULL;
 ALTER TABLE "ai_responses" ADD COLUMN IF NOT EXISTS "content" text;
+ALTER TABLE "ai_responses" ADD COLUMN IF NOT EXISTS "attempt_id" text;
+ALTER TABLE "ai_responses" ADD COLUMN IF NOT EXISTS "lease_expires_at" bigint;
+DO $$
+BEGIN
+	IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ai_responses_kind_check') THEN
+		ALTER TABLE "ai_responses" ADD CONSTRAINT "ai_responses_kind_check" CHECK ("kind" IN ('coach','mesocycle'));
+	END IF;
+END $$;
 
 -- 4. User reports of problematic AI responses (one per user and response).
 CREATE TABLE IF NOT EXISTS "reported_ai_responses" (

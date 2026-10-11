@@ -230,6 +230,8 @@ own gating is presentation only.
 | 503 | `ENTITLEMENT_UNAVAILABLE` | true | Entitlement store unreachable; the request is refused, never granted (fail closed) |
 | 404 | `RESPONSE_NOT_FOUND` | false | Reported response does not exist or belongs to another user (indistinguishable) |
 | 503 | `AI_UNAVAILABLE` | true | The AI provider is not configured on the server |
+| 409 | `AI_RESPONSE_IN_PROGRESS` | true | Another attempt for the same `clientMessageId` is generating |
+| 409 | `CLIENT_MESSAGE_ID_CONFLICT` | false | The `clientMessageId` belongs to another AI request kind |
 
 ### Server-only tables
 
@@ -264,17 +266,22 @@ ending in exactly one `complete` or `error`. Concatenated `delta`s are the answe
   per user and `clientMessageId`). Store the assistant `coachMessages` row under `responseId`.
 - Retry with the same `clientMessageId` after any failure. A complete response is replayed
   (start/delta/complete) without calling the model; an incomplete one is regenerated under the same
-  `responseId`. The server never writes the user's message: it is only the client's synced
+  `responseId` once no attempt holds it. Each attempt holds a lease (model timeout 45 s + 15 s); a
+  failed or aborted attempt releases it at once. While another attempt's lease is live the request
+  gets JSON `409 AI_RESPONSE_IN_PROGRESS` (retryable) before any streaming. Only the attempt holding
+  the lease can complete the response. A `clientMessageId` already used by another AI request kind
+  gets `409 CLIENT_MESSAGE_ID_CONFLICT` (not retryable). The server never writes the user's message: it is only the client's synced
   `coachMessages` row (id = `clientMessageId`), so a retry cannot duplicate it.
 - Context: the newest 20 live user/assistant turns (≤ 16 000 chars) of the user's synced
-  `coachMessages`, excluding `clientMessageId`. Assistant turns count only if their id is a complete
+  `coachMessages`, excluding `clientMessageId` and, once that message has synced, anything not created
+  before it. Assistant turns count only if their id is a complete
   `ai_responses` row of that user, and the text used is the server-stored one (`ai_responses.content`):
   forged or edited synced assistant rows never reach the model.
 - `complete.disclaimer: true`: the answer is general training guidance, not medical advice; show the
   disclaimer with it. The system prompt also forbids diagnoses/treatments.
 - Stream error codes (all `retryable: true`): `AI_TIMEOUT` (model cut at 45 s), `AI_PROVIDER_ERROR`,
-  `AI_EMPTY_RESPONSE`, `AI_RESPONSE_CONFLICT` (a concurrent attempt of the same `clientMessageId`
-  completed first; retrying replays it), `INTERNAL_ERROR`. Partial deltas before an error are not a
+  `AI_EMPTY_RESPONSE`, `AI_RESPONSE_CONFLICT` (this attempt lost its expired lease to a newer one;
+  retry), `INTERNAL_ERROR`. Partial deltas before an error are not a
   response. A client disconnect stops the model; the response stays incomplete.
 
 ### Report (`POST /api/v1/ai/responses/:id/report`)

@@ -3,7 +3,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import type { PoolDb } from '@/db/pool';
 import { ApiError } from '@/lib/api/v1/errors';
-import { claimCoachResponse, completeCoachResponse, findAiReport, loadCoachContext, reportAiResponse } from './store';
+import {
+  claimCoachResponse,
+  completeCoachResponse,
+  findAiReport,
+  loadCoachContext,
+  releaseCoachResponse,
+  reportAiResponse,
+} from './store';
 
 const NOW = 1_767_225_600_000;
 const url = process.env.SYNC_TEST_DATABASE_URL;
@@ -177,27 +184,74 @@ describe.skipIf(!url)('AI store (integration)', () => {
     });
   });
 
-  describe('claimCoachResponse / completeCoachResponse', () => {
-    it('one row per (user, clientMessageId): new → incomplete, retry reuses the id, complete replays', async () => {
+  describe('claimCoachResponse / completeCoachResponse / releaseCoachResponse', () => {
+    const LEASE = 60_000;
+    const claim = (u: string, cmid: string, attemptId: string, now: number, newId = crypto.randomUUID()) =>
+      claimCoachResponse(db, u, cmid, { newId, attemptId, now, leaseExpiresAt: now + LEASE });
+    const codeOf = async (p: Promise<unknown>) => {
+      try {
+        await p;
+      } catch (e) {
+        expect(e).toBeInstanceOf(ApiError);
+        return (e as ApiError).code;
+      }
+      throw new Error('expected an ApiError');
+    };
+
+    it('one row per (user, clientMessageId): leased attempts, release, retry reuses the id, complete replays', async () => {
       const u = newUser();
       const cmid = crypto.randomUUID();
       const id = crypto.randomUUID();
-      expect(await claimCoachResponse(db, u, cmid, id, NOW)).toEqual({ status: 'incomplete', responseId: id });
-      expect(await claimCoachResponse(db, u, cmid, crypto.randomUUID(), NOW + 1)).toEqual({ status: 'incomplete', responseId: id });
-      expect(await completeCoachResponse(db, u, id, 'Hecho', NOW + 2)).toBe(true);
-      // Only the first completion counts.
-      expect(await completeCoachResponse(db, u, id, 'Otro', NOW + 3)).toBe(false);
-      expect(await claimCoachResponse(db, u, cmid, crypto.randomUUID(), NOW + 4)).toEqual({ status: 'complete', responseId: id, content: 'Hecho' });
-      const rows = (await db.execute(sql`SELECT id, status, content FROM ai_responses WHERE user_id = ${u}`)).rows;
-      expect(rows).toEqual([{ id, status: 'complete', content: 'Hecho' }]);
+      expect(await claim(u, cmid, 'a1', NOW, id)).toEqual({ status: 'incomplete', responseId: id, attemptId: 'a1' });
+      // Live lease: a second attempt is refused.
+      expect(await codeOf(claim(u, cmid, 'a2', NOW + 1))).toBe('AI_RESPONSE_IN_PROGRESS');
+      // Released: the retry takes the same row.
+      await releaseCoachResponse(db, u, id, 'a1', NOW + 2);
+      expect(await claim(u, cmid, 'a2', NOW + 3)).toEqual({ status: 'incomplete', responseId: id, attemptId: 'a2' });
+      // The old attempt can neither complete nor release it any more.
+      expect(await completeCoachResponse(db, u, id, 'a1', 'viejo', NOW + 4)).toBe(false);
+      await releaseCoachResponse(db, u, id, 'a1', NOW + 4);
+      expect(await codeOf(claim(u, cmid, 'a3', NOW + 5))).toBe('AI_RESPONSE_IN_PROGRESS');
+      expect(await completeCoachResponse(db, u, id, 'a2', 'Hecho', NOW + 6)).toBe(true);
+      expect(await completeCoachResponse(db, u, id, 'a2', 'Otro', NOW + 7)).toBe(false);
+      expect(await claim(u, cmid, 'a4', NOW + 8)).toEqual({ status: 'complete', responseId: id, content: 'Hecho' });
+      const rows = (await db.execute(sql`SELECT id, status, content, attempt_id, lease_expires_at FROM ai_responses WHERE user_id = ${u}`)).rows;
+      expect(rows).toEqual([{ id, status: 'complete', content: 'Hecho', attempt_id: null, lease_expires_at: null }]);
     });
 
-    it("cannot complete another user's response", async () => {
+    it('an expired lease can be taken over; the stale attempt then loses', async () => {
+      const u = newUser();
+      const cmid = crypto.randomUUID();
+      const { responseId } = await claim(u, cmid, 'old', NOW);
+      expect(await claim(u, cmid, 'new', NOW + LEASE)).toEqual({ status: 'incomplete', responseId, attemptId: 'new' });
+      expect(await completeCoachResponse(db, u, responseId, 'old', 'tarde', NOW + LEASE + 1)).toBe(false);
+      expect(await completeCoachResponse(db, u, responseId, 'new', 'a tiempo', NOW + LEASE + 2)).toBe(true);
+    });
+
+    it("cannot complete another user's response; a non-Coach row is CLIENT_MESSAGE_ID_CONFLICT", async () => {
       const owner = newUser();
       const other = newUser();
-      const id = crypto.randomUUID();
-      await claimCoachResponse(db, owner, crypto.randomUUID(), id, NOW);
-      expect(await completeCoachResponse(db, other, id, 'robado', NOW)).toBe(false);
+      const { responseId } = await claim(owner, crypto.randomUUID(), 'a', NOW);
+      expect(await completeCoachResponse(db, other, responseId, 'a', 'robado', NOW)).toBe(false);
+      const cmid = crypto.randomUUID();
+      await db.execute(sql`
+        INSERT INTO ai_responses (id, user_id, client_message_id, kind, status, created_at, updated_at)
+        VALUES (${crypto.randomUUID()}, ${owner}, ${cmid}, 'mesocycle', 'incomplete', ${NOW}, ${NOW})`);
+      expect(await codeOf(claim(owner, cmid, 'b', NOW))).toBe('CLIENT_MESSAGE_ID_CONFLICT');
     });
+  });
+
+  it('loadCoachContext bounds context to turns before the answered message once it has synced', async () => {
+    const u = newUser();
+    const at = async (id: string, contenido: string, createdAt: number) => db.execute(sql`
+      INSERT INTO coach_messages (id, user_id, updated_at, deleted_at, server_updated_at, rol, contenido, created_at)
+      VALUES (${id}, ${u}, ${createdAt}, NULL, ${NOW}, 'user', ${contenido}, ${createdAt})`);
+    const current = `cm-${crypto.randomUUID()}`;
+    await at(`cm-${crypto.randomUUID()}`, 'antes', 1);
+    await at(current, 'actual', 2);
+    await at(`cm-${crypto.randomUUID()}`, 'después', 3);
+    expect((await loadCoachContext(db, u, 10, 1000, current)).map((t) => t.text)).toEqual(['antes']);
+    // Not synced yet: no bound.
+    expect((await loadCoachContext(db, u, 10, 1000, 'cm-unsynced')).map((t) => t.text)).toEqual(['antes', 'actual', 'después']);
   });
 });

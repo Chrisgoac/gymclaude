@@ -65,7 +65,8 @@ export interface CoachContextTurn {
  * (never from client-supplied history). Takes the newest live user/assistant messages, at most
  * `limitTurns`, and keeps the most recent contiguous run whose total length fits `maxChars`
  * (a message that would overflow the budget ends the window). Returned oldest first.
- * `excludeId` drops the message being answered (it may already have synced).
+ * `excludeId` drops the message being answered (it may already have synced) and, when it has,
+ * bounds the context to turns created before it.
  *
  * Assistant turns are trusted only when their id is a COMPLETE `ai_responses` row of the same
  * user, and their text is the server-stored `content`, never the synced copy: a client can sync
@@ -80,16 +81,22 @@ export async function loadCoachContext(
   excludeId?: string,
 ): Promise<CoachContextTurn[]> {
   if (!Number.isInteger(limitTurns) || limitTurns <= 0 || maxChars <= 0) return [];
+  // When the message being answered has synced, only turns created before it count: a regeneration
+  // must not see later turns (e.g. the user's next question). If it has not synced (the usual case
+  // for a first attempt) there is nothing newer to leak and no bound is applied.
   const result = await db.execute(sql`
     SELECT m.rol, CASE WHEN m.rol = 'assistant' THEN r.content ELSE m.contenido END AS contenido
     FROM coach_messages m
     LEFT JOIN ai_responses r
-      ON r.id = m.id AND r.user_id = m.user_id AND r.status = 'complete'
+      ON r.id = m.id AND r.user_id = m.user_id AND r.status = 'complete' AND r.kind = 'coach'
     WHERE m.user_id = ${userId}
       AND m.deleted_at IS NULL
       AND m.rol IN ('user', 'assistant')
       AND m.id <> ${excludeId ?? ''}
       AND (m.rol = 'user' OR r.content IS NOT NULL)
+      AND m.created_at < COALESCE(
+        (SELECT c.created_at FROM coach_messages c WHERE c.id = ${excludeId ?? ''} AND c.user_id = ${userId}),
+        9223372036854775807)
     ORDER BY m.created_at DESC, m.id DESC
     LIMIT ${Math.min(limitTurns, 200)}`);
   const turns: CoachContextTurn[] = [];
@@ -105,57 +112,97 @@ export async function loadCoachContext(
 /** Outcome of claiming the response to one user message (see claimCoachResponse). */
 export type CoachResponseClaim =
   | { status: 'complete'; responseId: string; content: string }
-  | { status: 'incomplete'; responseId: string };
+  | { status: 'incomplete'; responseId: string; attemptId: string };
+
+/** Another attempt of the same clientMessageId is generating right now (its lease is live). */
+export const responseInProgress = () =>
+  new ApiError(409, 'AI_RESPONSE_IN_PROGRESS', 'A response to this message is already being generated', true);
+/** The clientMessageId already names a different kind of AI request (e.g. a mesocycle). */
+export const clientMessageIdConflict = () =>
+  new ApiError(409, 'CLIENT_MESSAGE_ID_CONFLICT', 'This clientMessageId belongs to another AI request', false);
+
+export interface CoachClaimInput {
+  /** Id for a brand-new row (ignored when the row exists). */
+  newId: string;
+  /** Id of this generation attempt; only it can complete the row. */
+  attemptId: string;
+  now: number;
+  /** Absolute expiry of this attempt's lease (now + model timeout + margin). */
+  leaseExpiresAt: number;
+}
 
 /**
- * Claims the single `ai_responses` row of (userId, clientMessageId). A first request inserts it
- * as `incomplete` with `newId`; a retry of an incomplete one reuses its id (a new attempt of the
- * same response, never a second response); a complete one is returned with its stored text so
- * the caller replays it without calling the model. The server never writes the user's message:
- * it lives only in the client's synced `coach_messages`.
+ * Claims the single Coach `ai_responses` row of (userId, clientMessageId):
+ * - none yet → inserted `incomplete`, leased to `attemptId`;
+ * - incomplete with no live lease (released, or expired) → the same row/id is leased to `attemptId`
+ *   (a new attempt of the same response, never a second response);
+ * - incomplete with a live lease → 409 AI_RESPONSE_IN_PROGRESS (retryable), the model is not called;
+ * - complete → returned with its stored text, to be replayed without the model;
+ * - a row of another kind → 409 CLIENT_MESSAGE_ID_CONFLICT.
+ * The server never writes the user's message: it lives only in the client's synced `coach_messages`.
  */
 export async function claimCoachResponse(
   db: Db,
   userId: string,
   clientMessageId: string,
-  newId: string,
-  now: number,
+  input: CoachClaimInput,
 ): Promise<CoachResponseClaim> {
+  const { newId, attemptId, now, leaseExpiresAt } = input;
   const claimed = await db.execute(sql`
-    INSERT INTO ai_responses (id, user_id, client_message_id, status, content, created_at, updated_at)
-    VALUES (${newId}, ${userId}, ${clientMessageId}, 'incomplete', NULL, ${now}, ${now})
+    INSERT INTO ai_responses
+      (id, user_id, client_message_id, kind, status, content, attempt_id, lease_expires_at, created_at, updated_at)
+    VALUES (${newId}, ${userId}, ${clientMessageId}, 'coach', 'incomplete', NULL, ${attemptId}, ${leaseExpiresAt}, ${now}, ${now})
     ON CONFLICT (user_id, client_message_id)
-    DO UPDATE SET updated_at = EXCLUDED.updated_at WHERE ai_responses.status = 'incomplete'
+    DO UPDATE SET attempt_id = EXCLUDED.attempt_id, lease_expires_at = EXCLUDED.lease_expires_at,
+                  updated_at = EXCLUDED.updated_at
+    WHERE ai_responses.kind = 'coach'
+      AND ai_responses.status = 'incomplete'
+      AND (ai_responses.lease_expires_at IS NULL OR ai_responses.lease_expires_at <= ${now})
     RETURNING id`);
   const fresh = claimed.rows[0] as { id: string } | undefined;
-  if (fresh) return { status: 'incomplete', responseId: fresh.id };
+  if (fresh) return { status: 'incomplete', responseId: fresh.id, attemptId };
 
-  // The conflict row was not updated, so it is complete (a row never goes back to incomplete).
   const existing = await db.execute(sql`
-    SELECT id, status, content FROM ai_responses
+    SELECT id, kind, status, content FROM ai_responses
     WHERE user_id = ${userId} AND client_message_id = ${clientMessageId}`);
-  const row = existing.rows[0] as { id: string; status: string; content: string | null } | undefined;
-  if (!row || row.status !== 'complete' || row.content === null) {
-    throw new Error('ai_responses claim found no usable row');
-  }
+  const row = existing.rows[0] as { id: string; kind: string; status: string; content: string | null } | undefined;
+  if (!row) throw new Error('ai_responses claim found no row');
+  if (row.kind !== 'coach') throw clientMessageIdConflict();
+  if (row.status === 'incomplete') throw responseInProgress();
+  if (row.content === null) throw new Error('complete Coach response without content');
   return { status: 'complete', responseId: row.id, content: row.content };
 }
 
 /**
- * Stores the final text and marks the response complete. Returns false when the row was no longer
- * incomplete (a concurrent attempt of the same clientMessageId completed first): the caller must
- * not report its own text as the response.
+ * Stores the final text and marks the response complete, only for the attempt that holds it.
+ * Returns false when this attempt no longer owns the row (it was taken over after its lease expired,
+ * or the row is already complete): the caller must not report its own text as the response.
  */
 export async function completeCoachResponse(
   db: Db,
   userId: string,
   responseId: string,
+  attemptId: string,
   content: string,
   now: number,
 ): Promise<boolean> {
   const updated = await db.execute(sql`
-    UPDATE ai_responses SET status = 'complete', content = ${content}, updated_at = ${now}
-    WHERE id = ${responseId} AND user_id = ${userId} AND status = 'incomplete'
+    UPDATE ai_responses
+    SET status = 'complete', content = ${content}, attempt_id = NULL, lease_expires_at = NULL, updated_at = ${now}
+    WHERE id = ${responseId} AND user_id = ${userId} AND status = 'incomplete' AND attempt_id = ${attemptId}
     RETURNING id`);
   return updated.rows.length > 0;
+}
+
+/** Ends this attempt without a response, so a retry can start at once instead of waiting the lease. */
+export async function releaseCoachResponse(
+  db: Db,
+  userId: string,
+  responseId: string,
+  attemptId: string,
+  now: number,
+): Promise<void> {
+  await db.execute(sql`
+    UPDATE ai_responses SET lease_expires_at = NULL, updated_at = ${now}
+    WHERE id = ${responseId} AND user_id = ${userId} AND status = 'incomplete' AND attempt_id = ${attemptId}`);
 }

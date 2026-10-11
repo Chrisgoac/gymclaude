@@ -10,6 +10,10 @@ import { readFileSync } from 'node:fs';
 import pg from 'pg';
 
 const TABLES = ['subscription_entitlements', 'ai_reports', 'ai_responses', 'reported_ai_responses'];
+// Columnas añadidas por revisiones posteriores de 0003 (ADD COLUMN IF NOT EXISTS): deben existir.
+const REQUIRED_COLUMNS = {
+  ai_responses: ['kind', 'content', 'attempt_id', 'lease_expires_at'],
+};
 const UNIQUE_INDEXES = [
   'ai_reports_user_kind_fingerprint_idx',
   'ai_responses_user_client_message_idx',
@@ -70,6 +74,15 @@ try {
       [idx],
     );
     if (!r.rows[0]?.indisunique) throw new Error(`falta el índice único ${idx}`);
+  }
+  for (const [table, columns] of Object.entries(REQUIRED_COLUMNS)) {
+    const r = await client.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1",
+      [table],
+    );
+    const present = new Set(r.rows.map((row) => row.column_name));
+    const missing = columns.filter((c) => !present.has(c));
+    if (missing.length) throw new Error(`${table}: faltan columnas ${missing.join(', ')}`);
   }
   await client.query('COMMIT');
   console.log('0003_ai_and_entitlements OK');

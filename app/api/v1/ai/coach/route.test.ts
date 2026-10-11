@@ -6,7 +6,7 @@ import { setAuthSourceForTests } from '@/lib/api/v1/auth';
 import { RateLimitedError } from '@/lib/api/v1/errors';
 import { ApiErrorBodySchema } from '@/lib/api/v1/contracts/common';
 import { AiStreamEventSchema, type AiStreamEvent, type CoachSnapshotDto } from '@/lib/api/v1/ai/contracts';
-import type { CoachContextTurn, CoachResponseClaim } from '@/lib/api/v1/ai/store';
+import { responseInProgress, type CoachClaimInput, type CoachContextTurn, type CoachResponseClaim } from '@/lib/api/v1/ai/store';
 import type { CoachStreamInput, CoachStreamProvider } from '@/lib/coach-model';
 import { MEDICAL_DISCLAIMER_INSTRUCTION } from '@/lib/coach-prompt';
 import type { CoachResponseStore, CoachTurnDeps } from '@/lib/coach-stream';
@@ -59,35 +59,43 @@ const textOf = (events: AiStreamEvent[]) =>
 
 // ── Fakes ──
 
-type Row = { id: string; status: 'complete' | 'incomplete'; content: string | null };
+type Row = { id: string; status: 'complete' | 'incomplete'; content: string | null; attemptId: string | null; lease: number | null };
+/** In-memory twin of lib/api/v1/ai/store.ts (claim/lease/complete/release semantics). */
 function memoryStore(context: CoachContextTurn[] = []) {
   const rows = new Map<string, Row>();
+  const byId = (id: string) => [...rows.values()].find((r) => r.id === id);
   const store = {
     rows,
-    claim: vi.fn(async (userId: string, cmid: string, newId: string): Promise<CoachResponseClaim> => {
+    claim: vi.fn(async (userId: string, cmid: string, input: CoachClaimInput): Promise<CoachResponseClaim> => {
       const key = `${userId}|${cmid}`;
       const row = rows.get(key);
       if (!row) {
-        rows.set(key, { id: newId, status: 'incomplete', content: null });
-        return { status: 'incomplete', responseId: newId };
+        rows.set(key, { id: input.newId, status: 'incomplete', content: null, attemptId: input.attemptId, lease: input.leaseExpiresAt });
+        return { status: 'incomplete', responseId: input.newId, attemptId: input.attemptId };
       }
-      return row.status === 'complete'
-        ? { status: 'complete', responseId: row.id, content: row.content! }
-        : { status: 'incomplete', responseId: row.id };
+      if (row.status === 'complete') return { status: 'complete', responseId: row.id, content: row.content! };
+      if (row.lease !== null && row.lease > input.now) throw responseInProgress();
+      Object.assign(row, { attemptId: input.attemptId, lease: input.leaseExpiresAt });
+      return { status: 'incomplete', responseId: row.id, attemptId: input.attemptId };
     }),
     loadContext: vi.fn<(...args: unknown[]) => Promise<CoachContextTurn[]>>(async () => context),
-    complete: vi.fn(async (userId: string, responseId: string, content: string) => {
-      for (const row of rows.values()) {
-        if (row.id === responseId && row.status === 'incomplete') {
-          Object.assign(row, { status: 'complete', content });
-          return true;
-        }
-      }
-      return false;
+    complete: vi.fn(async (_u: string, responseId: string, attemptId: string, content: string) => {
+      const row = byId(responseId);
+      if (!row || row.status !== 'incomplete' || row.attemptId !== attemptId) return false;
+      Object.assign(row, { status: 'complete', content, attemptId: null, lease: null });
+      return true;
+    }),
+    release: vi.fn(async (_u: string, responseId: string, attemptId: string) => {
+      const row = byId(responseId);
+      if (row && row.status === 'incomplete' && row.attemptId === attemptId) row.lease = null;
     }),
   } satisfies CoachResponseStore & { rows: Map<string, Row> };
   return store;
 }
+const rowOf = () => {
+  const r = store.rows.get(`${USER}|${CMID}`);
+  return r && { id: r.id, status: r.status, content: r.content };
+};
 
 function scriptedProvider(chunks: string[], end: 'done' | 'error' | 'hang' = 'done') {
   const calls: CoachStreamInput[] = [];
@@ -105,11 +113,12 @@ function scriptedProvider(chunks: string[], end: 'done' | 'error' | 'hang' = 'do
 
 let store: ReturnType<typeof memoryStore>;
 let warn: MockInstance<typeof console.warn>;
+let info: MockInstance<typeof console.info>;
 let error: MockInstance<typeof console.error>;
-const useDeps = (provider: CoachStreamProvider, over: Partial<CoachTurnDeps> = {}) => {
+const setDeps = (provider: CoachStreamProvider, over: Partial<CoachTurnDeps> = {}) => {
   h.deps = { store, provider, newId: () => RID, now: () => 1_767_225_600_000, ...over };
 };
-const logged = () => [...warn.mock.calls, ...error.mock.calls].flat().map(String).join('\n');
+const logged = () => [...info.mock.calls, ...warn.mock.calls, ...error.mock.calls].flat().map(String).join('\n');
 
 beforeEach(() => {
   setAuthSourceForTests(async () => ({ userId: USER }));
@@ -117,12 +126,14 @@ beforeEach(() => {
   h.configured.mockReturnValue(true);
   store = memoryStore();
   warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  info = vi.spyOn(console, 'info').mockImplementation(() => {});
   error = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => {
   setAuthSourceForTests(null);
   vi.clearAllMocks();
   warn.mockRestore();
+  info.mockRestore();
   error.mockRestore();
 });
 
@@ -134,7 +145,7 @@ describe('POST /api/v1/ai/coach — authorization and limits (before any model c
 
   it('401 without a principal', async () => {
     const { provider, calls } = scriptedProvider(['x']);
-    useDeps(provider);
+    setDeps(provider);
     setAuthSourceForTests(async () => ({ userId: null }));
     const res = await post(body());
     expect(res.status).toBe(401);
@@ -145,7 +156,7 @@ describe('POST /api/v1/ai/coach — authorization and limits (before any model c
 
   it('429 with Retry-After when the ai rate limit is spent, before the entitlement check', async () => {
     const { provider, calls } = scriptedProvider(['x']);
-    useDeps(provider);
+    setDeps(provider);
     h.rate.mockRejectedValueOnce(new RateLimitedError(9));
     const res = await post(body());
     expect(res.status).toBe(429);
@@ -157,7 +168,7 @@ describe('POST /api/v1/ai/coach — authorization and limits (before any model c
 
   it('403 PRO_REQUIRED for a non-Pro user, asking about the principal only', async () => {
     const { provider, calls } = scriptedProvider(['x']);
-    useDeps(provider);
+    setDeps(provider);
     h.isPro.mockResolvedValue(false);
     const res = await post(body());
     expect(res.status).toBe(403);
@@ -168,7 +179,7 @@ describe('POST /api/v1/ai/coach — authorization and limits (before any model c
 
   it('fails closed with 503 ENTITLEMENT_UNAVAILABLE when the entitlement store errors', async () => {
     const { provider, calls } = scriptedProvider(['x']);
-    useDeps(provider);
+    setDeps(provider);
     h.isPro.mockRejectedValue(new Error('db down'));
     const res = await post(body());
     expect(res.status).toBe(503);
@@ -178,7 +189,7 @@ describe('POST /api/v1/ai/coach — authorization and limits (before any model c
 
   it('503 AI_UNAVAILABLE when DeepSeek is not configured', async () => {
     const { provider, calls } = scriptedProvider(['x']);
-    useDeps(provider);
+    setDeps(provider);
     h.configured.mockReturnValue(false);
     const res = await post(body());
     expect(res.status).toBe(503);
@@ -188,7 +199,7 @@ describe('POST /api/v1/ai/coach — authorization and limits (before any model c
 
   it('rejects prompt/snapshot violations with 400 INVALID_REQUEST', async () => {
     const { provider, calls } = scriptedProvider(['x']);
-    useDeps(provider);
+    setDeps(provider);
     const withPhoto = snapshot();
     Object.assign(withPhoto.cuerpo, { fotos: [{ url: 'https://r2/x.jpg' }] });
     const withExerciseId = snapshot();
@@ -212,7 +223,7 @@ describe('POST /api/v1/ai/coach — authorization and limits (before any model c
 
   it('415 for a non-JSON content type, 400 for malformed JSON, 413 for an oversized body', async () => {
     const { provider, calls } = scriptedProvider(['x']);
-    useDeps(provider);
+    setDeps(provider);
     expect((await post(body(), { headers: { 'content-type': 'text/plain' } })).status).toBe(415);
     const bad = await post('{nope');
     expect(bad.status).toBe(400);
@@ -230,7 +241,7 @@ describe('POST /api/v1/ai/coach — streaming', () => {
       { role: 'assistant', text: 'Hola, ¿en qué te ayudo?' },
     ]);
     const { provider, calls } = scriptedProvider(['Sube ', '2,5 kg ', 'cada semana.']);
-    useDeps(provider);
+    setDeps(provider);
     const res = await post(body());
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('application/x-ndjson; charset=utf-8');
@@ -240,7 +251,7 @@ describe('POST /api/v1/ai/coach — streaming', () => {
     expect(events[0]).toEqual({ type: 'start', clientMessageId: CMID, responseId: RID });
     expect(events.at(-1)).toEqual({ type: 'complete', responseId: RID, disclaimer: true });
     expect(textOf(events)).toBe('Sube 2,5 kg cada semana.');
-    expect(store.rows.get(`${USER}|${CMID}`)).toEqual({ id: RID, status: 'complete', content: 'Sube 2,5 kg cada semana.' });
+    expect(rowOf()).toEqual({ id: RID, status: 'complete', content: 'Sube 2,5 kg cada semana.' });
 
     // Server-built prompt: medical instruction + allowlisted snapshot; context excludes the current message.
     expect(store.loadContext).toHaveBeenCalledWith(USER, 20, 16_000, CMID);
@@ -257,10 +268,10 @@ describe('POST /api/v1/ai/coach — streaming', () => {
 
   it('never logs the prompt, the user text, the snapshot or the model output', async () => {
     const { provider } = scriptedProvider(['Respuesta secreta del modelo']);
-    useDeps(provider);
+    setDeps(provider);
     await eventsOf(await post(body()));
     const { provider: failing } = scriptedProvider(['parcial secreto'], 'error');
-    useDeps(failing, { newId: () => crypto.randomUUID() });
+    setDeps(failing, { newId: () => crypto.randomUUID() });
     await eventsOf(await post(body({ clientMessageId: crypto.randomUUID() })));
     const out = logged();
     expect(out).toContain(RID);
@@ -271,7 +282,7 @@ describe('POST /api/v1/ai/coach — streaming', () => {
 
   it('splits an oversized provider chunk into deltas within the contract limit', async () => {
     const huge = `${'a'.repeat(8000)}${'b'.repeat(5000)}`;
-    useDeps(scriptedProvider([huge]).provider);
+    setDeps(scriptedProvider([huge]).provider);
     const events = await eventsOf(await post(body()));
     const deltas = events.filter((e) => e.type === 'delta');
     expect(deltas.length).toBe(2);
@@ -280,25 +291,25 @@ describe('POST /api/v1/ai/coach — streaming', () => {
 
   it('times out a stalled model: partial deltas, then error AI_TIMEOUT retryable; the row stays incomplete', async () => {
     const { provider, calls } = scriptedProvider(['Empieza '], 'hang');
-    useDeps(provider, { timeoutMs: 30 });
+    setDeps(provider, { timeoutMs: 30 });
     const events = await eventsOf(await post(body()));
     expect(events.map((e) => e.type)).toEqual(['start', 'delta', 'error']);
     expect(events.at(-1)).toEqual({ type: 'error', code: 'AI_TIMEOUT', retryable: true });
     expect(calls[0].abortSignal.aborted).toBe(true);
     expect(store.complete).not.toHaveBeenCalled();
-    expect(store.rows.get(`${USER}|${CMID}`)?.status).toBe('incomplete');
+    expect(rowOf()?.status).toBe('incomplete');
   });
 
   it('a provider failure mid-stream ends with error AI_PROVIDER_ERROR and no completion', async () => {
-    useDeps(scriptedProvider(['Parcial '], 'error').provider);
+    setDeps(scriptedProvider(['Parcial '], 'error').provider);
     const events = await eventsOf(await post(body()));
     expect(events.map((e) => e.type)).toEqual(['start', 'delta', 'error']);
     expect(events.at(-1)).toEqual({ type: 'error', code: 'AI_PROVIDER_ERROR', retryable: true });
-    expect(store.rows.get(`${USER}|${CMID}`)?.status).toBe('incomplete');
+    expect(rowOf()?.status).toBe('incomplete');
   });
 
   it('an empty model answer is an error, never a complete empty response', async () => {
-    useDeps(scriptedProvider(['', '  ']).provider);
+    setDeps(scriptedProvider(['', '  ']).provider);
     const events = await eventsOf(await post(body()));
     expect(events.at(-1)).toEqual({ type: 'error', code: 'AI_EMPTY_RESPONSE', retryable: true });
     expect(store.complete).not.toHaveBeenCalled();
@@ -306,31 +317,68 @@ describe('POST /api/v1/ai/coach — streaming', () => {
 
   it('a client disconnect stops the model and leaves the response incomplete', async () => {
     const { provider, calls } = scriptedProvider(['Uno '], 'hang');
-    useDeps(provider, { timeoutMs: 60_000 });
+    setDeps(provider, { timeoutMs: 60_000 });
     const res = await post(body());
     const reader = res.body!.getReader();
     await reader.read(); // start
     await reader.read(); // first delta
     await reader.cancel();
     await vi.waitFor(() => expect(calls[0].abortSignal.aborted).toBe(true));
+    await vi.waitFor(() => expect(store.release).toHaveBeenCalled());
     expect(store.complete).not.toHaveBeenCalled();
-    expect(store.rows.get(`${USER}|${CMID}`)?.status).toBe('incomplete');
+    expect(rowOf()?.status).toBe('incomplete');
   });
 
-  it('a concurrent attempt that completed first wins: this one reports AI_RESPONSE_CONFLICT', async () => {
-    useDeps(scriptedProvider(['Otra respuesta']).provider);
+  it('an attempt that lost its row (lease expired, taken over) reports AI_RESPONSE_CONFLICT and releases nothing', async () => {
+    setDeps(scriptedProvider(['Otra respuesta']).provider);
     store.complete.mockResolvedValueOnce(false);
     const events = await eventsOf(await post(body()));
     expect(events.at(-1)).toEqual({ type: 'error', code: 'AI_RESPONSE_CONFLICT', retryable: true });
+    expect(store.release).not.toHaveBeenCalled();
+  });
+
+  it('every failed attempt releases its lease (a retry can start at once); success logs at info, failures warn', async () => {
+    setDeps(scriptedProvider(['ok']).provider);
+    await eventsOf(await post(body()));
+    expect(info.mock.calls.flat().join()).toContain('outcome=complete');
+    expect(warn).not.toHaveBeenCalled();
+
+    for (const [chunks, end, timeoutMs] of [[['x'], 'hang', 20], [['x'], 'error', 1000], [[' '], 'done', 1000]] as const) {
+      store = memoryStore();
+      setDeps(scriptedProvider([...chunks], end).provider, { timeoutMs });
+      await eventsOf(await post(body()));
+      expect(store.release).toHaveBeenCalledWith(USER, RID, RID, expect.any(Number));
+      expect(store.rows.get(`${USER}|${CMID}`)?.lease).toBeNull();
+    }
+    expect(warn).toHaveBeenCalled();
   });
 });
 
 describe('POST /api/v1/ai/coach — retry by clientMessageId', () => {
+  it('409 AI_RESPONSE_IN_PROGRESS (retryable, before streaming) while another attempt holds a live lease', async () => {
+    store.rows.set(`${USER}|${CMID}`, { id: RID, status: 'incomplete', content: null, attemptId: 'other', lease: 1_767_225_600_000 + 1 });
+    const { provider, calls } = scriptedProvider(['NO']);
+    setDeps(provider);
+    const res = await post(body());
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toMatchObject({ code: 'AI_RESPONSE_IN_PROGRESS', retryable: true });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('takes over an incomplete row whose lease expired (same responseId); the stale attempt can no longer complete it', async () => {
+    store.rows.set(`${USER}|${CMID}`, { id: RID, status: 'incomplete', content: null, attemptId: 'stale', lease: 1_767_225_600_000 });
+    setDeps(scriptedProvider(['Nueva']).provider, { newId: () => 'attempt-2' });
+    const events = await eventsOf(await post(body()));
+    expect(events.at(-1)).toEqual({ type: 'complete', responseId: RID, disclaimer: true });
+    expect(await store.complete(USER, RID, 'stale', 'vieja')).toBe(false);
+    expect(rowOf()).toEqual({ id: RID, status: 'complete', content: 'Nueva' });
+  });
+
   it('replays a complete response without calling the model (same responseId, same text)', async () => {
-    useDeps(scriptedProvider(['Primera ', 'respuesta']).provider);
+    setDeps(scriptedProvider(['Primera ', 'respuesta']).provider);
     const first = await eventsOf(await post(body()));
     const second = scriptedProvider(['NO DEBE LLAMARSE']);
-    useDeps(second.provider, { newId: () => crypto.randomUUID() });
+    setDeps(second.provider, { newId: () => crypto.randomUUID() });
     const replay = await eventsOf(await post(body()));
     expect(second.calls).toHaveLength(0);
     expect(replay[0]).toEqual({ type: 'start', clientMessageId: CMID, responseId: RID });
@@ -340,16 +388,17 @@ describe('POST /api/v1/ai/coach — retry by clientMessageId', () => {
   });
 
   it('regenerates an incomplete response under the same responseId (one row, no duplicate)', async () => {
-    useDeps(scriptedProvider(['Cort'], 'error').provider);
+    setDeps(scriptedProvider(['Cort'], 'error').provider);
     await eventsOf(await post(body()));
     const retry = scriptedProvider(['Respuesta completa']);
-    useDeps(retry.provider, { newId: () => crypto.randomUUID() });
+    setDeps(retry.provider, { newId: () => crypto.randomUUID() });
     const events = await eventsOf(await post(body()));
     expect(retry.calls).toHaveLength(1);
     expect(events[0]).toMatchObject({ type: 'start', responseId: RID });
     expect(events.at(-1)).toEqual({ type: 'complete', responseId: RID, disclaimer: true });
     expect(textOf(events)).toBe('Respuesta completa');
-    expect([...store.rows.values()]).toEqual([{ id: RID, status: 'complete', content: 'Respuesta completa' }]);
+    expect(store.rows.size).toBe(1);
+    expect(rowOf()).toEqual({ id: RID, status: 'complete', content: 'Respuesta completa' });
   });
 });
 
@@ -385,9 +434,10 @@ describe.skipIf(!url)('POST /api/v1/ai/coach (integration)', () => {
     return {
       provider,
       store: {
-        claim: (u, c, n, now) => store.claimCoachResponse(db, u, c, n, now),
+        claim: (u, c, input) => store.claimCoachResponse(db, u, c, input),
         loadContext: (u, l, m, e) => store.loadCoachContext(db, u, l, m, e),
-        complete: (u, r, c, now) => store.completeCoachResponse(db, u, r, c, now),
+        complete: (u, r, a, c, now) => store.completeCoachResponse(db, u, r, a, c, now),
+        release: (u, r, a, now) => store.releaseCoachResponse(db, u, r, a, now),
       },
     };
   };
@@ -469,5 +519,58 @@ describe.skipIf(!url)('POST /api/v1/ai/coach (integration)', () => {
       { role: 'user', content: 'Pregunta dos' },
       { role: 'user', content: 'Pregunta tres' },
     ]);
+  });
+
+  it('two truly concurrent requests for one clientMessageId: one model call, the other gets 409 before streaming', async () => {
+    const u = newUser();
+    const cmid = crypto.randomUUID();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const calls: CoachStreamInput[] = [];
+    h.deps = await dbDeps({
+      async *stream(input) {
+        calls.push(input);
+        await gate;
+        yield 'Única respuesta';
+      },
+    });
+    const [a, b] = await Promise.all([post(body({ clientMessageId: cmid })), post(body({ clientMessageId: cmid }))]);
+    const [streaming, refused] = a.status === 200 ? [a, b] : [b, a];
+    expect(refused.status).toBe(409);
+    expect(await errorOf(refused)).toMatchObject({ code: 'AI_RESPONSE_IN_PROGRESS', retryable: true });
+    release();
+    const events = await eventsOf(streaming);
+    expect(events.at(-1)).toMatchObject({ type: 'complete', disclaimer: true });
+    expect(calls).toHaveLength(1);
+    expect(await rowsOf(u)).toEqual([{ id: (events[0] as { responseId: string }).responseId, status: 'complete', content: 'Única respuesta' }]);
+  });
+
+  it('a regeneration only sees turns created before the message being answered', async () => {
+    const u = newUser();
+    const q1 = crypto.randomUUID();
+    await msg(u, crypto.randomUUID(), 'user', 'Antes');
+    await msg(u, q1, 'user', 'Pregunta original');
+    await msg(u, crypto.randomUUID(), 'user', 'Pregunta posterior');
+    const spy = scriptedProvider(['ok']);
+    h.deps = await dbDeps(spy.provider);
+    await eventsOf(await post(body({ clientMessageId: q1, text: 'Pregunta original' })));
+    expect(spy.calls[0].messages).toEqual([
+      { role: 'user', content: 'Antes' },
+      { role: 'user', content: 'Pregunta original' },
+    ]);
+  });
+
+  it('a clientMessageId already used by a non-Coach AI request is a stable 409, no model call', async () => {
+    const u = newUser();
+    const cmid = crypto.randomUUID();
+    await db.execute(sql`
+      INSERT INTO ai_responses (id, user_id, client_message_id, kind, status, created_at, updated_at)
+      VALUES (${crypto.randomUUID()}, ${u}, ${cmid}, 'mesocycle', 'complete', 1, 1)`);
+    const spy = scriptedProvider(['NO']);
+    h.deps = await dbDeps(spy.provider);
+    const res = await post(body({ clientMessageId: cmid }));
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toMatchObject({ code: 'CLIENT_MESSAGE_ID_CONFLICT', retryable: false });
+    expect(spy.calls).toHaveLength(0);
   });
 });

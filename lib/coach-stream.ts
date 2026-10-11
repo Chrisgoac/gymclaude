@@ -1,5 +1,5 @@
 import { MAX_STREAM_DELTA_CHARS, type AiStreamEvent, type CoachRequest } from '@/lib/api/v1/ai/contracts';
-import type { CoachContextTurn, CoachResponseClaim } from '@/lib/api/v1/ai/store';
+import type { CoachClaimInput, CoachContextTurn, CoachResponseClaim } from '@/lib/api/v1/ai/store';
 import type { CoachModelMessage, CoachStreamProvider } from '@/lib/coach-model';
 import { coachSystemPrompt } from '@/lib/coach-prompt';
 
@@ -8,8 +8,9 @@ import { coachSystemPrompt } from '@/lib/coach-prompt';
 //                                                     | error{code, retryable}
 // The response row (ai_responses) is the only thing the server writes: the user's message lives in
 // the client's synced coach_messages, so a retry never duplicates it. A retry of the same
-// clientMessageId replays a complete response without calling the model, or regenerates an
-// incomplete one under the same responseId.
+// clientMessageId replays a complete response without calling the model, regenerates an incomplete
+// one under the same responseId once no attempt holds its lease, or gets 409 AI_RESPONSE_IN_PROGRESS
+// (before any streaming) while one does. Only the attempt holding the lease can complete the row.
 
 /** Newest user/assistant turns sent as context. */
 export const COACH_CONTEXT_TURNS = 20;
@@ -18,15 +19,20 @@ export const COACH_CONTEXT_CHARS = 16_000;
 export const COACH_MAX_OUTPUT_TOKENS = 1500;
 /** The model call is aborted after this long (route maxDuration is 60 s). */
 export const COACH_TIMEOUT_MS = 45_000;
+/** An attempt's lease outlives its model timeout by this much (covers the final DB write). */
+export const COACH_LEASE_MARGIN_MS = 15_000;
 
 export const NDJSON_CONTENT_TYPE = 'application/x-ndjson; charset=utf-8';
 
 /** Persistence the Coach turn needs (lib/api/v1/ai/store.ts in production, in-memory in tests). */
 export interface CoachResponseStore {
-  claim(userId: string, clientMessageId: string, newId: string, now: number): Promise<CoachResponseClaim>;
+  /** Throws 409 AI_RESPONSE_IN_PROGRESS while another attempt holds a live lease. */
+  claim(userId: string, clientMessageId: string, input: CoachClaimInput): Promise<CoachResponseClaim>;
   loadContext(userId: string, limitTurns: number, maxChars: number, excludeId: string): Promise<CoachContextTurn[]>;
-  /** false when the row was no longer incomplete (a concurrent attempt completed first). */
-  complete(userId: string, responseId: string, content: string, now: number): Promise<boolean>;
+  /** false when this attempt no longer owns the row (taken over after its lease expired). */
+  complete(userId: string, responseId: string, attemptId: string, content: string, now: number): Promise<boolean>;
+  /** Drops this attempt's lease so a retry can start immediately. */
+  release(userId: string, responseId: string, attemptId: string, now: number): Promise<void>;
 }
 
 export interface CoachTurnDeps {
@@ -62,9 +68,10 @@ export function splitDelta(text: string, max = MAX_STREAM_DELTA_CHARS): string[]
   return pieces;
 }
 
-// Ids and codes only: never prompt, user text, snapshot or model output.
-const logOutcome = (responseId: string, outcome: string, extra?: string) =>
-  console.warn(`[api/v1/ai/coach] responseId=${responseId} outcome=${outcome}${extra ? ` ${extra}` : ''}`);
+// Ids and codes only: never prompt, user text, snapshot or model output. Failures warn, the rest info.
+const logOutcome = (responseId: string, outcome: string, extra?: string, level: 'info' | 'warn' = 'warn') =>
+  console[level](`[api/v1/ai/coach] responseId=${responseId} outcome=${outcome}${extra ? ` ${extra}` : ''}`);
+const errorName = (error: unknown) => `error=${error instanceof Error ? error.name : typeof error}`;
 
 /**
  * Claims the response row and loads context (errors here surface as ordinary API errors, before
@@ -78,11 +85,20 @@ export async function startCoachTurn(
   clientSignal: AbortSignal,
 ): Promise<ReadableStream<Uint8Array>> {
   const now = deps.now ?? Date.now;
-  const claim = await deps.store.claim(userId, request.clientMessageId, (deps.newId ?? (() => crypto.randomUUID()))(), now());
+  const newId = deps.newId ?? (() => crypto.randomUUID());
+  const timeoutMs = deps.timeoutMs ?? COACH_TIMEOUT_MS;
+  const claimedAt = now();
+  // A live attempt of the same clientMessageId makes this throw 409 before anything is streamed.
+  const claim = await deps.store.claim(userId, request.clientMessageId, {
+    newId: newId(),
+    attemptId: newId(),
+    now: claimedAt,
+    leaseExpiresAt: claimedAt + timeoutMs + COACH_LEASE_MARGIN_MS,
+  });
   const start: AiStreamEvent = { type: 'start', clientMessageId: request.clientMessageId, responseId: claim.responseId };
 
   if (claim.status === 'complete') {
-    logOutcome(claim.responseId, 'replay');
+    logOutcome(claim.responseId, 'replay', undefined, 'info');
     return new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(encodeEvent(start));
@@ -93,8 +109,14 @@ export async function startCoachTurn(
     });
   }
 
-  const responseId = claim.responseId;
-  const context = await deps.store.loadContext(userId, COACH_CONTEXT_TURNS, COACH_CONTEXT_CHARS, request.clientMessageId);
+  const { responseId, attemptId } = claim;
+  let context: CoachContextTurn[];
+  try {
+    context = await deps.store.loadContext(userId, COACH_CONTEXT_TURNS, COACH_CONTEXT_CHARS, request.clientMessageId);
+  } catch (error) {
+    await deps.store.release(userId, responseId, attemptId, now()).catch(() => {});
+    throw error;
+  }
   const messages: CoachModelMessage[] = [
     ...context.map((t) => ({ role: t.role, content: t.text })),
     { role: 'user', content: request.text },
@@ -120,8 +142,13 @@ export async function startCoachTurn(
         closed = true;
         controller.close();
       };
-      const fail = (code: CoachStreamErrorCode, extra?: string) => {
+      const release = () => deps.store.release(userId, responseId, attemptId, now()).catch((error: unknown) => {
+        logOutcome(responseId, 'RELEASE_FAILED', errorName(error));
+      });
+      /** Ends the attempt without a response: lease released (retry can start at once), error event. */
+      const fail = async (code: CoachStreamErrorCode, extra?: string, owned = true) => {
         logOutcome(responseId, code, extra);
+        if (owned) await release();
         emit({ type: 'error', code, retryable: true });
         finish();
       };
@@ -129,7 +156,7 @@ export async function startCoachTurn(
       void (async () => {
         if (clientSignal.aborted) stop('client');
         clientSignal.addEventListener('abort', onClientAbort, { once: true });
-        const timer = setTimeout(() => stop('timeout'), deps.timeoutMs ?? COACH_TIMEOUT_MS);
+        const timer = setTimeout(() => stop('timeout'), timeoutMs);
         const aborted = new Promise<'aborted'>((resolve) => {
           if (abort.signal.aborted) resolve('aborted');
           else abort.signal.addEventListener('abort', () => resolve('aborted'), { once: true });
@@ -165,28 +192,28 @@ export async function startCoachTurn(
 
         // The row stays `incomplete` (as claimed) on every path except a stored completion.
         if (reason === 'client') {
-          logOutcome(responseId, 'CLIENT_ABORTED');
+          logOutcome(responseId, 'CLIENT_ABORTED', undefined, 'info');
+          await release();
           finish();
           return;
         }
         if (reason === 'timeout') return fail('AI_TIMEOUT');
-        if (providerError !== null) {
-          return fail('AI_PROVIDER_ERROR', `error=${providerError instanceof Error ? providerError.name : typeof providerError}`);
-        }
+        if (providerError !== null) return fail('AI_PROVIDER_ERROR', errorName(providerError));
         if (text.trim().length === 0) return fail('AI_EMPTY_RESPONSE');
 
         let stored: boolean;
         try {
-          stored = await deps.store.complete(userId, responseId, text, now());
+          stored = await deps.store.complete(userId, responseId, attemptId, text, now());
         } catch (error) {
-          return fail('INTERNAL_ERROR', `error=${error instanceof Error ? error.name : typeof error}`);
+          return fail('INTERNAL_ERROR', errorName(error));
         }
-        // A concurrent attempt completed first: its text is the response; a retry replays it.
-        if (!stored) return fail('AI_RESPONSE_CONFLICT');
-        logOutcome(responseId, 'complete');
+        // This attempt lost the row (its lease expired and a retry took over): its text is not the
+        // response. Nothing to release.
+        if (!stored) return fail('AI_RESPONSE_CONFLICT', undefined, false);
+        logOutcome(responseId, 'complete', undefined, 'info');
         emit({ type: 'complete', responseId, disclaimer: true });
         finish();
-      })().catch((error: unknown) => fail('INTERNAL_ERROR', `error=${error instanceof Error ? error.name : typeof error}`));
+      })().catch((error: unknown) => fail('INTERNAL_ERROR', errorName(error)));
     },
     cancel() {
       closed = true;

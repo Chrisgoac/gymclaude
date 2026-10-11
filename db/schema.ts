@@ -237,14 +237,20 @@ export const aiResponses = pgTable('ai_responses', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
   clientMessageId: text('client_message_id').notNull(),
+  kind: text('kind').notNull().default('coach'),
   status: text('status').notNull(),
   // Texto final de una respuesta completa del Coach (NULL mientras está incompleta).
   content: text('content'),
+  // Intento de generación vivo: solo él puede completar la fila; otro intento espera a que el
+  // lease se libere o caduque.
+  attemptId: text('attempt_id'),
+  leaseExpiresAt: bigint('lease_expires_at', { mode: 'number' }),
   createdAt: bigint('created_at', { mode: 'number' }).notNull(),
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [
   uniqueIndex('ai_responses_user_client_message_idx').on(t.userId, t.clientMessageId),
   check('ai_responses_status_check', sql`${t.status} IN ('complete','incomplete')`),
+  check('ai_responses_kind_check', sql`${t.kind} IN ('coach','mesocycle')`),
 ]);
 
 // Reportes de respuestas de IA problemáticas (uno por usuario y respuesta).
