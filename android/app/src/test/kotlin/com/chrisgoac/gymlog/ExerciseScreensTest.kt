@@ -146,7 +146,7 @@ class ExerciseScreensTest {
 
     private val photoCalls = mutableListOf<String>()
     private val media = PhotoMedia()
-    private fun photosViewModel(id: String) = ExercisePhotosViewModel(media, PhotoCapture(photoCalls), id)
+    private fun photosViewModel(id: String) = ExercisePhotosViewModel(media, PhotoCapture(photoCalls), id, androidx.lifecycle.SavedStateHandle())
 
     @Test fun catalogDetailIsReadOnlyAndExplainsThatPhotosAreForOwnExercises(): Unit = with(rule) {
         val viewModel = ExerciseDetailViewModel(repository, "seed-press")

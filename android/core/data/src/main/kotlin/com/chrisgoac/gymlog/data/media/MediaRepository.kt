@@ -63,6 +63,8 @@ class OfflineMediaRepository(
     private val openSource: (String) -> InputStream?,
     /** Queues the background upload/delete of one photo (unique per account + photo). */
     private val schedule: suspend (userHash: String, mediaId: String) -> Unit,
+    /** Like [schedule] for an explicit user retry: starts now instead of waiting behind backoff. */
+    private val scheduleNow: suspend (userHash: String, mediaId: String) -> Unit = schedule,
     private val locks: SyncLocks,
     /** Server-corrected clock (grants carry server epoch expiries). */
     private val now: () -> Long,
@@ -306,9 +308,25 @@ class OfflineMediaRepository(
     override suspend fun retry(mediaId: String) {
         val open = databases.current.value ?: error("No open account")
         val dao = open.database.pendingMediaDao()
-        val row = dao.findById(mediaId)?.takeIf { it.state == PendingMediaState.REJECTED || it.state == PendingMediaState.PENDING } ?: return
-        dao.upsert(row.copy(state = PendingMediaState.PENDING, attempts = 0, lastError = null))
-        schedule(UserDatabaseManagerImpl.userHash(open.userId), mediaId)
+        // Read, check and write in one transaction under the account lock: a worker pass that finished
+        // meanwhile (row gone, or turned into a delete) is never resurrected. A refused upload starts over
+        // (attempts reset); one that merely keeps failing keeps its attempts and last error visible until
+        // the new attempt finishes.
+        val requeue = locks.forUser(open.userId).withLock {
+            open.database.withTransaction {
+                val row = dao.findById(mediaId)
+                when {
+                    row == null || row.operation != PendingMediaOperation.UPLOAD -> false
+                    row.state == PendingMediaState.REJECTED -> {
+                        dao.upsert(row.copy(state = PendingMediaState.PENDING, attempts = 0, lastError = null))
+                        true
+                    }
+                    row.state == PendingMediaState.PENDING -> true
+                    else -> false
+                }
+            }
+        }
+        if (requeue) scheduleNow(UserDatabaseManagerImpl.userHash(open.userId), mediaId)
     }
 
     override suspend fun discard(mediaId: String) {

@@ -65,7 +65,7 @@ class ExercisePhotosViewModel(
     private val media: MediaRepository,
     captureTargets: PhotoCaptureTargets,
     private val exerciseId: String,
-    savedState: SavedStateHandle = SavedStateHandle(),
+    savedState: SavedStateHandle,
 ) : ViewModel() {
     private data class Local(
         val saving: Boolean = false,

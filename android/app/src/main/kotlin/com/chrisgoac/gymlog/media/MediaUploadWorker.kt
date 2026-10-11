@@ -69,7 +69,7 @@ class WorkManagerMediaScheduler(
 ) {
     private val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
-    fun schedule(userHash: String, mediaId: String, resume: Boolean = false) {
+    fun schedule(userHash: String, mediaId: String, resume: Boolean = false, immediately: Boolean = false) {
         if (isSuspended(userHash)) return
         val request = OneTimeWorkRequestBuilder<MediaUploadWorker>()
             .setConstraints(constraints)
@@ -77,7 +77,12 @@ class WorkManagerMediaScheduler(
             .setInputData(workDataOf(MediaUploadWorker.KEY_USER_HASH to userHash, MediaUploadWorker.KEY_MEDIA_ID to mediaId))
             .addTag(tag(userHash))
             .build()
-        val policy = if (resume) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.APPEND_OR_REPLACE
+        // An explicit user retry replaces the queued/backing-off pass so it starts now (the upload is replay-safe by id).
+        val policy = when {
+            resume -> ExistingWorkPolicy.KEEP
+            immediately -> ExistingWorkPolicy.REPLACE
+            else -> ExistingWorkPolicy.APPEND_OR_REPLACE
+        }
         workManager().enqueueUniqueWork(workName(userHash, mediaId), policy, request)
     }
 

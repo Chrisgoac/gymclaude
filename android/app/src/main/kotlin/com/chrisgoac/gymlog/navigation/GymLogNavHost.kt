@@ -416,7 +416,7 @@ private fun GymLogNavHost(
                     } else {
                         val viewModel = viewModel { ExerciseDetailViewModel(exercises, id) }
                         val photos = media?.let { services ->
-                            viewModel(key = "photos:$id") { ExercisePhotosViewModel(services.repository, services.captureTargets, id) }
+                            viewModel(key = "photos:$id") { ExercisePhotosViewModel(services.repository, services.captureTargets, id, createSavedStateHandle()) }
                         }
                         ExerciseDetailScreen(
                             viewModel,
@@ -557,7 +557,7 @@ private fun GymLogNavHost(
                     SmokeScreen(GymLogDestination.Progress, navController, secondary = true)
                 } else {
                     val startWithCapture = entry.toRoute<GymLogDestination.ProgressPhotos>().capture
-                    val viewModel = viewModel { PhotoGalleryViewModel(media.repository, media.captureTargets, media::clock) }
+                    val viewModel = viewModel { PhotoGalleryViewModel(media.repository, media.captureTargets, media::clock, createSavedStateHandle()) }
                     // Opens the new-photo form once per visit (rotation keeps it in the ViewModel, not re-opened here).
                     var opened by rememberSaveable { mutableStateOf(false) }
                     LaunchedEffect(startWithCapture) {

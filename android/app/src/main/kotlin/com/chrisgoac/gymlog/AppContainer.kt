@@ -355,6 +355,7 @@ class AppContainer(private val application: Application) {
         cacheRoot = application.cacheDir,
         openSource = { uri -> application.contentResolver.openInputStream(android.net.Uri.parse(uri)) },
         schedule = { hash, id -> mediaScheduler.schedule(hash, id) },
+        scheduleNow = { hash, id -> mediaScheduler.schedule(hash, id, immediately = true) },
         locks = syncLocks,
         now = syncClock::nowMillis,
     )

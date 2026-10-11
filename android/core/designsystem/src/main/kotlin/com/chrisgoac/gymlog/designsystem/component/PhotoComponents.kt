@@ -92,8 +92,10 @@ fun PhotoTile(
 ) {
     val colors = HierroTheme.colors
     var broken by remember(imagePath) { mutableStateOf(false) }
+    // A tile whose file could not be decoded retries the decode on tap, then does what a tap normally does.
+    val tap: (() -> Unit)? = if (broken) ({ broken = false; onClick?.invoke() }) else onClick
     val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val clickable = if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier
+    val clickable = if (tap != null) Modifier.clickable(role = Role.Button, onClick = tap) else Modifier
     Column(
         modifier
             .then(clickable)

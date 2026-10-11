@@ -1,5 +1,6 @@
 package com.chrisgoac.gymlog.exercises
 
+import androidx.lifecycle.SavedStateHandle
 import com.chrisgoac.gymlog.domain.media.CaptureSlot
 import com.chrisgoac.gymlog.domain.media.MediaRepository
 import com.chrisgoac.gymlog.domain.media.MediaUiState
@@ -80,7 +81,7 @@ class ExercisePhotosViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val media = FakeMedia()
     private val capture = FakeCapture()
-    private val viewModel by lazy { ExercisePhotosViewModel(media, capture, "e1") }
+    private val viewModel by lazy { ExercisePhotosViewModel(media, capture, "e1", SavedStateHandle()) }
 
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
 

@@ -113,7 +113,7 @@ class PhotoGalleryViewModel(
     private val media: MediaRepository,
     captureTargets: PhotoCaptureTargets,
     private val clock: () -> PhotoClock,
-    private val savedState: SavedStateHandle = SavedStateHandle(),
+    private val savedState: SavedStateHandle,
 ) : ViewModel() {
     /** UI-only state that is not derived from the repository. */
     private data class Local(

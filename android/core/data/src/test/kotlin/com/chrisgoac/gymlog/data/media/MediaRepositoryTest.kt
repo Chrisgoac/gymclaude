@@ -13,6 +13,7 @@ import com.chrisgoac.gymlog.database.OpenUserDatabase
 import com.chrisgoac.gymlog.database.UserDatabaseManager
 import com.chrisgoac.gymlog.database.UserDatabaseManagerImpl
 import com.chrisgoac.gymlog.database.entity.ExercisePhotoEntity
+import com.chrisgoac.gymlog.database.entity.PendingMediaOperation
 import com.chrisgoac.gymlog.database.entity.PendingMediaState
 import com.chrisgoac.gymlog.database.entity.ProgressPhotoEntity
 import com.chrisgoac.gymlog.model.ApiErrorCode
@@ -130,6 +131,7 @@ class MediaRepositoryTest {
     private val manager = SwitchableManager(OpenUserDatabase(USER_A, dbA))
     private val api = FakeMediaApi()
     private val scheduled = mutableListOf<Pair<String, String>>()
+    private val immediate = mutableListOf<Pair<String, String>>()
     private val locks = SyncLocks()
 
     private fun repo(maxSourceBytes: Long = MediaLimits.MAX_SOURCE_BYTES, maxCacheBytes: Long = OfflineMediaRepository.DEFAULT_CACHE_BYTES) = OfflineMediaRepository(
@@ -139,6 +141,7 @@ class MediaRepositoryTest {
         cacheRoot = cacheRoot,
         openSource = { uri -> File(uri.removePrefix("file://")).takeIf { it.isFile }?.let(::FileInputStream) },
         schedule = { hash, id -> scheduled += hash to id },
+        scheduleNow = { hash, id -> immediate += hash to id },
         locks = locks,
         now = { now },
         newId = { "00000000-0000-4000-8000-%012d".format(++ids) },
@@ -309,6 +312,48 @@ class MediaRepositoryTest {
         assertEquals(1, dbA.exercisePhotoDao().getAll().size)
     }
 
+    @Test fun `retrying a photo that keeps failing restarts it at once and keeps its failure history`() = runTest {
+        api.uploadFailure = { SyncApiException.Transport(IOException("offline")) }
+        val id = queuedId(media.enqueue(sourceJpeg(100, 100), MediaOwner.Exercise("e1")))
+        assertEquals(MediaWorkOutcome.RETRY, media.process(USER_A, id))
+        val before = dbA.pendingMediaDao().findById(id)!!
+        assertEquals(1, before.attempts)
+
+        media.retry(id)
+
+        assertEquals(listOf(hashA to id), immediate)
+        assertEquals(before, dbA.pendingMediaDao().findById(id)) // attempts and last error stay visible
+        assertEquals(MediaStatus.PendingUpload(1, before.lastError), media.observe(MediaKind.EXERCISE).first().single().status)
+    }
+
+    @Test fun `retrying a fresh queued photo just reschedules it now`() = runTest {
+        val id = queuedId(media.enqueue(sourceJpeg(100, 100), MediaOwner.Exercise("e1")))
+        val before = dbA.pendingMediaDao().findById(id)
+        media.retry(id)
+        assertEquals(listOf(hashA to id), immediate)
+        assertEquals(before, dbA.pendingMediaDao().findById(id))
+    }
+
+    @Test fun `a retry that loses the race with a finished upload does nothing`() = runTest {
+        val id = queuedId(media.enqueue(sourceJpeg(100, 100), MediaOwner.Exercise("e1")))
+        assertEquals(MediaWorkOutcome.DONE, media.process(USER_A, id)) // uploaded: the pending row is gone
+        media.retry(id)
+        assertNull(dbA.pendingMediaDao().findById(id))
+        assertTrue(immediate.isEmpty())
+        assertEquals(1, dbA.exercisePhotoDao().getAll().size)
+    }
+
+    @Test fun `a retry never turns a queued delete back into an upload`() = runTest {
+        val id = queuedId(media.enqueue(sourceJpeg(100, 100), MediaOwner.Exercise("e1")))
+        api.uploadFailure = { SyncApiException.Transport(IOException("offline")) }
+        media.process(USER_A, id)
+        media.delete(id) // pending upload becomes a queued DELETE
+        immediate.clear()
+        media.retry(id)
+        assertEquals(PendingMediaOperation.DELETE, dbA.pendingMediaDao().findById(id)!!.operation)
+        assertTrue(immediate.isEmpty())
+    }
+
     @Test fun `a permanent rejection keeps the file for retry or discard`() = runTest {
         val id = queuedId(media.enqueue(sourceJpeg(100, 100), MediaOwner.Exercise("e1")))
         api.uploadFailure = { apiError(400, "INVALID_REFERENCE", false) }
@@ -323,7 +368,8 @@ class MediaRepositoryTest {
 
         scheduled.clear()
         media.retry(id)
-        assertEquals(listOf(hashA to id), scheduled)
+        assertEquals(listOf(hashA to id), immediate)
+        assertEquals(PendingMediaState.PENDING, dbA.pendingMediaDao().findById(id)!!.state)
         api.uploadFailure = null
         assertEquals(MediaWorkOutcome.DONE, media.process(USER_A, id))
         assertEquals(1, dbA.exercisePhotoDao().getAll().size)
