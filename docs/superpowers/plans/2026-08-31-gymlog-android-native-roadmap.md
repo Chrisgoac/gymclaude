@@ -151,6 +151,19 @@ Evidence: [android-phase-01-backend.md](../../verification/android-phase-01-back
 - [ ] Confirm auth waits for an active Clerk session, not merely a loaded user.
 - [ ] Confirm switching test accounts never exposes the previous account's Room rows or cached media.
 
+### Core workouts gate (Plan 3)
+
+Status: **automated evidence complete; device checks pending.**
+
+- [x] Offline routine workout (log, reorder, kill/reopen, finish) and offline historical edit converge on a second device/database, tombstones included (JVM two-device harness against an in-process contract-faithful sync server).
+- [x] A duplicated push delivery is applied once on the server (mutationId replay).
+- [x] Concurrent offline edits of the same set converge to the LWW winner in either sync order.
+- [x] UI offline flow (start routine/free workout, log, finish, history, edit, save) passes on the API 36 emulator.
+- [x] No WebView dependency in `android/`; all screens are Compose.
+- [ ] API 26 run, Pixel/Samsung rest-timer checks, and a real two-device run against the production server after Clerk configuration.
+
+Evidence: [android-phase-03-workouts.md](../../verification/android-phase-03-workouts.md).
+
 ### Product parity gate
 
 - [ ] Complete the inventory in design spec section 6 without WebView screens.
