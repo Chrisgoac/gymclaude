@@ -1,5 +1,6 @@
 package com.chrisgoac.gymlog.network
 
+import com.chrisgoac.gymlog.model.account.AccountWire
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
@@ -29,13 +30,16 @@ internal class AuthorizedCalls(
      * A 401 is retried once with a force-refreshed token (the cached one may have just expired).
      * A 401/403 that persists is [SyncApiException.SessionRejected] while the identity provider still
      * holds an active session for [expectedUserId], otherwise [SyncApiException.SessionRequired].
+     * [freshToken] skips the token cache from the first attempt (e.g. right after a reverification, whose
+     * new factor age only a newly minted token carries).
      */
     suspend fun <T> execute(
         expectedUserId: String,
         configure: HttpRequestBuilder.() -> Unit,
         decode: (String) -> T,
+        freshToken: Boolean = false,
     ): T {
-        var sent = send(expectedUserId, forceRefresh = false, configure)
+        var sent = send(expectedUserId, forceRefresh = freshToken, configure)
         if (sent.response.status.value == HTTP_UNAUTHORIZED) {
             sent = send(expectedUserId, forceRefresh = true, configure)
         }
@@ -147,6 +151,7 @@ internal class AuthorizedCalls(
         val reqId = response.headers["x-request-id"] ?: requestId
         if (status == HTTP_FORBIDDEN) {
             val routeError = NetworkErrorMapper.mapApiError(status, retryAfter, text, reqId)
+            if (routeError.rawCode == AccountWire.ACCOUNT_DELETING) auth.onAccountDeleting(expectedUserId)
             if (routeError.rawCode in ROUTE_FORBIDDEN_CODES) return routeError
         }
         if (status == HTTP_UNAUTHORIZED || status == HTTP_FORBIDDEN) {
@@ -183,7 +188,10 @@ internal class AuthorizedCalls(
         const val HTTP_UNAUTHORIZED = 401
         const val HTTP_FORBIDDEN = 403
 
-        /** 403 codes that are a route's own answer (entitlement, purchase owner), not an authentication failure. */
-        val ROUTE_FORBIDDEN_CODES = setOf("PRO_REQUIRED", "PURCHASE_ACCOUNT_MISMATCH")
+        /**
+         * 403 codes that are a route's own answer (entitlement, purchase owner, recent sign-in needed, account
+         * being deleted), not an authentication failure.
+         */
+        val ROUTE_FORBIDDEN_CODES = setOf("PRO_REQUIRED", "PURCHASE_ACCOUNT_MISMATCH", AccountWire.REAUTH_REQUIRED, AccountWire.ACCOUNT_DELETING)
     }
 }

@@ -4,7 +4,16 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.core.content.edit
+import com.chrisgoac.gymlog.account.AccountDeletionCoordinator
+import com.chrisgoac.gymlog.account.DataStoreAccountDeletionMarks
+import com.chrisgoac.gymlog.account.ServerAccountDeletion
 import com.chrisgoac.gymlog.auth.ClerkAuthGateway
+import com.chrisgoac.gymlog.auth.ClerkReauthGateway
+import com.chrisgoac.gymlog.domain.account.AccountDeletion
+import com.chrisgoac.gymlog.domain.auth.AuthStep
+import com.chrisgoac.gymlog.navigation.AccountServices
+import com.chrisgoac.gymlog.network.createAccountApi
+import com.chrisgoac.gymlog.settings.AccountLinks
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
 import com.chrisgoac.gymlog.data.achievement.OfflineAchievementRepository
 import com.chrisgoac.gymlog.data.backup.RoomBackupRepository
@@ -197,7 +206,17 @@ class AppContainer(private val application: Application) {
 
     private val clerkSession: ClerkAuthSessionProvider? = if (clerkConfigured) ClerkAuthSessionProvider(appScope) else null
 
-    val authSession: AuthSessionProvider = clerkSession ?: UnconfiguredAuthSession
+    /**
+     * The session every API client uses. A `403 ACCOUNT_DELETING` from any route starts the local side of the
+     * deletion, but only for the account that is still signed in (a stale request of a previous account is ignored).
+     */
+    val authSession: AuthSessionProvider = clerkSession?.let { clerk ->
+        object : AuthSessionProvider by clerk {
+            override fun onAccountDeleting(userId: String) {
+                if (clerk.state.value == AuthState.SignedIn(userId)) accountDeletion.onAccountDeleting(userId)
+            }
+        }
+    } ?: UnconfiguredAuthSession
 
     /** Only reachable from the auth screens, which a misconfigured app never shows. */
     val authGateway: AuthGateway by lazy {
@@ -460,12 +479,40 @@ class AppContainer(private val application: Application) {
         }
     }
 
+    /**
+     * The device side of account deletion (server accepted, or an `ACCOUNT_DELETING` answer): durable mark in a
+     * device-level DataStore, stop the account's work, end the Clerk session, wipe exactly that account's files.
+     * The root state machine shows nothing of the product while it runs, including after process death.
+     */
+    val accountDeletion: AccountDeletionCoordinator by lazy {
+        AccountDeletionCoordinator(
+            marks = DataStoreAccountDeletionMarks(
+                File(application.filesDir, "account_deletion.preferences_pb"),
+                CoroutineScope(SupervisorJob() + Dispatchers.IO),
+            ),
+            hashOf = UserDatabaseManagerImpl::userHash,
+            stopWork = { hash ->
+                syncScheduler.cancelForHash(hash)
+                mediaScheduler.cancelAll(hash)
+            },
+            endSession = { authGateway.signOut() == AuthStep.Completed },
+            wipe = accountCleaner::deleteAccountData,
+            scope = appScope,
+        )
+    }
+
     private val bootstrapRunner = BootstrapRunner { userId, database, onProgress ->
         bootstrapRepository.run(userId, database, onProgress)
     }
 
-    val rootStateMachine: RootStateMachine = RootStateMachine(authSession, databases, bootstrapRunner, appScope, clerkConfigured, startupGate = { startupSweep.await() })
-        .also { it.start() }
+    val rootStateMachine: RootStateMachine = RootStateMachine(
+        authSession, databases, bootstrapRunner, appScope, clerkConfigured,
+        startupGate = {
+            startupSweep.await()
+            if (clerkConfigured) accountDeletion.resumePending()
+        },
+        deletion = accountDeletion.status,
+    ).also { it.start() }
 
     /**
      * Google Play Billing verified by the server; the entitlement is cached per account (DataStore under
@@ -527,6 +574,19 @@ class AppContainer(private val application: Application) {
                 backup = BackupServices(backupRepository, ContentResolverBackupDocuments(application.contentResolver), syncClock::nowMillis, ZoneId::systemDefault),
                 billing = billing,
                 online = connectivity.online,
+                account = AccountServices(
+                    deletion = AccountDeletion(
+                        currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId },
+                        server = ServerAccountDeletion(createAccountApi(BuildConfig.API_BASE_URL, authSession, serverClock)),
+                        local = accountDeletion,
+                    ),
+                    reauth = ClerkReauthGateway(currentUserId = { (rootStateMachine.state.value as? RootState.Ready)?.userId }),
+                    links = AccountLinks(
+                        privacyPolicy = BuildConfig.PRIVACY_POLICY_URL,
+                        accountDeletion = BuildConfig.ACCOUNT_DELETION_URL,
+                        subscriptions = billing::managementUri,
+                    ),
+                ),
             )
         } else {
             null

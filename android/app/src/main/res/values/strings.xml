@@ -11,6 +11,8 @@
     <string name="nav_coach">Coach Pro</string>
     <string name="nav_mesocycle_generator">Mesociclo IA</string>
     <string name="nav_pro">GymLog Pro</string>
+    <string name="nav_account">Cuenta</string>
+    <string name="nav_privacy">Privacidad</string>
     <string name="nav_intelligent_report">Informe inteligente</string>
     <string name="nav_body">Cuerpo</string>
     <string name="nav_achievements">Logros</string>
@@ -36,6 +38,14 @@
     <string name="root_fatal_message">No se pudieron preparar tus datos. Cierra la app y vuelve a abrirla con conexión.</string>
     <string name="root_fatal_retry_message">No se pudieron descargar tus datos. Comprueba la conexión y vuelve a intentarlo: lo ya descargado se conserva.</string>
     <string name="root_retry">Reintentar</string>
+    <string name="root_deleting">Eliminando tu cuenta de este dispositivo</string>
+    <string name="root_deleting_failed_title">No se pudieron borrar los datos locales</string>
+    <string name="root_deleting_failed_message">Tu cuenta ya se está eliminando en el servidor, pero quedan datos en este dispositivo. Vuelve a intentarlo; no podrás usar la app hasta que terminen de borrarse.</string>
+    <string name="root_deleted_title">Cuenta eliminada</string>
+    <string name="root_deleted_message">Tu cuenta y sus datos se han borrado de este dispositivo. En el servidor se completa en minutos.</string>
+    <string name="root_deleted_subscription">Tu suscripción de GymLog Pro en Google Play sigue activa y se renovará: eliminar la cuenta no la cancela. Cancélala en Google Play.</string>
+    <string name="root_deleted_manage">Cancelar en Google Play</string>
+    <string name="root_deleted_continue">Continuar</string>
     <string name="root_fatal_config_title">Falta configuración</string>
     <string name="root_fatal_config_message">Esta compilación no tiene la clave pública de Clerk (clerk.publishableKey en android/local.properties).</string>
 

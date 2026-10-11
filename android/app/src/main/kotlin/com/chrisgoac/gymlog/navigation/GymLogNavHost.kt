@@ -103,7 +103,13 @@ import com.chrisgoac.gymlog.domain.settings.DeviceSettingsRepository
 import com.chrisgoac.gymlog.domain.settings.GymRepository
 import com.chrisgoac.gymlog.domain.settings.SettingsRepository
 import com.chrisgoac.gymlog.domain.billing.BillingRepository
+import com.chrisgoac.gymlog.settings.AccountLinks
+import com.chrisgoac.gymlog.settings.AccountScreen
+import com.chrisgoac.gymlog.settings.AccountViewModel
+import com.chrisgoac.gymlog.settings.PrivacyScreen
 import com.chrisgoac.gymlog.settings.ProScreen
+import com.chrisgoac.gymlog.domain.account.AccountDeletion
+import com.chrisgoac.gymlog.domain.auth.ReauthGateway
 import com.chrisgoac.gymlog.settings.ProViewModel
 import com.chrisgoac.gymlog.settings.SettingsScreen
 import com.chrisgoac.gymlog.settings.SettingsUiState
@@ -163,7 +169,12 @@ class SettingsServices(
     /** Google Play Billing of the account (server-verified Pro); null hides the subscription UI. */
     val billing: BillingRepository? = null,
     val online: Flow<Boolean> = flowOf(true),
+    /** Account deletion, reverification and the public links; null hides the account/privacy screens. */
+    val account: AccountServices? = null,
 )
+
+/** What the Account and Privacy routes need besides sync and sign-out. */
+class AccountServices(val deletion: AccountDeletion, val reauth: ReauthGateway, val links: AccountLinks)
 
 /** Backup export/import: the repository, the SAF document opener and the clock/zone for the file name and dates. */
 class BackupServices(val repository: BackupRepository, val documents: BackupDocuments, val now: () -> Long, val zone: () -> ZoneId)
@@ -353,19 +364,22 @@ private fun GymLogNavHost(
             }
         }
     }
-    val settingsViewModel = settings?.let { services -> viewModel { SettingsViewModel(services.sync, services.signOut, services.billing) } }
+    val settingsViewModel = settings?.let { services -> viewModel { SettingsViewModel(services.sync, services.billing) } }
+    val accountViewModel = settings?.account?.let { account ->
+        viewModel { AccountViewModel(settings.sync, settings.signOut, account.deletion, account.reauth, settings.billing, settings.online) }
+    }
     // Free accounts reach the Pro screen from Settings and from the locked AI entry points (null: billing not wired).
     val openPro: (() -> Unit)? = settings?.billing?.let { { navController.navigate(GymLogDestination.Pro) { launchSingleTop = true } } }
     val context = LocalContext.current
-    // An unanswered sign-out confirmation survives Settings -> diagnostics and rotation (it lives in
-    // the ViewModel); it is dropped, and sync resumes, once the user is on any other destination.
+    // An unanswered sign-out confirmation survives Account -> Privacy and rotation (it lives in the
+    // ViewModel); it is dropped, and sync resumes, once the user is on any other destination.
     // The back stack is null until the graph is set (also right after a rotation): that is "not
-    // known yet", not "left Settings", or a pending confirmation would be dropped on rotation.
+    // known yet", not "left the account screens", or a pending confirmation would be dropped on rotation.
     val destination by navController.currentBackStackEntryAsState()
-    val inSettings: Boolean? = destination?.destination?.let {
-        it.hasRoute(GymLogDestination.Settings::class) || it.hasRoute(GymLogDestination.SyncDiagnostics::class)
+    val inAccount: Boolean? = destination?.destination?.let {
+        it.hasRoute(GymLogDestination.Account::class) || it.hasRoute(GymLogDestination.Privacy::class)
     }
-    LaunchedEffect(inSettings) { if (inSettings == false) settingsViewModel?.onSettingsLeft() }
+    LaunchedEffect(inAccount) { if (inAccount == false) accountViewModel?.onAccountLeft() }
 
     Box(modifier) {
         NavHost(navController, startDestination = GymLogGraph.Train, modifier = Modifier.fillMaxSize()) {
@@ -675,7 +689,30 @@ private fun GymLogNavHost(
                         onBackup = settings?.backup?.let { { navController.navigate(GymLogDestination.Backup) } },
                         onOpenPro = openPro,
                         onOpenUri = { uri -> openExternalUri(context, uri) },
+                        onAccount = accountViewModel?.let { { navController.navigate(GymLogDestination.Account) { launchSingleTop = true } } },
                     )
+                }
+            }
+            composable<GymLogDestination.Account> {
+                val account = settings?.account
+                if (accountViewModel == null || account == null) {
+                    SmokeScreen(GymLogDestination.Account, navController, secondary = true)
+                } else {
+                    AccountScreen(
+                        accountViewModel,
+                        account.links,
+                        onBack = { navController.popBackStack() },
+                        onPrivacy = { navController.navigate(GymLogDestination.Privacy) { launchSingleTop = true } },
+                        onOpenUri = { uri -> openExternalUri(context, uri) },
+                    )
+                }
+            }
+            composable<GymLogDestination.Privacy> {
+                val account = settings?.account
+                if (account == null) {
+                    SmokeScreen(GymLogDestination.Privacy, navController, secondary = true)
+                } else {
+                    PrivacyScreen(account.links, onBack = { navController.popBackStack() }, onOpenUri = { uri -> openExternalUri(context, uri) })
                 }
             }
             composable<GymLogDestination.Pro> {

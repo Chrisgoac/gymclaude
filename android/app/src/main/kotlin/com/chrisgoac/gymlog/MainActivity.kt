@@ -1,6 +1,7 @@
 package com.chrisgoac.gymlog
 
 import android.content.Intent
+import com.chrisgoac.gymlog.navigation.openExternalUri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,6 +37,9 @@ class MainActivity : ComponentActivity() {
                     rootState,
                     authGateway = { container.authGateway },
                     onRetryBootstrap = container.rootStateMachine::retryBootstrap,
+                    onRetryDeletion = container.accountDeletion::retry,
+                    onDeletionAcknowledged = container.accountDeletion::acknowledge,
+                    onOpenUri = { uri -> openExternalUri(this, uri) },
                     settings = container.settingsServices,
                     exercises = container.exerciseRepository,
                     routines = container.routineRepository,

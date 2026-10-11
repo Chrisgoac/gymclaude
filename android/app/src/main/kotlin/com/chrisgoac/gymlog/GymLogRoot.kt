@@ -27,7 +27,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chrisgoac.gymlog.auth.AuthScreen
 import com.chrisgoac.gymlog.auth.AuthViewModel
+import com.chrisgoac.gymlog.designsystem.component.HierroButton
+import com.chrisgoac.gymlog.designsystem.component.HierroButtonVariant
+import com.chrisgoac.gymlog.designsystem.component.HierroCard
 import com.chrisgoac.gymlog.designsystem.component.HierroEmptyState
+import com.chrisgoac.gymlog.designsystem.component.HierroText
 import com.chrisgoac.gymlog.designsystem.component.HierroLoadingState
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
@@ -57,6 +61,10 @@ fun GymLogRoot(
     state: RootState,
     authGateway: () -> AuthGateway,
     onRetryBootstrap: () -> Unit = {},
+    /** Account deletion: retry a failed local wipe, dismiss the final notice, open Play's subscription page. */
+    onRetryDeletion: () -> Unit = {},
+    onDeletionAcknowledged: () -> Unit = {},
+    onOpenUri: (String) -> Unit = {},
     settings: SettingsServices? = null,
     exercises: ExerciseRepository? = null,
     routines: RoutineRepository? = null,
@@ -104,6 +112,34 @@ fun GymLogRoot(
                 openWorkoutRequest = openWorkoutRequest,
                 onOpenWorkoutHandled = onOpenWorkoutHandled,
             )
+        }
+        is RootState.DeletingAccount -> CenteredStatus {
+            if (state.failed) {
+                HierroEmptyState(
+                    title = stringResource(R.string.root_deleting_failed_title),
+                    message = stringResource(R.string.root_deleting_failed_message),
+                    actionLabel = stringResource(R.string.root_retry),
+                    onAction = onRetryDeletion,
+                )
+            } else {
+                HierroLoadingState(stringResource(R.string.root_deleting))
+            }
+        }
+        is RootState.AccountDeleted -> CenteredStatus {
+            HierroCard {
+                HierroText(stringResource(R.string.root_deleted_title).uppercase(), style = HierroTheme.typography.title)
+                HierroText(stringResource(R.string.root_deleted_message), color = HierroTheme.colors.textMuted)
+                val subscription = state.subscription?.takeIf { it.willRenew }
+                if (subscription != null) {
+                    HierroText(stringResource(R.string.root_deleted_subscription), color = HierroTheme.colors.error)
+                    HierroButton(stringResource(R.string.root_deleted_manage), { onOpenUri(subscription.manageUrl) })
+                }
+                HierroButton(
+                    stringResource(R.string.root_deleted_continue),
+                    onDeletionAcknowledged,
+                    variant = if (subscription != null) HierroButtonVariant.Secondary else HierroButtonVariant.Primary,
+                )
+            }
         }
         is RootState.Fatal -> CenteredStatus {
             val config = state.message == "config"

@@ -95,7 +95,8 @@ private fun Modifier.hardBox(fill: Color, border: Color, shadow: Color?, shadowO
 
 // ---- Buttons ----
 
-enum class HierroButtonVariant { Primary, Secondary }
+/** [Destructive]: an action that throws data away; reserved for explicit, irreversible choices. */
+enum class HierroButtonVariant { Primary, Secondary, Destructive }
 
 @Composable
 fun HierroButton(
@@ -117,6 +118,7 @@ fun HierroButton(
     val fill = when {
         !enabled -> colors.surfaceMuted
         variant == HierroButtonVariant.Primary -> colors.accent
+        variant == HierroButtonVariant.Destructive -> colors.error
         else -> colors.ink
     }
     val content = when {

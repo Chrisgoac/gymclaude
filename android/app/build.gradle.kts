@@ -11,10 +11,13 @@ val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
 }
 
-fun buildConfigString(key: String, default: String): String {
-    val value = localProps.getProperty(key, default).trim()
-    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-}
+fun quoted(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+fun buildConfigString(key: String, default: String): String = quoted(localProps.getProperty(key, default).trim())
+
+// Public web pages the app links to (privacy policy, account deletion): the web app, same host as the API by default.
+val webBaseUrl: String = localProps.getProperty("gymlog.webBaseUrl", localProps.getProperty("gymlog.apiBaseUrl", "https://gym.chrisgoac.dev"))
+    .trim().trimEnd('/')
 
 android {
     namespace = "com.chrisgoac.gymlog"
@@ -30,6 +33,8 @@ android {
 
         buildConfigField("String", "API_BASE_URL", buildConfigString("gymlog.apiBaseUrl", "https://gym.chrisgoac.dev"))
         buildConfigField("String", "CLERK_PUBLISHABLE_KEY", buildConfigString("clerk.publishableKey", ""))
+        buildConfigField("String", "PRIVACY_POLICY_URL", quoted("$webBaseUrl/privacy"))
+        buildConfigField("String", "ACCOUNT_DELETION_URL", quoted("$webBaseUrl/delete-account"))
     }
 
     buildTypes {

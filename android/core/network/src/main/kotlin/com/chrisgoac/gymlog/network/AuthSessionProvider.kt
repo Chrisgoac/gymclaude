@@ -20,4 +20,10 @@ interface AuthSessionProvider {
      * another account's token). [forceRefresh] bypasses any cached token.
      */
     suspend fun accessToken(expectedUserId: String, forceRefresh: Boolean = false): String?
+
+    /**
+     * A v1 route answered `403 ACCOUNT_DELETING` for [userId]: the server has started deleting that account.
+     * The app stops using it and removes its local data. Called from any API client, on any thread.
+     */
+    fun onAccountDeleting(userId: String) {}
 }

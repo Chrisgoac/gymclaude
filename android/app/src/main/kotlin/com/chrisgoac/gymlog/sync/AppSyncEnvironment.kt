@@ -27,13 +27,18 @@ class AppSyncEnvironment(
     override suspend fun readiness(userHash: String): SyncReadiness {
         if (scheduler.isSuspended(userHash)) return SyncReadiness.NotYet // sign-out in progress: no syncing.
         val settled = withTimeoutOrNull(startupTimeoutMillis) {
-            rootState.first { it is RootState.Ready || it is RootState.SignedOut || it is RootState.ReauthenticationRequired || it is RootState.Fatal }
+            rootState.first {
+                it is RootState.Ready || it is RootState.SignedOut || it is RootState.ReauthenticationRequired || it is RootState.Fatal ||
+                    it is RootState.DeletingAccount || it is RootState.AccountDeleted
+            }
         } ?: return SyncReadiness.NotYet
         return when (settled) {
             is RootState.Ready -> if (matches(settled.userId, userHash)) SyncReadiness.Ready(settled.userId) else SyncReadiness.Unavailable
             is RootState.ReauthenticationRequired -> if (matches(settled.userId, userHash)) SyncReadiness.SessionRequired else SyncReadiness.Unavailable
             RootState.SignedOut -> SyncReadiness.SessionRequired
             is RootState.Fatal -> if (settled.canRetry) SyncReadiness.NotYet else SyncReadiness.Unavailable
+            // The account is being (or was) deleted: its work is cancelled and never comes back.
+            is RootState.DeletingAccount, is RootState.AccountDeleted -> SyncReadiness.Unavailable
             else -> SyncReadiness.NotYet
         }
     }

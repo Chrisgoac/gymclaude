@@ -11,18 +11,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.chrisgoac.gymlog.designsystem.component.HierroButton
 import com.chrisgoac.gymlog.designsystem.component.HierroButtonVariant
-import com.chrisgoac.gymlog.designsystem.component.HierroCard
 import com.chrisgoac.gymlog.designsystem.component.HierroHeaderAction
 import com.chrisgoac.gymlog.designsystem.component.HierroScreenHeader
-import com.chrisgoac.gymlog.designsystem.component.HierroText
-import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 
-/** Settings: sync status and account actions. */
+/** Settings: sync status, subscription and the entry to account controls. */
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
@@ -36,6 +32,8 @@ fun SettingsScreen(
     /** Null hides the subscription card (billing is not wired). */
     onOpenPro: (() -> Unit)? = null,
     onOpenUri: (String) -> Unit = {},
+    /** Sign-out, privacy and account deletion; null hides the entry. */
+    onAccount: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsState()
     Column(modifier.fillMaxSize()) {
@@ -52,31 +50,8 @@ fun SettingsScreen(
                 }
             }
             SyncStatusCard(state.sync, onSyncNow = viewModel::syncNow, onDetails = onSyncDetails)
-            AccountCard(state.signOut, viewModel)
+            if (onAccount != null) HierroButton(stringResource(R.string.settings_account_and_privacy), onAccount, variant = HierroButtonVariant.Secondary)
         }
     }
 }
 
-@Composable
-private fun AccountCard(phase: SignOutPhase, viewModel: SettingsViewModel) {
-    HierroCard {
-        HierroText(stringResource(R.string.settings_account_title).uppercase(), style = HierroTheme.typography.label, color = HierroTheme.colors.textMuted)
-        when (phase) {
-            is SignOutPhase.Confirm -> {
-                HierroText(stringResource(R.string.settings_sign_out_confirm_title).uppercase(), style = HierroTheme.typography.title, color = HierroTheme.colors.error)
-                HierroText(pluralStringResource(R.plurals.settings_sign_out_confirm_message, phase.unsyncedChanges, phase.unsyncedChanges))
-                HierroButton(stringResource(R.string.settings_sign_out_keep), viewModel::cancelSignOut)
-                HierroButton(stringResource(R.string.settings_sign_out_discard), viewModel::confirmDiscard, variant = HierroButtonVariant.Secondary)
-            }
-            else -> {
-                if (phase == SignOutPhase.Failed) HierroText(stringResource(R.string.settings_sign_out_failed), color = HierroTheme.colors.error)
-                HierroButton(
-                    stringResource(R.string.settings_sign_out),
-                    viewModel::signOut,
-                    variant = HierroButtonVariant.Secondary,
-                    loading = phase == SignOutPhase.Working,
-                )
-            }
-        }
-    }
-}

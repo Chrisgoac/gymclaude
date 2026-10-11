@@ -54,6 +54,16 @@ class RoomLocalAccountCleaner(
     }
 
     /**
+     * Account deletion: removes everything local of the account [hash] (database, private files, caches and the
+     * per-account stores released by [onLocalDataDeleted]) and any sign-out mark it had. Only the hash is known
+     * after process death; the caller has already stopped the account's work and ended its session.
+     */
+    suspend fun deleteAccountData(hash: String) {
+        deleteByHash(hash)
+        marks.clear(hash)
+    }
+
+    /**
      * Called before [userId]'s database is opened (every open, not only at start). A confirmed
      * deletion is finished first, so the account restarts from a clean database and never resyncs
      * what the user discarded. An intent mark means the sign-out never completed (the session is

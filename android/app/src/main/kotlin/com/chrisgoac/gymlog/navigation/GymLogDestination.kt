@@ -59,6 +59,9 @@ sealed interface GymLogDestination {
     /** Pro: intelligent report, above Progress. */
     @Serializable data object IntelligentReport : GymLogDestination { override val title = R.string.nav_intelligent_report }
     @Serializable data object Pro : GymLogDestination { override val title = R.string.nav_pro }
+    /** Sign-out, account deletion and the entry to [Privacy], above Settings. */
+    @Serializable data object Account : GymLogDestination { override val title = R.string.nav_account }
+    @Serializable data object Privacy : GymLogDestination { override val title = R.string.nav_privacy }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 
