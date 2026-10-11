@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Only camera capture targets are shared, and only through URIs granted to the capture intent. -->
 <paths>
-    <files-path name="media_capture" path="users/" />
+    <files-path name="media_capture" path="capture/" />
 </paths>

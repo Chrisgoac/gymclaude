@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.media.ExifInterface
+import androidx.exifinterface.media.ExifInterface
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chrisgoac.gymlog.data.sync.SyncLocks
@@ -33,7 +33,9 @@ import com.chrisgoac.gymlog.network.SyncApiException
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -81,6 +83,8 @@ class MediaRepositoryTest {
         var grantFailure: (() -> Exception)? = null
         var downloadFailure: (() -> Exception?)? = null
         val downloads = mutableListOf<String>()
+        var downloadStarted: CompletableDeferred<Unit>? = null
+        var downloadGate: CompletableDeferred<Unit>? = null
 
         override suspend fun upload(expectedUserId: String, kind: MediaKind, mediaId: String, fields: Map<String, String>, file: File, mimeType: String): MediaUploadResponse {
             uploadFailure?.let { throw it() }
@@ -108,6 +112,8 @@ class MediaRepositoryTest {
 
         override suspend fun download(readUrl: String, maxBytes: Long): ByteArray {
             downloadFailure?.invoke()?.let { throw it }
+            downloadStarted?.complete(Unit)
+            downloadGate?.await()
             downloads += readUrl
             return jpegBytes(8, 8)
         }
@@ -126,7 +132,7 @@ class MediaRepositoryTest {
     private val scheduled = mutableListOf<Pair<String, String>>()
     private val locks = SyncLocks()
 
-    private fun repo(maxSourceBytes: Long = MediaLimits.MAX_SOURCE_BYTES) = OfflineMediaRepository(
+    private fun repo(maxSourceBytes: Long = MediaLimits.MAX_SOURCE_BYTES, maxCacheBytes: Long = OfflineMediaRepository.DEFAULT_CACHE_BYTES) = OfflineMediaRepository(
         databases = manager,
         api = api,
         filesRoot = filesRoot,
@@ -137,6 +143,7 @@ class MediaRepositoryTest {
         now = { now },
         newId = { "00000000-0000-4000-8000-%012d".format(++ids) },
         maxSourceBytes = maxSourceBytes,
+        maxCacheBytes = maxCacheBytes,
     )
 
     private val media = repo()
@@ -447,6 +454,101 @@ class MediaRepositoryTest {
         assertTrue(media.pendingWork(USER_A).isEmpty())
         assertEquals(hashB to queued, scheduled.last())
         assertTrue(aCopy.isFile)
+    }
+
+    // ── Fix round 1 ──
+
+    @Test fun `a pulled tombstone evicts the cached copy and a queued original of that photo`() = runTest {
+        dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("live", 10, null, "e1", "/api/media/read/live", "k1", 1))
+        dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("gone", 10, null, "e1", "/api/media/read/gone", "k2", 2))
+        val queued = queuedId(media.enqueue(sourceJpeg(100, 100), MediaOwner.Exercise("e1")))
+        cacheDir().mkdirs()
+        val liveCopy = File(cacheDir(), "live.jpg").apply { writeBytes(byteArrayOf(1)) }
+        val goneCopy = File(cacheDir(), "gone.jpg").apply { writeBytes(byteArrayOf(1)) }
+        val strayCopy = File(cacheDir(), "never-synced.jpg").apply { writeBytes(byteArrayOf(1)) }
+
+        // Pull applies tombstones for "gone" and for the photo still queued here (deleted on another device).
+        dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("gone", 20, 20, "e1", "/api/media/read/gone", "k2", 3))
+        dbA.exercisePhotoDao().upsert(ExercisePhotoEntity(queued, 20, 20, "e1", "/api/media/read/$queued", "k3", 4))
+        media.sweep(USER_A)
+
+        assertTrue(liveCopy.isFile)
+        assertFalse(goneCopy.exists())
+        assertFalse(strayCopy.exists())
+        assertNull(dbA.pendingMediaDao().findById(queued))
+        assertFalse(pendingFile(queued).exists())
+        assertTrue(media.observe(MediaKind.EXERCISE).first().map { it.id } == listOf("live"))
+    }
+
+    @Test fun `local-data deletion during an in-flight download leaves no files behind`() = runTest {
+        dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("x1", 10, null, "e1", "/api/media/read/x1", "k", 1))
+        api.downloadStarted = CompletableDeferred()
+        api.downloadGate = CompletableDeferred()
+        val pending = async { media.image("x1") }
+        api.downloadStarted!!.await()
+
+        // What RoomLocalAccountCleaner does: under the account lock, close the database and remove the directories.
+        locks.forUser(USER_A).withLock {
+            manager.current.value = null
+            File(cacheRoot, "users/$hashA").deleteRecursively()
+            File(filesRoot, "users/$hashA").deleteRecursively()
+        }
+        api.downloadGate!!.complete(Unit)
+
+        assertEquals(MediaImage.Unavailable(MediaImage.Unavailable.Reason.SESSION_REQUIRED), pending.await())
+        assertFalse(File(cacheRoot, "users/$hashA").exists())
+        assertFalse(File(filesRoot, "users/$hashA").exists())
+    }
+
+    @Test fun `a signed-out account cannot ingest`() = runTest {
+        manager.current.value = null
+        val failed = runCatching { media.enqueue(sourceJpeg(10, 10), MediaOwner.Exercise("e1")) }
+        assertTrue(failed.isFailure)
+        assertFalse(File(filesRoot, "users/$hashA").exists())
+    }
+
+    @Test fun `a delete the server refuses for another reason than 404 keeps retrying`() = runTest {
+        dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("x1", 10, null, "e1", "/api/media/read/x1", "k", 1))
+        media.delete("x1")
+        api.deleteFailure = { apiError(400, "INVALID_MEDIA_ID", false) }
+        assertEquals(MediaWorkOutcome.RETRY, media.process(USER_A, "x1"))
+        val row = dbA.pendingMediaDao().findById("x1")!!
+        assertEquals(PendingMediaState.PENDING, row.state)
+        assertEquals("INVALID_MEDIA_ID", row.lastError)
+    }
+
+    @Test fun `an oversized upload refused locally is rejected, not retried`() = runTest {
+        val id = queuedId(media.enqueue(sourceJpeg(100, 100), MediaOwner.Exercise("e1")))
+        api.uploadFailure = { apiError(413, MediaApiImpl.MEDIA_TOO_LARGE, false) }
+        assertEquals(MediaWorkOutcome.DONE, media.process(USER_A, id))
+        assertEquals(MediaStatus.Rejected(MediaApiImpl.MEDIA_TOO_LARGE), media.observe(MediaKind.EXERCISE).first().single().status)
+    }
+
+    @Test fun `forgetting an account drops its in-memory grants`() = runTest {
+        dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("x1", 10, null, "e1", "/api/media/read/x1", "k", 1))
+        media.image("x1")
+        File(cacheDir(), "x1.jpg").delete()
+        media.forgetAccount(hashA)
+        media.image("x1")
+        assertEquals(2, api.grantsIssued)
+    }
+
+    @Test fun `the display cache is bounded and evicts the least recently used copy`() = runTest {
+        val size = jpegBytes(8, 8).size.toLong()
+        val bounded = repo(maxCacheBytes = size * 2)
+        listOf("a", "b", "c").forEach { id ->
+            dbA.exercisePhotoDao().upsert(ExercisePhotoEntity(id, 10, null, "e1", "/api/media/read/$id", "k$id", 1))
+        }
+        bounded.image("a")
+        bounded.image("b")
+        File(cacheDir(), "a.jpg").setLastModified(1_000L)
+        File(cacheDir(), "b.jpg").setLastModified(2_000L)
+        bounded.image("a") // a cache hit refreshes "a": "b" is now the least recently used
+        bounded.image("c")
+        // Adding "c" exceeded the budget: "b" (least recently used) went.
+        assertTrue(File(cacheDir(), "a.jpg").isFile)
+        assertFalse(File(cacheDir(), "b.jpg").exists())
+        assertTrue(File(cacheDir(), "c.jpg").isFile)
     }
 
     private fun nearest(pixel: Int): Int = if (Color.red(pixel) > Color.blue(pixel)) Color.RED else Color.BLUE

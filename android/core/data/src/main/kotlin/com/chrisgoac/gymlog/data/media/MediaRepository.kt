@@ -69,6 +69,8 @@ class OfflineMediaRepository(
     private val compressor: ImageCompressor = ImageCompressor(),
     private val newId: () -> String = { UUID.randomUUID().toString() },
     private val maxSourceBytes: Long = MediaLimits.MAX_SOURCE_BYTES,
+    /** Display-cache budget per account; least recently used copies are evicted beyond it. */
+    private val maxCacheBytes: Long = DEFAULT_CACHE_BYTES,
 ) : MediaRepository {
     private val grants = ConcurrentHashMap<String, MediaReadGrant>()
 
@@ -81,12 +83,19 @@ class OfflineMediaRepository(
         val id = newId()
         val dir = pendingDir(hash)
         val target = File(dir, "$id$JPEG")
-        val failure = withContext(Dispatchers.IO) { ingest(sourceUri, dir, id, target) }
-        if (failure != null) return EnqueueResult.Invalid(failure)
-        if (databases.current.value?.userId != open.userId) {
-            target.delete()
-            error("The account changed while the image was being prepared")
+        // Under the account lock (local-data deletion takes it too) and only while the account is still
+        // the open one: a signed-out account's directory is never recreated.
+        locks.forUser(open.userId).withLock {
+            if (databases.current.value?.userId != open.userId) error("The account is no longer open")
+            val failure = withContext(Dispatchers.IO) { ingest(sourceUri, dir, id, target) }
+            if (failure != null) return EnqueueResult.Invalid(failure)
+            insertPending(open, id, owner, target)
         }
+        schedule(hash, id)
+        return EnqueueResult.Queued(id)
+    }
+
+    private suspend fun insertPending(open: OpenUserDatabase, id: String, owner: MediaOwner, target: File) {
         open.database.pendingMediaDao().insert(
             PendingMediaEntity(
                 id = id,
@@ -103,8 +112,6 @@ class OfflineMediaRepository(
                 createdAt = now(),
             ),
         )
-        schedule(hash, id)
-        return EnqueueResult.Queued(id)
     }
 
     /** Copies then compresses into the private pending directory; null on success. */
@@ -192,7 +199,10 @@ class OfflineMediaRepository(
             if (file != null && file.isFile) return MediaImage.Available(file.path)
         }
         val cached = cacheFile(hash, mediaId)
-        if (cached.isFile) return MediaImage.Available(cached.path)
+        if (cached.isFile) {
+            cached.setLastModified(System.currentTimeMillis()) // LRU recency
+            return MediaImage.Available(cached.path)
+        }
         return download(open.userId, hash, mediaId, cached)
     }
 
@@ -217,7 +227,17 @@ class OfflineMediaRepository(
             } catch (e: SyncApiException) {
                 return unavailable(e)
             }
-            withContext(Dispatchers.IO) { writeAtomically(target, bytes) }
+            // The download ran unlocked; the write happens only if the account is still the open one
+            // (local-data deletion holds this lock while it removes the directories).
+            val stored = locks.forUser(userId).withLock {
+                if (databases.current.value?.userId != userId) return@withLock false
+                withContext(Dispatchers.IO) {
+                    writeAtomically(target, bytes)
+                    trimCache(hash)
+                }
+                true
+            }
+            if (!stored) return MediaImage.Unavailable(MediaImage.Unavailable.Reason.SESSION_REQUIRED)
             return MediaImage.Available(target.path)
         }
         return MediaImage.Unavailable(MediaImage.Unavailable.Reason.OFFLINE)
@@ -315,7 +335,46 @@ class OfflineMediaRepository(
                 ?.filter { it.name !in referenced && it.lastModified() < cutoff }
                 ?.forEach { it.delete() }
         }
-        return rows.filter { it.state == PendingMediaState.PENDING }.map { it.id }
+        sweep(userId)
+        return open.database.pendingMediaDao().getAll().filter { it.state == PendingMediaState.PENDING }.map { it.id }
+    }
+
+    /**
+     * Evicts what a remote tombstone (pull) made obsolete: cached copies whose photo is no longer live,
+     * and queued uploads of photos the server already deleted (with their pending original). Run after
+     * every sync and on resume.
+     */
+    suspend fun sweep(userId: String) = locks.forUser(userId).withLock {
+        val open = databases.current.value?.takeIf { it.userId == userId } ?: return@withLock
+        val db = open.database
+        val hash = UserDatabaseManagerImpl.userHash(userId)
+        val exercise = db.exercisePhotoDao().getAll()
+        val progress = db.progressPhotoDao().getAll()
+        val live = HashSet<String>()
+        val tombstoned = HashSet<String>()
+        exercise.forEach { if (it.deletedAt == null) live += it.id else tombstoned += it.id }
+        progress.forEach { if (it.deletedAt == null) live += it.id else tombstoned += it.id }
+
+        val dropped = ArrayList<PendingMediaEntity>()
+        db.withTransaction {
+            db.pendingMediaDao().getAll()
+                .filter { it.operation == PendingMediaOperation.UPLOAD && it.id in tombstoned && it.id !in live }
+                .forEach {
+                    db.pendingMediaDao().delete(it.id)
+                    dropped += it
+                }
+        }
+        dropped.forEach { grants.remove(grantKey(hash, it.id)) }
+        val keep = live.mapTo(HashSet()) { fileSafe(it) + JPEG }
+        withContext(Dispatchers.IO) {
+            dropped.forEach { row -> row.fileName?.let { File(pendingDir(hash), it).delete() } }
+            cacheDir(hash).listFiles()?.filter { it.name !in keep }?.forEach { it.delete() }
+        }
+    }
+
+    /** Forgets the in-memory read grants of an account whose local data is being deleted. */
+    fun forgetAccount(userHash: String) {
+        grants.keys.removeIf { it.startsWith("$userHash/") }
     }
 
     /**
@@ -377,7 +436,10 @@ class OfflineMediaRepository(
             true
         }
         if (!confirmed) return null
-        withContext(Dispatchers.IO) { moveToCache(file, cacheFile(hash, row.id)) }
+        withContext(Dispatchers.IO) {
+            moveToCache(file, cacheFile(hash, row.id))
+            trimCache(hash)
+        }
         return MediaWorkOutcome.DONE
     }
 
@@ -388,7 +450,9 @@ class OfflineMediaRepository(
             throw e
         } catch (e: SyncApiException) {
             val gone = e is SyncApiException.Api && e.httpStatus == HTTP_NOT_FOUND && !e.retryable
-            if (!gone) return failure(open.database, row, e)
+            if (e is SyncApiException.SessionRequired) return MediaWorkOutcome.SESSION_REQUIRED
+            // Any other refusal is retried: a delete the user asked for is never stranded as "rejected".
+            if (!gone) return recordAttempt(open.database, row, errorCode(e))
         }
         open.database.withTransaction {
             when (kind) {
@@ -406,6 +470,14 @@ class OfflineMediaRepository(
         withContext(Dispatchers.IO) { cacheFile(hash, row.id).delete() }
         grants.remove(grantKey(hash, row.id))
         return MediaWorkOutcome.DONE
+    }
+
+    private fun errorCode(e: SyncApiException): String = when (e) {
+        is SyncApiException.Api -> e.rawCode.ifBlank { "HTTP ${e.httpStatus}" }
+        is SyncApiException.SessionRequired -> "SESSION_REQUIRED"
+        is SyncApiException.SessionRejected -> "SESSION_REJECTED"
+        is SyncApiException.Transport -> "NETWORK"
+        is SyncApiException.Malformed -> "MALFORMED_RESPONSE"
     }
 
     private suspend fun failure(db: GymLogDatabase, row: PendingMediaEntity, e: SyncApiException): MediaWorkOutcome = when (e) {
@@ -477,7 +549,21 @@ class OfflineMediaRepository(
 
     private fun pendingDir(hash: String) = File(filesRoot, "users/$hash/media/pending")
 
-    private fun cacheFile(hash: String, mediaId: String) = File(cacheRoot, "users/$hash/media/${fileSafe(mediaId)}$JPEG")
+    private fun cacheDir(hash: String) = File(cacheRoot, "users/$hash/media")
+
+    private fun cacheFile(hash: String, mediaId: String) = File(cacheDir(hash), "${fileSafe(mediaId)}$JPEG")
+
+    /** Evicts least recently used copies until the account's cache fits [maxCacheBytes]. */
+    private fun trimCache(hash: String) {
+        val files = cacheDir(hash).listFiles()?.filter { it.isFile } ?: return
+        var total = files.sumOf { it.length() }
+        if (total <= maxCacheBytes) return
+        for (file in files.sortedBy { it.lastModified() }) {
+            if (total <= maxCacheBytes) break
+            val size = file.length()
+            if (file.delete()) total -= size
+        }
+    }
 
     private fun grantKey(hash: String, mediaId: String) = "$hash/$mediaId"
 
@@ -539,6 +625,8 @@ class OfflineMediaRepository(
         private const val COPY_BUFFER = 64 * 1024
         private const val MAX_NOTE_CHARS = 2000
         private const val MAX_STEPS = 3
+
+        const val DEFAULT_CACHE_BYTES = 100L * 1024 * 1024
 
         /** A grant is not used in its last 30 s (download time, clock skew). */
         const val GRANT_SAFETY_MILLIS = 30_000L

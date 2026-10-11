@@ -72,7 +72,8 @@ class MediaApiImpl internal constructor(
         file: File,
         mimeType: String,
     ): MediaUploadResponse {
-        require(file.length() <= MediaLimits.MAX_BYTES) { "Media exceeds ${MediaLimits.MAX_BYTES} bytes" }
+        // Refused locally exactly like the server would (413, permanent): never sent.
+        if (file.length() > MediaLimits.MAX_BYTES) throw tooLarge(HTTP_PAYLOAD_TOO_LARGE, MEDIA_TOO_LARGE)
         val bytes = file.readBytes()
         return calls.execute(
             expectedUserId,
@@ -158,10 +159,10 @@ class MediaApiImpl internal constructor(
         message = "Signed read URL failed",
     )
 
-    private fun tooLarge(status: Int) = SyncApiException.Api(
+    private fun tooLarge(status: Int, rawCode: String = DOWNLOAD_TOO_LARGE) = SyncApiException.Api(
         httpStatus = status,
-        code = ApiErrorCode.Unknown,
-        rawCode = DOWNLOAD_TOO_LARGE,
+        code = ApiErrorCode.fromWire(rawCode),
+        rawCode = rawCode,
         retryable = false,
         retryAfterSeconds = null,
         mutationId = null,
@@ -172,6 +173,8 @@ class MediaApiImpl internal constructor(
     companion object {
         const val SIGNED_URL_REJECTED = "SIGNED_URL_REJECTED"
         const val DOWNLOAD_TOO_LARGE = "DOWNLOAD_TOO_LARGE"
+        const val MEDIA_TOO_LARGE = "MEDIA_TOO_LARGE"
+        private const val HTTP_PAYLOAD_TOO_LARGE = 413
         private const val BUFFER_BYTES = 64 * 1024
     }
 }

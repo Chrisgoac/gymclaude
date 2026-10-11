@@ -4,6 +4,8 @@ import com.chrisgoac.gymlog.RootState
 import com.chrisgoac.gymlog.database.UserDatabaseManagerImpl
 import com.chrisgoac.gymlog.domain.SyncResult
 import com.chrisgoac.gymlog.domain.SyncRepository
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -19,6 +21,8 @@ class AppSyncEnvironment(
     private val scheduler: WorkManagerSyncScheduler,
     override val retryGate: RetryAfterGate,
     private val startupTimeoutMillis: Long = STARTUP_TIMEOUT_MILLIS,
+    /** Runs after every sync run of [userId] (e.g. evicting photos a pulled tombstone deleted); failures are logged, never fail the run. */
+    private val afterSync: suspend (userId: String) -> Unit = {},
 ) : SyncEnvironment {
     override suspend fun readiness(userHash: String): SyncReadiness {
         if (scheduler.isSuspended(userHash)) return SyncReadiness.NotYet // sign-out in progress: no syncing.
@@ -34,7 +38,17 @@ class AppSyncEnvironment(
         }
     }
 
-    override suspend fun syncOnce(userId: String): SyncResult = repository.syncOnce(userId)
+    override suspend fun syncOnce(userId: String): SyncResult {
+        val result = repository.syncOnce(userId)
+        try {
+            afterSync(userId)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (e: Exception) {
+            Log.w("GymLogSync", "Post-sync cleanup failed", e)
+        }
+        return result
+    }
 
     override suspend fun requeueAfterRetryWindow(userHash: String) {
         scheduler.requestSyncForHash(userHash)

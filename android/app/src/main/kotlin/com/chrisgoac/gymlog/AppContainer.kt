@@ -155,6 +155,8 @@ class AppContainer(private val application: Application) {
             restTimerDeletionHook.onDeleted(hash)
             accountPrefs.forget(hash)
             mediaScheduler.cancelAll(hash)
+            offlineMedia.forgetAccount(hash)
+            cameraCaptureTargets.forget(hash)
         },
     )
 
@@ -387,7 +389,10 @@ class AppContainer(private val application: Application) {
     val rootStateMachine: RootStateMachine = RootStateMachine(authSession, databases, bootstrapRunner, appScope, clerkConfigured, startupGate = { startupSweep.await() })
         .also { it.start() }
 
-    private val syncEnvironment = AppSyncEnvironment(rootStateMachine.state, syncRepository, syncScheduler, retryGate)
+    private val syncEnvironment = AppSyncEnvironment(
+        rootStateMachine.state, syncRepository, syncScheduler, retryGate,
+        afterSync = offlineMedia::sweep, // pulled photo tombstones evict cached copies and queued originals
+    )
 
     /** Worker factory for WorkManager's on-demand initialization (see [GymLogApplication]): sync and photo uploads. */
     val workerFactory: DelegatingWorkerFactory = DelegatingWorkerFactory().apply {

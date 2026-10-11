@@ -123,6 +123,25 @@ class MediaApiTest {
     }
 
     @Test
+    fun anOversizedFileIsRefusedLocallyAsAPermanent413() = runTest {
+        val requests = mutableListOf<HttpRequestData>()
+        val api = api(requests) { error("must not be called") }
+        val big = Files.createTempFile("big", ".jpg").toFile().apply {
+            deleteOnExit()
+            java.io.RandomAccessFile(this, "rw").use { it.setLength(com.chrisgoac.gymlog.model.media.MediaLimits.MAX_BYTES + 1) }
+        }
+        try {
+            api.upload(USER, MediaKind.EXERCISE, "m1", mapOf("exerciseId" to "e1"), big)
+            fail()
+        } catch (e: SyncApiException.Api) {
+            assertEquals(413, e.httpStatus)
+            assertEquals(MediaApiImpl.MEDIA_TOO_LARGE, e.rawCode)
+            assertFalse(e.retryable)
+        }
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
     fun readGrantAndDeleteUseTheV1Routes() = runTest {
         val requests = mutableListOf<HttpRequestData>()
         val api = api(requests) { request ->

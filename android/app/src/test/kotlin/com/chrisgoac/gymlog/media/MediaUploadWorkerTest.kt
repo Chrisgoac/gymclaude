@@ -118,11 +118,14 @@ class MediaUploadWorkerTest {
     @Test fun cameraCaptureTargetsLiveInTheAccountsPrivateDirectory() {
         val targets = CameraCaptureTargets(context)
         val target = targets.create(hash)
-        assertTrue(target.file.path.startsWith(context.filesDir.path + "/users/$hash/media/capture/"))
+        assertTrue(target.file.path.startsWith(context.filesDir.path + "/capture/$hash/"))
         assertEquals("content", target.uri.scheme)
         assertEquals("${context.packageName}.media", target.uri.authority)
         target.file.writeBytes(byteArrayOf(1))
         targets.release(target)
         assertTrue(!target.file.exists())
+        val another = targets.create(hash).also { it.file.writeBytes(byteArrayOf(1)) }
+        targets.forget(hash)
+        assertTrue(!another.file.parentFile!!.exists())
     }
 }

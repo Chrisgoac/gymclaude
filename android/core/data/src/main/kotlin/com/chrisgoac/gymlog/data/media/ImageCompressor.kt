@@ -5,7 +5,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
-import android.media.ExifInterface
+import androidx.exifinterface.media.ExifInterface
 import com.chrisgoac.gymlog.model.media.InvalidImage
 import com.chrisgoac.gymlog.model.media.MediaLimits
 import java.io.File
