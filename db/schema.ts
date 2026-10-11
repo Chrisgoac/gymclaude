@@ -93,7 +93,12 @@ export const exercisePhotos = pgTable('exercise_photos', {
   ...sync,
   exerciseId: text('exercise_id').notNull(),
   url: text('url').notNull(),
-  key: text('key').notNull(),
+  key: text('key').notNull(), // clave del objeto R2 (objectKey)
+  // Metadatos de medios privados v1 (0002). Nulos en filas legacy de la PWA.
+  mime: text('mime'),
+  bytes: integer('bytes'),
+  width: integer('width'),
+  height: integer('height'),
 });
 
 export const userSettings = pgTable('user_settings', {
@@ -129,6 +134,11 @@ export const progressPhotos = pgTable('progress_photos', {
   fecha: bigint('fecha', { mode: 'number' }).notNull(),
   angulo: text('angulo').notNull(),
   nota: text('nota'),
+  // Metadatos de medios privados v1 (0002). Nulos en filas legacy de la PWA.
+  mime: text('mime'),
+  bytes: integer('bytes'),
+  width: integer('width'),
+  height: integer('height'),
 });
 
 export const mesocycles = pgTable('mesocycles', {
@@ -174,3 +184,14 @@ export const apiRateBuckets = pgTable('api_rate_buckets', {
   windowStart: bigint('window_start', { mode: 'number' }).notNull(), // epoch ms
   count: integer('count').notNull(),
 }, (t) => [primaryKey({ columns: [t.scope, t.subjectHash, t.windowStart] })]);
+
+// Borrados diferidos de objetos R2 tras el tombstone de una foto (0002). Solo servidor: no se
+// sincroniza. `due_at` es a la vez la fecha de vencimiento y el lease del proceso que la reclama.
+export const mediaDeletions = pgTable('media_deletions', {
+  objectKey: text('object_key').primaryKey(),
+  userId: text('user_id').notNull(),
+  dueAt: bigint('due_at', { mode: 'number' }).notNull(), // epoch ms
+  attempts: integer('attempts').notNull().default(0),
+  lastError: text('last_error'),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(), // epoch ms
+}, (t) => [index('media_deletions_due_at_idx').on(t.dueAt)]);
