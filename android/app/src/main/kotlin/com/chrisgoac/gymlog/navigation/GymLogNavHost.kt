@@ -29,6 +29,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -120,6 +123,12 @@ import com.chrisgoac.gymlog.body.BodyScreen
 import com.chrisgoac.gymlog.body.BodyViewModel
 import com.chrisgoac.gymlog.body.BodyClock
 import com.chrisgoac.gymlog.domain.body.BodyRepository
+import com.chrisgoac.gymlog.domain.media.MediaRepository
+import com.chrisgoac.gymlog.domain.media.PhotoCaptureTargets
+import com.chrisgoac.gymlog.exercises.ExercisePhotosViewModel
+import com.chrisgoac.gymlog.progress.PhotoClock
+import com.chrisgoac.gymlog.progress.PhotoGalleryViewModel
+import com.chrisgoac.gymlog.progress.ProgressGalleryScreen
 import com.chrisgoac.gymlog.domain.math.WeightUnit
 import kotlinx.coroutines.flow.StateFlow
 import com.chrisgoac.gymlog.progress.ExerciseProgressScreen
@@ -172,6 +181,19 @@ class BodyServices(
     fun clock(): BodyClock = BodyClock(now(), zone())
 }
 
+/**
+ * What the private-photo screens need: the offline media repository, camera capture slots (no CAMERA
+ * permission) and the server-corrected clock + device zone the photo dates are chosen in.
+ */
+class MediaServices(
+    val repository: MediaRepository,
+    val captureTargets: PhotoCaptureTargets,
+    val now: () -> Long,
+    val zone: () -> ZoneId,
+) {
+    fun clock(): PhotoClock = PhotoClock(now(), zone())
+}
+
 /** What the Achievements route needs: the streak (stats), unlocked milestones + records, and the device zone dates are shown in. */
 class AchievementsServices(
     val stats: StatsRepository,
@@ -195,6 +217,7 @@ fun GymLogApp(
     progress: ProgressServices? = null,
     body: BodyServices? = null,
     achievements: AchievementsServices? = null,
+    media: MediaServices? = null,
     syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
     onOpenWorkoutHandled: () -> Unit = {},
@@ -217,7 +240,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, body, achievements, syncState)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, body, achievements, media, syncState)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -255,6 +278,7 @@ private fun GymLogNavHost(
     progress: ProgressServices?,
     body: BodyServices?,
     achievements: AchievementsServices?,
+    media: MediaServices?,
     syncState: Flow<SyncUiState>?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
@@ -391,10 +415,14 @@ private fun GymLogNavHost(
                         SmokeScreen(GymLogDestination.Exercises, navController, secondary = true)
                     } else {
                         val viewModel = viewModel { ExerciseDetailViewModel(exercises, id) }
+                        val photos = media?.let { services ->
+                            viewModel(key = "photos:$id") { ExercisePhotosViewModel(services.repository, services.captureTargets, id) }
+                        }
                         ExerciseDetailScreen(
                             viewModel,
                             onBack = { navController.popBackStack() },
                             onEdit = { navController.navigate(GymLogDestination.ExerciseEditor(it)) },
+                            photos = photos,
                         )
                     }
                 }
@@ -441,6 +469,7 @@ private fun GymLogNavHost(
                             onOpenReport = null,
                             onOpenBody = body?.let { { navController.navigate(GymLogDestination.Body) { launchSingleTop = true } } },
                             onOpenAchievements = achievements?.let { { navController.navigate(GymLogDestination.Achievements) { launchSingleTop = true } } },
+                            onOpenPhotos = media?.let { { navController.navigate(GymLogDestination.ProgressPhotos()) { launchSingleTop = true } } },
                         )
                     }
                 }
@@ -515,7 +544,29 @@ private fun GymLogNavHost(
                     SmokeScreen(GymLogDestination.Body, navController, secondary = true)
                 } else {
                     val viewModel = viewModel { BodyViewModel(body.repository, createSavedStateHandle(), body::clock, body.weightUnit) }
-                    BodyScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+                    BodyScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() },
+                        onOpenPhotos = media?.let { { navController.navigate(GymLogDestination.ProgressPhotos()) { launchSingleTop = true } } },
+                        onAddPhoto = media?.let { { navController.navigate(GymLogDestination.ProgressPhotos(capture = true)) { launchSingleTop = true } } },
+                    )
+                }
+            }
+            composable<GymLogDestination.ProgressPhotos> { entry ->
+                if (media == null) {
+                    SmokeScreen(GymLogDestination.Progress, navController, secondary = true)
+                } else {
+                    val startWithCapture = entry.toRoute<GymLogDestination.ProgressPhotos>().capture
+                    val viewModel = viewModel { PhotoGalleryViewModel(media.repository, media.captureTargets, media::clock) }
+                    // Opens the new-photo form once per visit (rotation keeps it in the ViewModel, not re-opened here).
+                    var opened by rememberSaveable { mutableStateOf(false) }
+                    LaunchedEffect(startWithCapture) {
+                        if (startWithCapture && !opened) {
+                            opened = true
+                            viewModel.onAddPhoto()
+                        }
+                    }
+                    ProgressGalleryScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
                 }
             }
             composable<GymLogDestination.Achievements> {

@@ -40,15 +40,25 @@ import com.chrisgoac.gymlog.feature.body.R
 
 /**
  * Body measurements: pick a metric, add / edit / delete readings, see the latest value, its changes,
- * an accessible chart (with a table alternative) and the history. Progress photos arrive in Plan 5.
+ * an accessible chart (with a table alternative) and the history. Progress photos have their own gallery (reached from here).
  */
 @Composable
-fun BodyScreen(viewModel: BodyViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun BodyScreen(
+    viewModel: BodyViewModel,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Opens the progress photo gallery; null hides the photo actions. */
+    onOpenPhotos: (() -> Unit)? = null,
+    /** Opens the gallery straight on the new-photo form. */
+    onAddPhoto: (() -> Unit)? = null,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     BodyContent(
         state = state,
         actions = BodyActions(
             onBack = onBack,
+            onOpenPhotos = onOpenPhotos,
+            onAddPhoto = onAddPhoto,
             onMetric = viewModel::onMetric,
             onPeriod = viewModel::onPeriod,
             onRetry = viewModel::retry,
@@ -74,6 +84,8 @@ fun BodyScreen(viewModel: BodyViewModel, onBack: () -> Unit, modifier: Modifier 
 
 internal class BodyActions(
     val onBack: () -> Unit,
+    val onOpenPhotos: (() -> Unit)?,
+    val onAddPhoto: (() -> Unit)?,
     val onMetric: (String) -> Unit,
     val onPeriod: (Period) -> Unit,
     val onRetry: () -> Unit,
@@ -145,7 +157,7 @@ private fun BodyList(state: BodyUiState, actions: BodyActions) {
                 historySection(state, clock, actions)
             }
         }
-        photosSection()
+        photosSection(actions.onOpenPhotos, actions.onAddPhoto)
     }
 }
 
@@ -252,20 +264,15 @@ private fun LazyListScope.historySection(state: BodyUiState, clock: BodyClock, a
     }
 }
 
-/** Progress photos need the media capability (Plan 5): the action is visible but disabled, with the reason spoken. */
-private fun LazyListScope.photosSection() {
+/** Progress photos live in their own gallery (Progress feature); this section only leads there. */
+private fun LazyListScope.photosSection(onOpenPhotos: (() -> Unit)?, onAddPhoto: (() -> Unit)?) {
+    if (onOpenPhotos == null && onAddPhoto == null) return
     item(key = "photos-heading") { SectionHeading(stringResource(R.string.body_section_photos)) }
     item(key = "photos") {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            HierroButton(
-                text = stringResource(R.string.body_photos_action),
-                onClick = {},
-                modifier = Modifier.fillMaxWidth(),
-                variant = HierroButtonVariant.Secondary,
-                enabled = false,
-                contentDescription = stringResource(R.string.body_photos_description),
-            )
-            HierroText(stringResource(R.string.body_photos_soon), color = HierroTheme.colors.textMuted)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HierroText(stringResource(R.string.body_photos_hint), color = HierroTheme.colors.textMuted)
+            onAddPhoto?.let { HierroButton(stringResource(R.string.body_photos_add), it, Modifier.fillMaxWidth()) }
+            onOpenPhotos?.let { HierroButton(stringResource(R.string.body_photos_action), it, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary) }
         }
     }
 }

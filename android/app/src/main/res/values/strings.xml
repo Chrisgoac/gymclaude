@@ -21,6 +21,7 @@
     <string name="nav_routine_editor">Editar rutina</string>
     <string name="nav_active_workout">Entrenamiento</string>
     <string name="nav_history_detail">Entreno</string>
+    <string name="nav_progress_photos">Fotos de progreso</string>
     <string name="nav_progress_exercise">Progreso del ejercicio</string>
     <string name="nav_history_editor">Editar entreno</string>
     <string name="nav_back">Atrás</string>

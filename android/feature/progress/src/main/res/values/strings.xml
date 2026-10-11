@@ -3,6 +3,7 @@
     <string name="progress_title">Progreso</string>
     <string name="progress_achievements_action">Logros y récords</string>
     <string name="progress_body_action">Peso y medidas corporales</string>
+    <string name="progress_photos_action">Fotos de progreso</string>
     <string name="progress_back">Atrás</string>
     <string name="progress_loading">Cargando progreso</string>
     <string name="progress_error_title">No se pudo cargar el progreso</string>
@@ -105,4 +106,87 @@
     <string name="progress_metric_1rm_title">1RM estimado por sesión</string>
     <string name="progress_metric_weight_title">Peso máximo por sesión</string>
     <string name="progress_metric_volume_title">Volumen por sesión</string>
+
+    <!-- Progress photos (gallery, capture, viewer, comparison) -->
+    <string name="progress_photos_title">Fotos de progreso</string>
+    <string name="progress_photos_back">Atrás</string>
+    <string name="progress_photos_add">Añadir foto</string>
+    <string name="progress_photos_compare">Comparar fotos</string>
+    <string name="progress_photos_loading">Cargando fotos</string>
+    <string name="progress_photos_error_title">No se pudieron cargar las fotos</string>
+    <string name="progress_photos_error_message">Inténtalo de nuevo. Tus fotos siguen guardadas en este dispositivo.</string>
+    <string name="progress_photos_retry">Reintentar</string>
+    <string name="progress_photos_empty_title">Aún no hay fotos</string>
+    <string name="progress_photos_empty_message">Añade una foto de frente, de lado o de espalda para ver tu evolución. Solo tú puedes verlas.</string>
+    <string name="progress_photos_private_note">Tus fotos son privadas: se guardan cifradas en tu cuenta y solo se muestran aquí.</string>
+    <string name="progress_photos_angle_frente">Frente</string>
+    <string name="progress_photos_angle_lado">Lado</string>
+    <string name="progress_photos_angle_espalda">Espalda</string>
+
+    <string name="progress_photos_tile_description">%1$s, %2$s. %3$s</string>
+    <string name="progress_photos_tile_description_note">%1$s, %2$s. Nota: %3$s. %4$s</string>
+    <string name="progress_photos_placeholder">Sin vista previa</string>
+
+    <string name="progress_photos_state_pending">Guardada en este dispositivo, pendiente de subir</string>
+    <string name="progress_photos_state_uploading">Subiendo</string>
+    <string name="progress_photos_state_uploading_percent">Subiendo, %1$d %%</string>
+    <string name="progress_photos_state_loading">Cargando foto</string>
+    <string name="progress_photos_state_offline">Sin conexión: esta foto aún no está guardada en este dispositivo</string>
+    <string name="progress_photos_state_failure_upload">No se pudo subir ahora; se reintentará sola</string>
+    <string name="progress_photos_state_failure_load">No se pudo cargar la foto</string>
+    <string name="progress_photos_state_rejected_large">Rechazada: la foto es demasiado grande</string>
+    <string name="progress_photos_state_rejected_type">Rechazada: tipo de imagen no admitido</string>
+    <string name="progress_photos_state_rejected_other">Rechazada: no se pudo subir</string>
+
+    <string name="progress_photos_capture_title">Nueva foto de progreso</string>
+    <string name="progress_photos_capture_angle">Ángulo</string>
+    <string name="progress_photos_capture_date">Fecha</string>
+    <string name="progress_photos_capture_date_change">Fecha: %1$s. Cambiar fecha</string>
+    <string name="progress_photos_capture_note">Nota (opcional)</string>
+    <string name="progress_photos_capture_pick">Elegir de la galería</string>
+    <string name="progress_photos_capture_camera">Hacer una foto</string>
+    <string name="progress_photos_capture_cancel">Cancelar</string>
+    <string name="progress_photos_capture_saving">Guardando foto</string>
+    <string name="progress_photos_capture_hint">Primero indica ángulo y fecha; después elige la foto. Se guarda aquí aunque no tengas conexión.</string>
+    <string name="progress_photos_date_ok">Aceptar</string>
+    <string name="progress_photos_date_cancel">Cancelar</string>
+    <string name="progress_photos_date_title">Fecha de la foto</string>
+
+    <string name="progress_photos_message_corrupt">No se pudo leer esa imagen. Prueba con otra.</string>
+    <string name="progress_photos_message_unsupported">Ese tipo de archivo no se admite. Elige una foto JPG, PNG, WebP o HEIC.</string>
+    <string name="progress_photos_message_too_large">Esa imagen es demasiado grande.</string>
+    <string name="progress_photos_message_unreadable">No se pudo abrir esa imagen. Prueba con otra.</string>
+    <string name="progress_photos_message_action">No se pudo completar la acción. Inténtalo de nuevo.</string>
+    <string name="progress_photos_message_camera">No se puede usar la cámara ahora mismo. Elige una foto de la galería.</string>
+    <string name="progress_photos_message_dismiss">Entendido</string>
+
+    <string name="progress_photos_viewer_title">Foto de progreso</string>
+    <string name="progress_photos_viewer_close">Cerrar foto</string>
+    <string name="progress_photos_viewer_image">Foto de %1$s del %2$s</string>
+    <string name="progress_photos_viewer_note">Nota: %1$s</string>
+    <string name="progress_photos_viewer_retry_image">Reintentar cargar la foto</string>
+    <string name="progress_photos_viewer_retry_upload">Reintentar subida</string>
+    <string name="progress_photos_viewer_discard">Descartar foto</string>
+    <string name="progress_photos_viewer_delete">Eliminar foto</string>
+
+    <string name="progress_photos_delete_title">¿Eliminar esta foto?</string>
+    <string name="progress_photos_delete_message">Se borrará la foto de %1$s del %2$s de tu cuenta y de este dispositivo. No se puede deshacer.</string>
+    <string name="progress_photos_delete_confirm">Eliminar</string>
+    <string name="progress_photos_discard_title">¿Descartar esta foto?</string>
+    <string name="progress_photos_discard_message">La foto de %1$s del %2$s no llegó a subirse. Se borrará de este dispositivo.</string>
+    <string name="progress_photos_discard_confirm">Descartar</string>
+    <string name="progress_photos_delete_cancel">Cancelar</string>
+
+    <string name="progress_photos_compare_title">Comparar fotos</string>
+    <string name="progress_photos_compare_close">Cerrar comparación</string>
+    <string name="progress_photos_compare_need_two">Para comparar necesitas al menos dos fotos del mismo ángulo.</string>
+    <string name="progress_photos_compare_angle">Ángulo a comparar</string>
+    <string name="progress_photos_compare_side_a">Foto A</string>
+    <string name="progress_photos_compare_side_b">Foto B</string>
+    <string name="progress_photos_compare_image">%1$s: foto de %2$s del %3$s. %4$s</string>
+    <string name="progress_photos_compare_swap">Intercambiar A y B</string>
+    <string name="progress_photos_compare_choose_a">Elegir foto A</string>
+    <string name="progress_photos_compare_choose_b">Elegir foto B</string>
+    <string name="progress_photos_compare_selected">seleccionada</string>
+    <string name="progress_photos_compare_option">%1$s, %2$s</string>
 </resources>

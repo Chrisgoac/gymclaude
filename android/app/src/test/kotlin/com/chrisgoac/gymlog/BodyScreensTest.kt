@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
@@ -108,12 +109,12 @@ class BodyScreensTest {
         rule.waitForIdle()
     }
 
-    private fun show(fontScale: Float = 2f, onBack: () -> Unit = {}) {
+    private fun show(fontScale: Float = 2f, onBack: () -> Unit = {}, onOpenPhotos: (() -> Unit)? = null, onAddPhoto: (() -> Unit)? = null) {
         val viewModel = BodyViewModel(repo, SavedStateHandle(), { BodyClock(NOW, MADRID) })
         rule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                GymLogTheme { BodyScreen(viewModel, onBack = onBack) }
+                GymLogTheme { BodyScreen(viewModel, onBack = onBack, onOpenPhotos = onOpenPhotos, onAddPhoto = onAddPhoto) }
             }
         }
         idle()
@@ -128,12 +129,22 @@ class BodyScreensTest {
         repo.seed("peso", 80.5, dayAt(1))
     }
 
-    @Test fun emptyStateOffersTheFirstReadingAndPhotosAreDisabledWithAReason() {
-        show()
+    @Test fun emptyStateOffersTheFirstReadingAndLeadsToThePrivatePhotoGallery() {
+        val calls = mutableListOf<String>()
+        show(onOpenPhotos = { calls += "open" }, onAddPhoto = { calls += "add" })
         rule.onNodeWithText("Aún no hay mediciones de peso", ignoreCase = true).assertIsDisplayed()
         rule.onNodeWithText("Añadir medición").assertIsDisplayed()
-        scrollTo("Disponible próximamente")
-        rule.onNodeWithContentDescription("Fotos de progreso. Disponible próximamente.").assertIsNotEnabled()
+        scrollTo("Añadir foto de progreso")
+        rule.onNodeWithText("Añadir foto de progreso").assertIsEnabled().performClick()
+        scrollTo("Ver fotos de progreso")
+        rule.onNodeWithText("Ver fotos de progreso").assertIsEnabled().performClick()
+        assertEquals(listOf("add", "open"), calls)
+    }
+
+    @Test fun withoutMediaServicesThePhotoSectionIsHiddenInsteadOfDisabled() {
+        show()
+        rule.onNodeWithText("Ver fotos de progreso").assertDoesNotExist()
+        rule.onNodeWithText("Añadir foto de progreso").assertDoesNotExist()
     }
 
     @Test fun summaryRowsAreOneStopEachAndSayTheDirectionInWords() {

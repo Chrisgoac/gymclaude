@@ -39,6 +39,8 @@ fun ExerciseDetailScreen(
     onBack: () -> Unit,
     onEdit: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Photos of custom exercises; null hides the card (previews, callers without media). */
+    photos: ExercisePhotosViewModel? = null,
 ) {
     val state by viewModel.state.collectAsState()
     val deleted by viewModel.deleted.collectAsState()
@@ -58,13 +60,18 @@ fun ExerciseDetailScreen(
             ExerciseDetailUiState.NotFound -> Column(Modifier.padding(16.dp)) {
                 HierroEmptyState(stringResource(R.string.exercises_detail_not_found_title), stringResource(R.string.exercises_detail_not_found_message))
             }
-            is ExerciseDetailUiState.Found -> ExerciseDetailContent(current, onEdit, viewModel::delete)
+            is ExerciseDetailUiState.Found -> ExerciseDetailContent(current, onEdit, viewModel::delete, photos)
         }
     }
 }
 
 @Composable
-internal fun ExerciseDetailContent(state: ExerciseDetailUiState.Found, onEdit: (String) -> Unit, onDelete: () -> Unit) {
+internal fun ExerciseDetailContent(
+    state: ExerciseDetailUiState.Found,
+    onEdit: (String) -> Unit,
+    onDelete: () -> Unit,
+    photos: ExercisePhotosViewModel? = null,
+) {
     val exercise = state.exercise
     var confirmingDelete by rememberSaveable { mutableStateOf(false) }
     Column(
@@ -85,7 +92,9 @@ internal fun ExerciseDetailContent(state: ExerciseDetailUiState.Found, onEdit: (
         TextSection(R.string.exercises_detail_execution, exercise.execution)
         TextSection(R.string.exercises_detail_notes, exercise.notes)
         exercise.videoUrl?.let { url -> VideoButton(url) }
-        PhotosCard()
+        if (photos != null) {
+            if (exercise.isCustom) ExercisePhotosSection(photos) else CatalogPhotosNote()
+        }
         if (exercise.isCustom) ManageCard(state, confirmingDelete, { confirmingDelete = it }, onEdit, onDelete)
     }
 }
@@ -111,13 +120,12 @@ private fun VideoButton(url: String) {
     HierroButton(stringResource(R.string.exercises_detail_video), onClick = { runCatching { uriHandler.openUri(url) } }, variant = HierroButtonVariant.Secondary)
 }
 
-/** Photos arrive with cloud storage (a later plan): shown disabled with the reason, never a fake upload. */
+/** Catalog exercises are shared, not the user's own: photos can only be attached to custom ones. */
 @Composable
-private fun PhotosCard() {
+private fun CatalogPhotosNote() {
     HierroCard {
         HierroText(stringResource(R.string.exercises_photos_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.label, HierroTheme.colors.textMuted)
-        HierroButton(stringResource(R.string.exercises_photos_add), onClick = {}, enabled = false, variant = HierroButtonVariant.Secondary)
-        HierroText(stringResource(R.string.exercises_photos_unavailable), color = HierroTheme.colors.textMuted)
+        HierroText(stringResource(R.string.exercises_photos_catalog_note), color = HierroTheme.colors.textMuted)
     }
 }
 

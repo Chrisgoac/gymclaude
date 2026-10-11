@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {
                     progress = container.progressServices,
                     body = container.bodyServices,
                     achievements = container.achievementsServices,
+                    media = container.mediaServices,
                     syncState = container.syncUiState,
                     openWorkoutRequest = container.openWorkoutRequest.collectAsState().value,
                     onOpenWorkoutHandled = { container.openWorkoutRequest.value = null },

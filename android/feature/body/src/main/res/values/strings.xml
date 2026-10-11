@@ -97,9 +97,9 @@
     <string name="body_custom_error_limit">Has alcanzado el máximo de %1$d medidas propias.</string>
     <string name="body_custom_error_failed">No se pudo crear la medida. Inténtalo de nuevo.</string>
 
-    <string name="body_photos_action">Fotos de progreso</string>
-    <string name="body_photos_soon">Disponible próximamente</string>
-    <string name="body_photos_description">Fotos de progreso. Disponible próximamente.</string>
+    <string name="body_photos_action">Ver fotos de progreso</string>
+    <string name="body_photos_add">Añadir foto de progreso</string>
+    <string name="body_photos_hint">Fotos privadas de frente, lado y espalda para comparar tu evolución. Se guardan aunque no tengas conexión.</string>
 
     <string name="body_unit_kg_spoken">kilogramos</string>
     <string name="body_unit_lb_spoken">libras</string>

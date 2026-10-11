@@ -19,6 +19,16 @@ import com.chrisgoac.gymlog.domain.exercise.ExerciseInput
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.domain.exercise.ExerciseType
 import com.chrisgoac.gymlog.domain.exercise.MuscleGroup
+import com.chrisgoac.gymlog.domain.media.CaptureSlot
+import com.chrisgoac.gymlog.domain.media.MediaRepository
+import com.chrisgoac.gymlog.domain.media.PhotoCaptureTargets
+import com.chrisgoac.gymlog.exercises.ExercisePhotosViewModel
+import com.chrisgoac.gymlog.model.media.EnqueueResult
+import com.chrisgoac.gymlog.model.media.MediaImage
+import com.chrisgoac.gymlog.model.media.MediaItem
+import com.chrisgoac.gymlog.model.media.MediaKind
+import com.chrisgoac.gymlog.model.media.MediaOwner
+import com.chrisgoac.gymlog.model.media.MediaStatus
 import com.chrisgoac.gymlog.exercises.ExerciseDetailScreen
 import com.chrisgoac.gymlog.exercises.ExerciseDetailViewModel
 import com.chrisgoac.gymlog.exercises.ExerciseEditorScreen
@@ -38,6 +48,22 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+
+private class PhotoMedia : MediaRepository {
+    val items = MutableStateFlow<List<MediaItem>>(emptyList())
+    val discarded = mutableListOf<String>()
+    override suspend fun enqueue(sourceUri: String, owner: MediaOwner): EnqueueResult = EnqueueResult.Queued("n")
+    override fun observe(kind: MediaKind): Flow<List<MediaItem>> = items.map { all -> all.filter { it.owner.kind == kind } }
+    override suspend fun delete(mediaId: String) = Unit
+    override suspend fun retry(mediaId: String) = Unit
+    override suspend fun discard(mediaId: String) { discarded += mediaId; items.value = items.value.filterNot { it.id == mediaId } }
+    override suspend fun image(mediaId: String): MediaImage = MediaImage.Unavailable(MediaImage.Unavailable.Reason.OFFLINE)
+}
+
+private class PhotoCapture(val calls: MutableList<String>) : PhotoCaptureTargets {
+    override fun create(): CaptureSlot? = null
+    override fun release(slot: CaptureSlot) { calls += "release" }
+}
 
 private class StaticExercises(initial: List<Exercise>) : ExerciseRepository {
     val store = MutableStateFlow(initial)
@@ -118,15 +144,55 @@ class ExerciseScreensTest {
         onNodeWithText("Crear ejercicio").assertExists()
     }
 
-    @Test fun catalogDetailIsReadOnlyAndPhotosAreDisabledWithAReason(): Unit = with(rule) {
+    private val photoCalls = mutableListOf<String>()
+    private val media = PhotoMedia()
+    private fun photosViewModel(id: String) = ExercisePhotosViewModel(media, PhotoCapture(photoCalls), id)
+
+    @Test fun catalogDetailIsReadOnlyAndExplainsThatPhotosAreForOwnExercises(): Unit = with(rule) {
         val viewModel = ExerciseDetailViewModel(repository, "seed-press")
-        setContent { GymLogTheme { ExerciseDetailScreen(viewModel, onBack = {}, onEdit = {}) } }
+        setContent { GymLogTheme { ExerciseDetailScreen(viewModel, onBack = {}, onEdit = {}, photos = photosViewModel("seed-press")) } }
         waitForIdle()
         onNodeWithText("Ejercicio del catálogo: es de solo lectura.").assertExists()
         onAllNodesWithText("Editar").assertCountEquals(0)
         onAllNodesWithText("Eliminar").assertCountEquals(0)
-        onNode(hasContentDescription("Añadir foto")).assertIsNotEnabled()
-        onNodeWithText("Disponible próximamente").assertExists()
+        onNodeWithText("Las fotos solo se pueden añadir a tus propios ejercicios.").assertExists()
+        onAllNodesWithText("Elegir de la galería").assertCountEquals(0)
+    }
+
+    @Test fun customDetailOffersPickerAndCameraAndListsItsPhotosWithTheirState(): Unit = with(rule) {
+        media.items.value = listOf(
+            MediaItem("m1", MediaOwner.Exercise("c1"), MediaStatus.PendingUpload(0, null), null),
+            MediaItem("m2", MediaOwner.Exercise("c1"), MediaStatus.Rejected("MEDIA_TOO_LARGE"), null),
+            MediaItem("other", MediaOwner.Exercise("zz"), MediaStatus.Synced, "k"),
+        )
+        val viewModel = ExerciseDetailViewModel(repository, "c1")
+        setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(androidx.compose.ui.platform.LocalDensity.current.density, 2f),
+            ) { GymLogTheme { ExerciseDetailScreen(viewModel, onBack = {}, onEdit = {}, photos = photosViewModel("c1")) } }
+        }
+        waitForIdle()
+        onNodeWithText("Elegir de la galería").performScrollTo().assertExists()
+        onNodeWithText("Hacer una foto").performScrollTo().assertExists()
+        onNodeWithContentDescription("Foto 1 de 2. Guardada en este dispositivo, pendiente de subir").performScrollTo().assertExists()
+        onNodeWithContentDescription("Foto 2 de 2. Rechazada: la foto es demasiado grande").performScrollTo().assertExists()
+    }
+
+    @Test fun aRefusedPhotoCanBeRetriedOrDiscardedAfterConfirming(): Unit = with(rule) {
+        media.items.value = listOf(MediaItem("m2", MediaOwner.Exercise("c1"), MediaStatus.Rejected("MEDIA_TOO_LARGE"), null))
+        val viewModel = ExerciseDetailViewModel(repository, "c1")
+        setContent { GymLogTheme { ExerciseDetailScreen(viewModel, onBack = {}, onEdit = {}, photos = photosViewModel("c1")) } }
+        waitForIdle()
+        onNodeWithContentDescription("Foto 1 de 1. Rechazada: la foto es demasiado grande").performScrollTo().performClick()
+        waitForIdle()
+        onNodeWithText("Reintentar subida").assertExists()
+        onNodeWithText("Descartar foto").performClick()
+        waitForIdle()
+        onNodeWithText("¿Descartar esta foto?").assertExists()
+        assertEquals(emptyList<String>(), media.discarded)
+        onNodeWithText("Descartar").performClick()
+        waitForIdle()
+        assertEquals(listOf("m2"), media.discarded)
     }
 
     @Test fun customDetailOffersEditAndConfirmedDelete(): Unit = with(rule) {

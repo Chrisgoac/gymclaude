@@ -55,6 +55,9 @@ import com.chrisgoac.gymlog.domain.stats.StatsInvalidation
 import com.chrisgoac.gymlog.domain.stats.StatsRepository
 import com.chrisgoac.gymlog.navigation.HistoryEditServices
 import com.chrisgoac.gymlog.navigation.BodyServices
+import com.chrisgoac.gymlog.navigation.MediaServices
+import com.chrisgoac.gymlog.domain.media.CaptureSlot
+import com.chrisgoac.gymlog.domain.media.PhotoCaptureTargets
 import com.chrisgoac.gymlog.navigation.ProgressServices
 import com.chrisgoac.gymlog.domain.entitlement.EntitlementReader
 import com.chrisgoac.gymlog.domain.time.DayRollover
@@ -88,6 +91,7 @@ import com.chrisgoac.gymlog.network.createMediaApi
 import com.chrisgoac.gymlog.data.media.OfflineMediaRepository
 import com.chrisgoac.gymlog.domain.media.MediaRepository
 import com.chrisgoac.gymlog.media.CameraCaptureTargets
+import com.chrisgoac.gymlog.media.CaptureTarget
 import com.chrisgoac.gymlog.media.MediaUploadWorkerFactory
 import com.chrisgoac.gymlog.media.MediaWorkEnvironment
 import com.chrisgoac.gymlog.media.WorkManagerMediaScheduler
@@ -357,6 +361,28 @@ class AppContainer(private val application: Application) {
 
     /** Private photos of the open account: offline queue + v1 media endpoints (never the outbox). */
     val mediaRepository: MediaRepository = offlineMedia
+
+    /** Camera capture slots of the open account for the feature modules (they never see app classes). */
+    private val photoCaptureTargets = object : PhotoCaptureTargets {
+        private val targets = HashMap<String, CaptureTarget>()
+
+        override fun create(): CaptureSlot? {
+            val hash = currentUserHash() ?: return null
+            val target = cameraCaptureTargets.create(hash)
+            val token = target.file.name
+            synchronized(targets) { targets[token] = target }
+            return CaptureSlot(target.uri.toString(), token)
+        }
+
+        override fun release(slot: CaptureSlot) {
+            synchronized(targets) { targets.remove(slot.token) }?.let(cameraCaptureTargets::release)
+        }
+    }
+
+    /** Photo screens (exercise photos, progress gallery): repository, camera slots, clock and zone. */
+    val mediaServices: MediaServices by lazy {
+        MediaServices(mediaRepository, photoCaptureTargets, syncClock::nowMillis, ZoneId::systemDefault)
+    }
 
     // Manual syncs go through the scheduler too, so the Retry-After window and the one-run rule hold.
     val syncUseCases: SyncUseCases = DefaultSyncUseCases(

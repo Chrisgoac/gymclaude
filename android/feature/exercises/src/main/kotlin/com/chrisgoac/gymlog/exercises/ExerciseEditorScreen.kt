@@ -86,8 +86,7 @@ private fun EditorForm(state: ExerciseEditorUiState, vm: ExerciseEditorViewModel
         HierroTextField(input.notes, vm::onNotes, stringResource(R.string.exercises_editor_notes), singleLine = false, errorMessage = state.error(ExerciseField.NOTES))
         HierroCard {
             HierroText(stringResource(R.string.exercises_photos_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.label, HierroTheme.colors.textMuted)
-            HierroButton(stringResource(R.string.exercises_photos_add), onClick = {}, enabled = false, variant = HierroButtonVariant.Secondary)
-            HierroText(stringResource(R.string.exercises_photos_unavailable), color = HierroTheme.colors.textMuted)
+            HierroText(stringResource(R.string.exercises_photos_editor_note), color = HierroTheme.colors.textMuted)
         }
         if (state.saveFailed) {
             HierroText(stringResource(R.string.exercises_editor_save_failed), Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = HierroTheme.colors.error)

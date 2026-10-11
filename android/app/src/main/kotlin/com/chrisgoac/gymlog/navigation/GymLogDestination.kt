@@ -50,6 +50,10 @@ sealed interface GymLogDestination {
     @Serializable data class ProgressExercise(val exerciseId: String, val period: String, val gym: String) : GymLogDestination {
         override val title: Int get() = R.string.nav_progress_exercise
     }
+    /** Private progress photos; [capture] opens the gallery straight on the new-photo form. */
+    @Serializable data class ProgressPhotos(val capture: Boolean = false) : GymLogDestination {
+        override val title: Int get() = R.string.nav_progress_photos
+    }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 
