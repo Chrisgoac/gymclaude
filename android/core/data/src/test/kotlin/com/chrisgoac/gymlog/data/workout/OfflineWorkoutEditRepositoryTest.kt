@@ -79,7 +79,7 @@ class OfflineWorkoutEditRepositoryTest {
         val exercises = OfflineExerciseRepository(manager, runnerFor)
         val nextId = { "00000000-0000-4000-8000-%012d".format(++ids) }
         val routines = OfflineRoutineRepository(manager, runnerFor, exercises, newId = nextId)
-        workouts = OfflineWorkoutRepository(manager, runnerFor, exercises, now = { now }, newId = nextId)
+        workouts = OfflineWorkoutRepository(manager, runnerFor, now = { now }, newId = nextId)
         log = OfflineWorkoutLogRepository(manager, runnerFor, newId = nextId)
         history = OfflineHistoryRepository(manager, runnerFor, exercises, routines, now = { now })
         edits = OfflineWorkoutEditRepository(manager, runnerFor)

@@ -4,12 +4,13 @@ import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.LocalMutation
 import com.chrisgoac.gymlog.database.LocalMutationRunner
 import com.chrisgoac.gymlog.database.UserDatabaseManager
-import com.chrisgoac.gymlog.database.dao.FinishedSessionRow
+import com.chrisgoac.gymlog.database.dao.HistorySessionRow
 import com.chrisgoac.gymlog.database.entity.toRecord
 import com.chrisgoac.gymlog.domain.exercise.Exercise
 import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
 import com.chrisgoac.gymlog.domain.exercise.searchKey
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
+import com.chrisgoac.gymlog.domain.workout.ActiveWorkoutPolicy
 import com.chrisgoac.gymlog.domain.workout.HistoryDetail
 import com.chrisgoac.gymlog.domain.workout.HistoryFilter
 import com.chrisgoac.gymlog.domain.workout.HistoryItem
@@ -39,7 +40,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 
 /**
- * Finished-workout history over the open account's Room database. The list is a LIMITed walk of
+ * Workout history over the open account's Room database: finished sessions plus abandoned
+ * unfinished ones (shown "Sin terminar"); the active workout ([ActiveWorkoutPolicy]) is excluded. The list is a LIMITed walk of
  * `index_workout_sessions_fecha` plus one grouped totals query for the visible page only; the
  * text query resolves names to ids first (routines, exercises) and asks SQL for just those
  * sessions, so no read scans every workout. Edits are single local mutations (outbox).
@@ -64,23 +66,26 @@ class OfflineHistoryRepository(
                 val database = open.database
                 combine(
                     database.invalidationTracker.createFlow(SESSIONS, LOGGED_EXERCISES, LOGGED_SETS, GYMS),
+                    // Also re-reads when the active workout ages out and joins the history.
+                    database.workoutSessionDao().observeActiveSessionId(now),
                     routines.observeRoutines(),
                     exerciseNames,
-                ) { _, routineList, exerciseList -> routineList to exerciseList }.mapLatest { (routineList, exerciseList) ->
+                ) { _, _, routineList, exerciseList -> routineList to exerciseList }.mapLatest { (routineList, exerciseList) ->
                     database.withTransaction {
                         val dao = database.workoutHistoryDao()
+                        val activeId = database.workoutSessionDao().findActiveSessionId(now())
                         val since = filter.period.sinceMillis(now())
                         val routineNames = routineList.associate { it.id to it.name }
-                        val rows: List<FinishedSessionRow> = if (key.isEmpty()) {
-                            dao.finishedPage(since, filter.gymId, limit + 1)
+                        val rows: List<HistorySessionRow> = if (key.isEmpty()) {
+                            dao.historyPage(since, filter.gymId, activeId, limit + 1)
                         } else {
                             val matchingRoutines = routineList.filter { it.name.searchKey().contains(key) }.map { it.id }
                             val matchingExercises = exerciseList.filter { it.name.searchKey().contains(key) }.map { it.id }
-                            val found = LinkedHashMap<String, FinishedSessionRow>()
-                            dao.finishedWithNotes(since, filter.gymId).filter { it.notas.orEmpty().searchKey().contains(key) }.forEach { found[it.id] = it }
-                            matchingRoutines.chunked(ID_CHUNK).forEach { ids -> dao.finishedByRoutines(since, filter.gymId, ids).forEach { found[it.id] = it } }
-                            matchingExercises.chunked(ID_CHUNK).forEach { ids -> dao.finishedByExercises(since, filter.gymId, ids).forEach { found[it.id] = it } }
-                            found.values.sortedWith(compareByDescending<FinishedSessionRow> { it.fecha }.thenBy { it.id }).take(limit + 1)
+                            val found = LinkedHashMap<String, HistorySessionRow>()
+                            dao.historyWithNotes(since, filter.gymId, activeId).filter { it.notas.orEmpty().searchKey().contains(key) }.forEach { found[it.id] = it }
+                            matchingRoutines.chunked(ID_CHUNK).forEach { ids -> dao.historyByRoutines(since, filter.gymId, activeId, ids).forEach { found[it.id] = it } }
+                            matchingExercises.chunked(ID_CHUNK).forEach { ids -> dao.historyByExercises(since, filter.gymId, activeId, ids).forEach { found[it.id] = it } }
+                            found.values.sortedWith(compareByDescending<HistorySessionRow> { it.fecha }.thenBy { it.id }).take(limit + 1)
                         }
                         val page = rows.take(limit)
                         val totals = page.map { it.id }.chunked(ID_CHUNK).flatMap { dao.totals(it) }.associateBy { it.sessionId }
@@ -157,6 +162,17 @@ class OfflineHistoryRepository(
                 if (gym == null || gym.deletedAt != null) throw WorkoutStartException.GymUnavailable(gymId)
             }
             put(session.copy(gymId = gymId, updatedAt = nextTimestamp(SyncTable.WORKOUT_SESSIONS, session.id)))
+        }
+    }
+
+    override suspend fun finishWithDuration(sessionId: String, durationSeconds: Int): Int {
+        require(durationSeconds in 60..ActiveWorkoutPolicy.MAX_FINISH_MINUTES * 60) { "Duration $durationSeconds s out of range" }
+        return mutate { _ ->
+            val session = (find(SyncTable.WORKOUT_SESSIONS, RecordId(sessionId)) as? WorkoutSessionRecord)?.takeIf { it.deletedAt == null }
+                ?: throw WorkoutRowMissingException(sessionId)
+            session.duracionSegundos?.let { return@mutate it }
+            put(session.copy(duracionSegundos = durationSeconds, updatedAt = nextTimestamp(SyncTable.WORKOUT_SESSIONS, session.id)))
+            durationSeconds
         }
     }
 

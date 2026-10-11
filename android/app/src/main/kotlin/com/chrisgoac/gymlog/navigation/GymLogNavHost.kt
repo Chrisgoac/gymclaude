@@ -60,7 +60,9 @@ import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
 import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import com.chrisgoac.gymlog.train.ActiveWorkoutChoice
 import com.chrisgoac.gymlog.train.ActiveWorkoutScreen
+import com.chrisgoac.gymlog.timer.TrackWorkoutScreenVisibility
 import com.chrisgoac.gymlog.train.WorkoutViewModel
 import com.chrisgoac.gymlog.train.StartWorkoutUseCase
 import com.chrisgoac.gymlog.train.TrainEvent
@@ -206,197 +208,203 @@ private fun GymLogNavHost(
     }
     LaunchedEffect(inSettings) { if (inSettings == false) settingsViewModel?.onSettingsLeft() }
 
-    NavHost(navController, startDestination = GymLogGraph.Train, modifier = modifier) {
-        navigation<GymLogGraph.Train>(startDestination = GymLogDestination.Train) {
-            composable<GymLogDestination.Train> {
-                if (trainViewModel == null) {
-                    SmokeScreen(GymLogDestination.Train, navController, showSecondaryCards = true)
-                } else {
-                    TrainHomeScreen(
-                        trainViewModel,
-                        onOpenWorkout = { navController.navigate(GymLogDestination.ActiveWorkout(it)) { launchSingleTop = true } },
-                        onOpenBody = { navController.navigate(GymLogDestination.Body) },
-                        onOpenAchievements = { navController.navigate(GymLogDestination.Achievements) },
-                        onSettings = { navController.navigate(GymLogDestination.Settings) },
-                    )
-                }
-            }
-            composable<GymLogDestination.ActiveWorkout> { entry ->
-                val sessionId = entry.toRoute<GymLogDestination.ActiveWorkout>().sessionId
-                if (workouts == null || workoutLog == null || exercises == null || routines == null) {
-                    SmokeScreen(GymLogDestination.Train, navController, secondary = true)
-                } else {
-                    // Typed drafts live in the entry's SavedStateHandle (process death); the session itself is in Room.
-                    // The first rest timer asks for the notification permission (API 33+), in context.
-                    val context = LocalContext.current
-                    val requestNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-                    val onRestStarted by rememberUpdatedState<(Int?) -> Unit> { rest ->
-                        if (rest != null && rest > 0 && NotificationPermissionPrompt.consumePrompt(context)) {
-                            requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                    }
-                    val viewModel = viewModel(key = sessionId) {
-                        WorkoutViewModel(
-                            sessionId, workouts, workoutLog, exercises, routines, createSavedStateHandle(),
-                            onSetCompleted = { onRestStarted(it) },
-                            restTimer = restTimer,
-                            finishWorkout = finishWorkout,
+    Box(modifier) {
+        NavHost(navController, startDestination = GymLogGraph.Train, modifier = Modifier.fillMaxSize()) {
+            navigation<GymLogGraph.Train>(startDestination = GymLogDestination.Train) {
+                composable<GymLogDestination.Train> {
+                    if (trainViewModel == null) {
+                        SmokeScreen(GymLogDestination.Train, navController, showSecondaryCards = true)
+                    } else {
+                        TrainHomeScreen(
+                            trainViewModel,
+                            onOpenWorkout = { navController.navigate(GymLogDestination.ActiveWorkout(it)) { launchSingleTop = true } },
+                            onOpenBody = { navController.navigate(GymLogDestination.Body) },
+                            onOpenAchievements = { navController.navigate(GymLogDestination.Achievements) },
+                            onSettings = { navController.navigate(GymLogDestination.Settings) },
                         )
                     }
-                    ActiveWorkoutScreen(viewModel, onBack = { navController.popBackStack() })
                 }
-            }
-        }
-        navigation<GymLogGraph.Routines>(startDestination = GymLogDestination.Routines) {
-            composable<GymLogDestination.Routines> {
-                if (routines == null) {
-                    SmokeScreen(GymLogDestination.Routines, navController)
-                } else {
-                    val viewModel = viewModel { RoutineListViewModel(routines) }
-                    RoutineListScreen(
-                        viewModel,
-                        onOpen = { navController.navigate(GymLogDestination.RoutineEditor(it)) },
-                        onCreate = { navController.navigate(GymLogDestination.RoutineEditor()) },
-                        onStartRoutine = { trainViewModel?.startRoutine(it) },
-                        onSettings = { navController.navigate(GymLogDestination.Settings) },
-                    )
-                }
-            }
-            composable<GymLogDestination.RoutineEditor> { entry ->
-                val id = entry.toRoute<GymLogDestination.RoutineEditor>().id
-                if (routines == null || exercises == null) {
-                    SmokeScreen(GymLogDestination.Routines, navController, secondary = true)
-                } else {
-                    // The draft is kept in the entry's SavedStateHandle, so it survives process death.
-                    val viewModel = viewModel { RoutineEditorViewModel(routines, exercises, createSavedStateHandle(), id) }
-                    RoutineEditorScreen(
-                        viewModel,
-                        onBack = { navController.popBackStack() },
-                        onDone = { navController.popBackStack() },
-                    )
-                }
-            }
-        }
-        navigation<GymLogGraph.Exercises>(startDestination = GymLogDestination.Exercises) {
-            composable<GymLogDestination.Exercises> {
-                if (exercises == null) {
-                    SmokeScreen(GymLogDestination.Exercises, navController)
-                } else {
-                    val viewModel = viewModel { ExerciseListViewModel(exercises) }
-                    ExerciseListScreen(
-                        viewModel,
-                        onOpen = { navController.navigate(GymLogDestination.ExerciseDetail(it)) },
-                        onCreate = { navController.navigate(GymLogDestination.ExerciseEditor()) },
-                        onSettings = { navController.navigate(GymLogDestination.Settings) },
-                    )
-                }
-            }
-            composable<GymLogDestination.ExerciseDetail> { entry ->
-                val id = entry.toRoute<GymLogDestination.ExerciseDetail>().id
-                if (exercises == null) {
-                    SmokeScreen(GymLogDestination.Exercises, navController, secondary = true)
-                } else {
-                    val viewModel = viewModel { ExerciseDetailViewModel(exercises, id) }
-                    ExerciseDetailScreen(
-                        viewModel,
-                        onBack = { navController.popBackStack() },
-                        onEdit = { navController.navigate(GymLogDestination.ExerciseEditor(it)) },
-                    )
-                }
-            }
-            composable<GymLogDestination.ExerciseEditor> { entry ->
-                val id = entry.toRoute<GymLogDestination.ExerciseEditor>().id
-                if (exercises == null) {
-                    SmokeScreen(GymLogDestination.Exercises, navController, secondary = true)
-                } else {
-                    val viewModel = viewModel { ExerciseEditorViewModel(exercises, id) }
-                    ExerciseEditorScreen(
-                        viewModel,
-                        onBack = { navController.popBackStack() },
-                        onSaved = { savedId ->
-                            if (id == null) {
-                                // A new exercise replaces the editor with its detail page.
-                                navController.navigate(GymLogDestination.ExerciseDetail(savedId)) {
-                                    popUpTo<GymLogDestination.ExerciseEditor> { inclusive = true }
-                                }
-                            } else {
-                                navController.popBackStack()
+                composable<GymLogDestination.ActiveWorkout> { entry ->
+                    val sessionId = entry.toRoute<GymLogDestination.ActiveWorkout>().sessionId
+                    if (workouts == null || workoutLog == null || exercises == null || routines == null) {
+                        SmokeScreen(GymLogDestination.Train, navController, secondary = true)
+                    } else {
+                        // Typed drafts live in the entry's SavedStateHandle (process death); the session itself is in Room.
+                        // The first rest timer asks for the notification permission (API 33+), in context.
+                        val context = LocalContext.current
+                        val requestNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+                        val onRestStarted by rememberUpdatedState<(Int?) -> Unit> { rest ->
+                            if (rest != null && rest > 0 && NotificationPermissionPrompt.consumePrompt(context)) {
+                                requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
                             }
-                        },
-                    )
+                        }
+                        val viewModel = viewModel(key = sessionId) {
+                            WorkoutViewModel(
+                                sessionId, workouts, workoutLog, exercises, routines, createSavedStateHandle(),
+                                onSetCompleted = { onRestStarted(it) },
+                                restTimer = restTimer,
+                                finishWorkout = finishWorkout,
+                            )
+                        }
+                        // While this entry is started, the rest timer's end is announced here, not by notification.
+                        TrackWorkoutScreenVisibility(entry)
+                        ActiveWorkoutScreen(viewModel, onBack = { navController.popBackStack() })
+                    }
                 }
             }
-        }
-        navigation<GymLogGraph.Progress>(startDestination = GymLogDestination.Progress) {
-            composable<GymLogDestination.Progress> { SmokeScreen(GymLogDestination.Progress, navController) }
-        }
-        navigation<GymLogGraph.History>(startDestination = GymLogDestination.History) {
-            composable<GymLogDestination.History> {
-                if (history == null || workouts == null) {
-                    SmokeScreen(GymLogDestination.History, navController)
-                } else {
-                    // Shell-scoped: filters and the loaded window survive opening a detail and rotation.
-                    val viewModel = viewModel { HistoryListViewModel(history, workouts, syncState ?: emptyFlow()) }
-                    HistoryListScreen(
-                        viewModel,
-                        onOpen = { navController.navigate(GymLogDestination.HistoryDetail(it)) },
-                        onSettings = { navController.navigate(GymLogDestination.Settings) },
-                    )
-                }
-            }
-            composable<GymLogDestination.HistoryDetail> { entry ->
-                val sessionId = entry.toRoute<GymLogDestination.HistoryDetail>().sessionId
-                if (history == null || workouts == null) {
-                    SmokeScreen(GymLogDestination.History, navController, secondary = true)
-                } else {
-                    val viewModel = viewModel(key = sessionId) { HistoryDetailViewModel(history, workouts, sessionId) }
-                    HistoryDetailScreen(
-                        viewModel,
-                        onBack = { navController.popBackStack() },
-                        onEdit = if (historyEditing != null && exercises != null) {
-                            { navController.navigate(GymLogDestination.HistoryEditor(sessionId)) { launchSingleTop = true } }
-                        } else {
-                            null
-                        },
-                    )
-                }
-            }
-            composable<GymLogDestination.HistoryEditor> { entry ->
-                val sessionId = entry.toRoute<GymLogDestination.HistoryEditor>().sessionId
-                if (history == null || workouts == null || exercises == null || historyEditing == null) {
-                    SmokeScreen(GymLogDestination.History, navController, secondary = true)
-                } else {
-                    // The draft (and the original it came from) live in the entry's SavedStateHandle: rotation and
-                    // process death keep the edit; nothing is written until "Guardar cambios".
-                    val viewModel = viewModel(key = "edit:$sessionId") {
-                        HistoryEditorViewModel(
-                            sessionId, history, workouts, exercises, historyEditing.save, createSavedStateHandle(), now = historyEditing.now,
+            navigation<GymLogGraph.Routines>(startDestination = GymLogDestination.Routines) {
+                composable<GymLogDestination.Routines> {
+                    if (routines == null) {
+                        SmokeScreen(GymLogDestination.Routines, navController)
+                    } else {
+                        val viewModel = viewModel { RoutineListViewModel(routines) }
+                        RoutineListScreen(
+                            viewModel,
+                            onOpen = { navController.navigate(GymLogDestination.RoutineEditor(it)) },
+                            onCreate = { navController.navigate(GymLogDestination.RoutineEditor()) },
+                            onStartRoutine = { trainViewModel?.startRoutine(it) },
+                            onSettings = { navController.navigate(GymLogDestination.Settings) },
                         )
                     }
-                    // System back asks before discarding changes, like the Cancel action.
-                    BackHandler { viewModel.requestExit() }
-                    HistoryEditorScreen(viewModel, onExit = { navController.popBackStack() })
+                }
+                composable<GymLogDestination.RoutineEditor> { entry ->
+                    val id = entry.toRoute<GymLogDestination.RoutineEditor>().id
+                    if (routines == null || exercises == null) {
+                        SmokeScreen(GymLogDestination.Routines, navController, secondary = true)
+                    } else {
+                        // The draft is kept in the entry's SavedStateHandle, so it survives process death.
+                        val viewModel = viewModel { RoutineEditorViewModel(routines, exercises, createSavedStateHandle(), id) }
+                        RoutineEditorScreen(
+                            viewModel,
+                            onBack = { navController.popBackStack() },
+                            onDone = { navController.popBackStack() },
+                        )
+                    }
                 }
             }
-        }
-        composable<GymLogDestination.Coach> { SmokeScreen(GymLogDestination.Coach, navController, secondary = true) }
-        composable<GymLogDestination.Body> { SmokeScreen(GymLogDestination.Body, navController, secondary = true) }
-        composable<GymLogDestination.Achievements> { SmokeScreen(GymLogDestination.Achievements, navController, secondary = true) }
-        composable<GymLogDestination.Settings> {
-            if (settingsViewModel == null) {
-                SmokeScreen(GymLogDestination.Settings, navController, secondary = true)
-            } else {
-                SettingsScreen(
-                    settingsViewModel,
-                    onBack = { navController.popBackStack() },
-                    onSyncDetails = { navController.navigate(GymLogDestination.SyncDiagnostics) },
-                )
+            navigation<GymLogGraph.Exercises>(startDestination = GymLogDestination.Exercises) {
+                composable<GymLogDestination.Exercises> {
+                    if (exercises == null) {
+                        SmokeScreen(GymLogDestination.Exercises, navController)
+                    } else {
+                        val viewModel = viewModel { ExerciseListViewModel(exercises) }
+                        ExerciseListScreen(
+                            viewModel,
+                            onOpen = { navController.navigate(GymLogDestination.ExerciseDetail(it)) },
+                            onCreate = { navController.navigate(GymLogDestination.ExerciseEditor()) },
+                            onSettings = { navController.navigate(GymLogDestination.Settings) },
+                        )
+                    }
+                }
+                composable<GymLogDestination.ExerciseDetail> { entry ->
+                    val id = entry.toRoute<GymLogDestination.ExerciseDetail>().id
+                    if (exercises == null) {
+                        SmokeScreen(GymLogDestination.Exercises, navController, secondary = true)
+                    } else {
+                        val viewModel = viewModel { ExerciseDetailViewModel(exercises, id) }
+                        ExerciseDetailScreen(
+                            viewModel,
+                            onBack = { navController.popBackStack() },
+                            onEdit = { navController.navigate(GymLogDestination.ExerciseEditor(it)) },
+                        )
+                    }
+                }
+                composable<GymLogDestination.ExerciseEditor> { entry ->
+                    val id = entry.toRoute<GymLogDestination.ExerciseEditor>().id
+                    if (exercises == null) {
+                        SmokeScreen(GymLogDestination.Exercises, navController, secondary = true)
+                    } else {
+                        val viewModel = viewModel { ExerciseEditorViewModel(exercises, id) }
+                        ExerciseEditorScreen(
+                            viewModel,
+                            onBack = { navController.popBackStack() },
+                            onSaved = { savedId ->
+                                if (id == null) {
+                                    // A new exercise replaces the editor with its detail page.
+                                    navController.navigate(GymLogDestination.ExerciseDetail(savedId)) {
+                                        popUpTo<GymLogDestination.ExerciseEditor> { inclusive = true }
+                                    }
+                                } else {
+                                    navController.popBackStack()
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+            navigation<GymLogGraph.Progress>(startDestination = GymLogDestination.Progress) {
+                composable<GymLogDestination.Progress> { SmokeScreen(GymLogDestination.Progress, navController) }
+            }
+            navigation<GymLogGraph.History>(startDestination = GymLogDestination.History) {
+                composable<GymLogDestination.History> {
+                    if (history == null || workouts == null) {
+                        SmokeScreen(GymLogDestination.History, navController)
+                    } else {
+                        // Shell-scoped: filters and the loaded window survive opening a detail and rotation.
+                        val viewModel = viewModel { HistoryListViewModel(history, workouts, syncState ?: emptyFlow()) }
+                        HistoryListScreen(
+                            viewModel,
+                            onOpen = { navController.navigate(GymLogDestination.HistoryDetail(it)) },
+                            onSettings = { navController.navigate(GymLogDestination.Settings) },
+                        )
+                    }
+                }
+                composable<GymLogDestination.HistoryDetail> { entry ->
+                    val sessionId = entry.toRoute<GymLogDestination.HistoryDetail>().sessionId
+                    if (history == null || workouts == null) {
+                        SmokeScreen(GymLogDestination.History, navController, secondary = true)
+                    } else {
+                        val viewModel = viewModel(key = sessionId) { HistoryDetailViewModel(history, workouts, sessionId) }
+                        HistoryDetailScreen(
+                            viewModel,
+                            onBack = { navController.popBackStack() },
+                            onEdit = if (historyEditing != null && exercises != null) {
+                                { navController.navigate(GymLogDestination.HistoryEditor(sessionId)) { launchSingleTop = true } }
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                }
+                composable<GymLogDestination.HistoryEditor> { entry ->
+                    val sessionId = entry.toRoute<GymLogDestination.HistoryEditor>().sessionId
+                    if (history == null || workouts == null || exercises == null || historyEditing == null) {
+                        SmokeScreen(GymLogDestination.History, navController, secondary = true)
+                    } else {
+                        // The draft (and the original it came from) live in the entry's SavedStateHandle: rotation and
+                        // process death keep the edit; nothing is written until "Guardar cambios".
+                        val viewModel = viewModel(key = "edit:$sessionId") {
+                            HistoryEditorViewModel(
+                                sessionId, history, workouts, exercises, historyEditing.save, createSavedStateHandle(), now = historyEditing.now,
+                            )
+                        }
+                        // System back asks before discarding changes, like the Cancel action.
+                        BackHandler { viewModel.requestExit() }
+                        HistoryEditorScreen(viewModel, onExit = { navController.popBackStack() })
+                    }
+                }
+            }
+            composable<GymLogDestination.Coach> { SmokeScreen(GymLogDestination.Coach, navController, secondary = true) }
+            composable<GymLogDestination.Body> { SmokeScreen(GymLogDestination.Body, navController, secondary = true) }
+            composable<GymLogDestination.Achievements> { SmokeScreen(GymLogDestination.Achievements, navController, secondary = true) }
+            composable<GymLogDestination.Settings> {
+                if (settingsViewModel == null) {
+                    SmokeScreen(GymLogDestination.Settings, navController, secondary = true)
+                } else {
+                    SettingsScreen(
+                        settingsViewModel,
+                        onBack = { navController.popBackStack() },
+                        onSyncDetails = { navController.navigate(GymLogDestination.SyncDiagnostics) },
+                    )
+                }
+            }
+            composable<GymLogDestination.SyncDiagnostics> {
+                val diagnostics by (settingsViewModel?.state ?: EmptySettingsState).collectAsState()
+                SyncDiagnosticsScreen(diagnostics.diagnostics, onBack = { navController.popBackStack() })
             }
         }
-        composable<GymLogDestination.SyncDiagnostics> {
-            val diagnostics by (settingsViewModel?.state ?: EmptySettingsState).collectAsState()
-            SyncDiagnosticsScreen(diagnostics.diagnostics, onBack = { navController.popBackStack() })
-        }
+        // "Tienes un entrenamiento en curso": over whichever tab (Train or Routines) started.
+        trainViewModel?.let { ActiveWorkoutChoice(it) }
     }
 }
 

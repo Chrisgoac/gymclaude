@@ -50,6 +50,10 @@ sealed interface TrainEvent {
  * Train tab state and start actions. One instance per account shell: the Routines tab's "Empezar"
  * goes through [startRoutine] too, so both entry points share the gym selection, the in-flight
  * guard and the one-active-workout rule.
+ *
+ * Starting while a workout is active never silently opens it: the start comes back `resumed`
+ * (nothing was written) and [activeChoice] asks "Tienes un entrenamiento en curso" with
+ * [continueActive] / [dismissActiveChoice]. The shell shows that prompt over whichever tab started it.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TrainHomeViewModel(
@@ -62,8 +66,12 @@ class TrainHomeViewModel(
     private val startError = MutableStateFlow<StartError?>(null)
     private val attempt = MutableStateFlow(0)
     private val events = Channel<TrainEvent>(Channel.BUFFERED)
+    private val pendingChoice = MutableStateFlow<String?>(null)
 
     val eventFlow: Flow<TrainEvent> = events.receiveAsFlow()
+
+    /** Session id of the active workout a start ran into, while the user chooses; null = no prompt. */
+    val activeChoice: StateFlow<String?> = pendingChoice
 
     val state: StateFlow<TrainHomeUiState> = attempt
         .flatMapLatest { content() }
@@ -120,7 +128,8 @@ class TrainHomeViewModel(
         viewModelScope.launch {
             try {
                 when (val result = block()) {
-                    is StartWorkoutResult.Started -> events.send(TrainEvent.OpenWorkout(result.sessionId))
+                    is StartWorkoutResult.Started ->
+                        if (result.resumed) pendingChoice.value = result.sessionId else events.send(TrainEvent.OpenWorkout(result.sessionId))
                     StartWorkoutResult.GymUnavailable -> {
                         selectedGym.value = null
                         fail(StartError.GymUnavailable)
@@ -133,6 +142,18 @@ class TrainHomeViewModel(
                 starting.value = false
             }
         }
+    }
+
+    /** "Continuar el actual": opens the workout that was already running. */
+    fun continueActive() {
+        val sessionId = pendingChoice.value ?: return
+        pendingChoice.value = null
+        viewModelScope.launch { events.send(TrainEvent.OpenWorkout(sessionId)) }
+    }
+
+    /** "Cancelar": nothing is started or opened. */
+    fun dismissActiveChoice() {
+        pendingChoice.value = null
     }
 
     private suspend fun fail(error: StartError) {

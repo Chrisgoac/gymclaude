@@ -3,6 +3,7 @@ package com.chrisgoac.gymlog.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.chrisgoac.gymlog.domain.SyncUiState
+import com.chrisgoac.gymlog.domain.workout.ActiveWorkoutPolicy
 import com.chrisgoac.gymlog.domain.workout.Gym
 import com.chrisgoac.gymlog.domain.workout.HistoryDetail
 import com.chrisgoac.gymlog.domain.workout.HistoryFilter
@@ -12,12 +13,15 @@ import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.onStart
@@ -47,7 +51,7 @@ data class HistoryListUiState(
  * The finished-workout list with period / gym / text filters. Only the newest [pageSize] matches
  * are read; [loadMore] widens the window. Any filter change returns to the first page.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class HistoryListViewModel(
     history: HistoryRepository,
     workouts: WorkoutRepository,
@@ -59,7 +63,15 @@ class HistoryListViewModel(
     private val window = MutableStateFlow(Window(limit = pageSize))
     private val attempt = MutableStateFlow(0)
 
-    val state: StateFlow<HistoryListUiState> = combine(window, attempt) { w, _ -> w }
+    /** The query last handed to the repository: only a changed, non-blank query waits [QUERY_DEBOUNCE_MILLIS] (clearing applies at once). */
+    private var appliedQuery = window.value.filter.query
+
+    /** What is actually queried: typing is debounced, other filter changes and paging apply at once. */
+    private val applied: Flow<Window> = window
+        .debounce { w -> if (w.filter.query == appliedQuery || w.filter.query.isBlank()) 0L else QUERY_DEBOUNCE_MILLIS }
+        .onEach { appliedQuery = it.filter.query }
+
+    val state: StateFlow<HistoryListUiState> = combine(applied, attempt) { w, _ -> w }
         .flatMapLatest { w ->
             combine(
                 history.observeHistory(w.filter, w.limit),
@@ -71,6 +83,8 @@ class HistoryListViewModel(
                 .onStart { emit(HistoryListUiState(w.filter, HistoryLoadStatus.Loading)) }
                 .catch { emit(HistoryListUiState(w.filter, HistoryLoadStatus.Failed)) }
         }
+        // The search field always shows what was typed, even while its results are still debounced.
+        .combine(window) { content, typed -> content.copy(filter = typed.filter) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), HistoryListUiState())
 
     fun onQuery(query: String) = changeFilter { it.copy(query = query) }
@@ -91,6 +105,9 @@ class HistoryListViewModel(
 
     companion object {
         const val PAGE_SIZE = 30
+
+        /** Wait after the last keystroke before querying (one query per pause, not per character). */
+        const val QUERY_DEBOUNCE_MILLIS = 250L
     }
 }
 
@@ -108,7 +125,15 @@ sealed interface HistoryDetailUiState {
         val confirmingDelete: Boolean = false,
         val deleting: Boolean = false,
         val deleteFailed: Boolean = false,
-    ) : HistoryDetailUiState
+        /** Typed minutes for finishing an abandoned (unfinished) session; prefilled with the default. */
+        val finishMinutes: String = ActiveWorkoutPolicy.DEFAULT_FINISH_MINUTES.toString(),
+        val finishInvalid: Boolean = false,
+        val finishing: Boolean = false,
+        val finishFailed: Boolean = false,
+    ) : HistoryDetailUiState {
+        /** An abandoned workout: offer "Terminar" with a typed duration instead of editing. */
+        val unfinished: Boolean get() = detail.workout.session.durationSeconds == null
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -123,6 +148,10 @@ class HistoryDetailViewModel(
         val confirmingDelete: Boolean = false,
         val deleting: Boolean = false,
         val deleteFailed: Boolean = false,
+        val finishMinutes: String = ActiveWorkoutPolicy.DEFAULT_FINISH_MINUTES.toString(),
+        val finishInvalid: Boolean = false,
+        val finishing: Boolean = false,
+        val finishFailed: Boolean = false,
     )
 
     private val local = MutableStateFlow(Local())
@@ -138,7 +167,10 @@ class HistoryDetailViewModel(
                 if (detail == null) {
                     HistoryDetailUiState.NotFound
                 } else {
-                    HistoryDetailUiState.Found(detail, gyms, l.choosingGym, l.gymFailed, l.confirmingDelete, l.deleting, l.deleteFailed)
+                    HistoryDetailUiState.Found(
+                        detail, gyms, l.choosingGym, l.gymFailed, l.confirmingDelete, l.deleting, l.deleteFailed,
+                        l.finishMinutes, l.finishInvalid, l.finishing, l.finishFailed,
+                    )
                 }
             }.onStart<HistoryDetailUiState> { emit(HistoryDetailUiState.Loading) }
                 .catch { emit(HistoryDetailUiState.Failed) }
@@ -163,6 +195,36 @@ class HistoryDetailViewModel(
                 throw e
             } catch (_: Exception) {
                 local.update { it.copy(gymFailed = true) }
+            }
+        }
+    }
+
+    // ---- Finish an abandoned session ----
+
+    fun onFinishMinutes(text: String) = local.update { it.copy(finishMinutes = text, finishInvalid = false, finishFailed = false) }
+
+    /**
+     * Stores the typed duration (whole minutes, 1..[ActiveWorkoutPolicy.MAX_FINISH_MINUTES]) as the
+     * session's duration in one mutation; never `now - start`. Invalid input writes nothing.
+     */
+    fun finishWithDuration() {
+        val current = local.value
+        if (current.finishing) return
+        val minutes = parseFinishMinutes(current.finishMinutes)
+        if (minutes == null) {
+            local.update { it.copy(finishInvalid = true) }
+            return
+        }
+        local.update { it.copy(finishing = true, finishInvalid = false, finishFailed = false) }
+        viewModelScope.launch {
+            try {
+                history.finishWithDuration(sessionId, minutes * 60)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                local.update { it.copy(finishFailed = true) }
+            } finally {
+                local.update { it.copy(finishing = false) }
             }
         }
     }
@@ -192,3 +254,8 @@ class HistoryDetailViewModel(
         }
     }
 }
+
+/** Whole minutes in 1..[ActiveWorkoutPolicy.MAX_FINISH_MINUTES], or null. */
+internal fun parseFinishMinutes(text: String): Int? =
+    text.trim().takeIf { it.isNotEmpty() && it.all(Char::isDigit) && it.length <= 4 }?.toInt()
+        ?.takeIf { it in 1..ActiveWorkoutPolicy.MAX_FINISH_MINUTES }

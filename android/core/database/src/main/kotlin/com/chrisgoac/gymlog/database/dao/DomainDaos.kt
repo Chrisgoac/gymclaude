@@ -26,6 +26,15 @@ import kotlinx.coroutines.flow.Flow
 // - getAll: every row including tombstones (sync, diagnostics, tests).
 // There is no physical delete: removing a synced row means upserting a tombstone.
 
+/** An exercise id with its display name. */
+data class ExerciseName(val id: String, val nombre: String)
+
+/** Live custom exercises by primary key (non-custom synced rows are not exercises the app shows). */
+const val CUSTOM_EXERCISE_NAMES_SQL = "SELECT id, nombre FROM exercises WHERE id IN (:ids) AND deletedAt IS NULL AND esPersonalizado = 1"
+
+/** Live logged exercises of one session in order, through `index_logged_exercises_sessionId`. */
+const val LIVE_EXERCISES_FOR_SESSION_SQL = "SELECT * FROM logged_exercises WHERE sessionId = :sessionId AND deletedAt IS NULL ORDER BY orden, id"
+
 @Dao
 interface ExerciseDao {
     @Upsert suspend fun upsert(entity: ExerciseEntity)
@@ -38,6 +47,9 @@ interface ExerciseDao {
 
     @Query("SELECT * FROM exercises ORDER BY id")
     suspend fun getAll(): List<ExerciseEntity>
+
+    @Query(CUSTOM_EXERCISE_NAMES_SQL)
+    suspend fun customNames(ids: List<String>): List<ExerciseName>
 }
 
 @Dao
@@ -104,7 +116,7 @@ interface LoggedExerciseDao {
     fun observeLive(): Flow<List<LoggedExerciseEntity>>
 
     /** Live exercises of one session in order; usable inside a mutation transaction. */
-    @Query("SELECT * FROM logged_exercises WHERE sessionId = :sessionId AND deletedAt IS NULL ORDER BY orden, id")
+    @Query(LIVE_EXERCISES_FOR_SESSION_SQL)
     suspend fun liveForSession(sessionId: String): List<LoggedExerciseEntity>
 
     @Query("SELECT * FROM logged_exercises ORDER BY id")

@@ -5,7 +5,27 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 
-/** A workout session. Active = [durationSeconds] is null (not finished) and not deleted. */
+/**
+ * Which unfinished session is THE active workout (controller ruling): the newest unfinished, live
+ * session started at most [WINDOW_MILLIS] ago on the server-corrected clock. Older unfinished
+ * sessions are abandoned: History lists them as "Sin terminar", they can be deleted or finished
+ * with a typed duration, and they never block starting a new workout.
+ */
+object ActiveWorkoutPolicy {
+    const val WINDOW_MILLIS: Long = 12L * 60 * 60 * 1000
+
+    /** True while a session started at [startedAt] can still be the active one. */
+    fun isFresh(startedAt: Long, now: Long): Boolean = startedAt >= now - WINDOW_MILLIS
+
+    /** The instant a session started at [startedAt] stops being fresh. */
+    fun staleAt(startedAt: Long): Long = startedAt + WINDOW_MILLIS + 1
+
+    /** Bounds of the "finish with a duration" prompt for an abandoned session, in minutes. */
+    const val DEFAULT_FINISH_MINUTES = 60
+    const val MAX_FINISH_MINUTES = 24 * 60
+}
+
+/** A workout session. Unfinished = [durationSeconds] is null; see [ActiveWorkoutPolicy] for which one is active. */
 data class WorkoutSession(
     val id: String,
     val routineId: String?,

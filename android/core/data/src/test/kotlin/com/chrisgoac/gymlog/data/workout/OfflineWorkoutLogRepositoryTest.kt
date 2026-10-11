@@ -62,7 +62,7 @@ class OfflineWorkoutLogRepositoryTest {
     private val runner = RoomLocalMutationRunner(db, DeviceId("test-device"), clock = { now })
     private val nextId = { "00000000-0000-4000-8000-%012d".format(++ids) }
     private val exercises = OfflineExerciseRepository(manager, { runner })
-    private val workouts = OfflineWorkoutRepository(manager, { runner }, exercises, now = { now }, newId = nextId)
+    private val workouts = OfflineWorkoutRepository(manager, { runner }, now = { now }, newId = nextId)
     private val log = OfflineWorkoutLogRepository(manager, { runner }, newId = nextId)
 
     @Before fun seedCatalog() = runTest {

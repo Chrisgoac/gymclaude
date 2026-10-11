@@ -93,7 +93,7 @@ class HistoryEditorScreenTest {
         val runner = RoomLocalMutationRunner(db, DeviceId("test-device"), clock = { now })
         val runnerFor = { _: GymLogDatabase -> runner }
         exercises = OfflineExerciseRepository(manager, runnerFor)
-        workouts = OfflineWorkoutRepository(manager, runnerFor, exercises, now = { now })
+        workouts = OfflineWorkoutRepository(manager, runnerFor, now = { now })
         val log = OfflineWorkoutLogRepository(manager, runnerFor)
         history = OfflineHistoryRepository(manager, runnerFor, exercises, OfflineRoutineRepository(manager, runnerFor, exercises), now = { now })
         save = DefaultSaveWorkoutDraftUseCase(OfflineWorkoutEditRepository(manager, runnerFor)) { now }

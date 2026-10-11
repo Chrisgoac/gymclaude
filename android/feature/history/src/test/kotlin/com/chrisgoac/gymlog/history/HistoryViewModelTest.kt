@@ -1,6 +1,7 @@
 package com.chrisgoac.gymlog.history
 
 import com.chrisgoac.gymlog.domain.SyncUiState
+import com.chrisgoac.gymlog.domain.workout.ActiveWorkoutPolicy
 import com.chrisgoac.gymlog.domain.workout.Gym
 import com.chrisgoac.gymlog.domain.workout.HistoryDetail
 import com.chrisgoac.gymlog.domain.workout.HistoryFilter
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -67,6 +69,11 @@ private class FakeHistory : HistoryRepository {
     override suspend fun changeGym(sessionId: String, gymId: String?) {
         if (failGym) throw IllegalStateException("disk")
         calls += "gym:$gymId"
+    }
+
+    override suspend fun finishWithDuration(sessionId: String, durationSeconds: Int): Int {
+        calls += "finish:$sessionId:$durationSeconds"
+        return durationSeconds
     }
 
     override suspend fun deleteSession(sessionId: String) {
@@ -139,6 +146,7 @@ class HistoryViewModelTest {
         vm.onPeriod(HistoryPeriod.MONTHS_3)
         vm.onQuery("press")
         vm.onGym("g1")
+        advanceTimeBy(HistoryListViewModel.QUERY_DEBOUNCE_MILLIS)
         runCurrent()
 
         val (filter, limit) = repo.requests.last()
@@ -264,5 +272,70 @@ class HistoryViewModelTest {
         repo.detail.value = null
         runCurrent()
         assertEquals(HistoryDetailUiState.NotFound, vm.state.value)
+    }
+
+    @Test fun `typing in the search is debounced into one query per pause while the field echoes at once`() = runTest(dispatcher) {
+        val vm = listViewModel()
+        val before = repo.requests.size
+
+        for (typed in listOf("p", "pr", "pre", "pres")) {
+            vm.onQuery(typed)
+            advanceTimeBy(100)
+            runCurrent()
+            assertEquals(typed, vm.state.value.filter.query)
+        }
+        assertEquals(before, repo.requests.size)
+
+        advanceTimeBy(HistoryListViewModel.QUERY_DEBOUNCE_MILLIS)
+        runCurrent()
+        assertEquals(listOf("pres"), repo.requests.drop(before).map { it.first.query })
+
+        // Clearing the text applies at once.
+        vm.onQuery("")
+        runCurrent()
+        assertEquals("", repo.requests.last().first.query)
+    }
+
+    // ---- Abandoned sessions ----
+
+    private fun TestScope.unfinishedDetail(): HistoryDetailViewModel {
+        val open = aggregate().let { it.copy(session = it.session.copy(durationSeconds = null)) }
+        repo.detail.value = HistoryDetail(open, "Casa", null, open.summary(0))
+        val vm = HistoryDetailViewModel(repo, gyms, "s1")
+        backgroundScope.launch(dispatcher) { vm.state.collect {} }
+        runCurrent()
+        return vm
+    }
+
+    @Test fun `an unfinished session offers finishing with 60 minutes prefilled`() = runTest(dispatcher) {
+        val vm = unfinishedDetail()
+        val state = vm.state.value as HistoryDetailUiState.Found
+        assertTrue(state.unfinished)
+        assertEquals(ActiveWorkoutPolicy.DEFAULT_FINISH_MINUTES.toString(), state.finishMinutes)
+
+        vm.finishWithDuration()
+        runCurrent()
+        assertEquals(listOf("finish:s1:3600"), repo.calls)
+    }
+
+    @Test fun `a finished session is not offered the finish prompt`() = runTest(dispatcher) {
+        assertFalse((detailViewModel().state.value as HistoryDetailUiState.Found).unfinished)
+    }
+
+    @Test fun `the typed minutes are stored as the duration and invalid input writes nothing`() = runTest(dispatcher) {
+        val vm = unfinishedDetail()
+        for (bad in listOf("", "0", "abc", "4.5", "-3", "1441")) {
+            vm.onFinishMinutes(bad)
+            vm.finishWithDuration()
+            runCurrent()
+            assertTrue(bad, (vm.state.value as HistoryDetailUiState.Found).finishInvalid)
+        }
+        assertTrue(repo.calls.isEmpty())
+
+        vm.onFinishMinutes(" 45 ")
+        vm.finishWithDuration()
+        runCurrent()
+        assertEquals(listOf("finish:s1:2700"), repo.calls)
+        assertFalse((vm.state.value as HistoryDetailUiState.Found).finishInvalid)
     }
 }

@@ -143,13 +143,12 @@ private fun periodLabel(period: HistoryPeriod): String = when (period) {
 private fun HistoryRow(item: HistoryItem, onOpen: (String) -> Unit) {
     HierroCard(onClick = { onOpen(item.sessionId) }) {
         HierroText(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(item.startedAt)), style = HierroTheme.typography.title)
+        val duration = item.durationSeconds
+        if (duration == null) UnfinishedBadge()
         HierroText(item.routineName ?: stringResource(R.string.history_free_workout))
+        val counts = exercisesText(item.exerciseCount) + " · " + setsText(item.setCount)
         HierroText(
-            stringResource(
-                R.string.history_item_summary,
-                exercisesText(item.exerciseCount) + " · " + setsText(item.setCount),
-                durationText(item.durationSeconds),
-            ),
+            if (duration == null) counts else stringResource(R.string.history_item_summary, counts, durationText(duration)),
             color = HierroTheme.colors.textMuted,
         )
         val gym = item.gymName ?: stringResource(R.string.history_gym_none)

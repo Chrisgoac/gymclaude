@@ -137,4 +137,12 @@
     <string name="history_editor_keep_editing">Seguir editando</string>
     <string name="history_editor_unfinished_title">Entreno en curso</string>
     <string name="history_editor_unfinished_message">Termina este entreno antes de editarlo desde el historial.</string>
+    <!-- Abandoned (unfinished) sessions: older than the 12 h active window. -->
+    <string name="history_unfinished_badge">Sin terminar</string>
+    <string name="history_detail_finish_title">Terminar entreno</string>
+    <string name="history_detail_finish_message">Este entreno se quedó sin terminar. Indica cuánto duró para guardarlo.</string>
+    <string name="history_detail_finish_minutes">Duración (minutos)</string>
+    <string name="history_detail_finish_button">Terminar entreno</string>
+    <string name="history_detail_finish_invalid">Escribe un número de minutos entre 1 y %1$d.</string>
+    <string name="history_detail_finish_failed">No se pudo guardar. Inténtalo de nuevo.</string>
 </resources>

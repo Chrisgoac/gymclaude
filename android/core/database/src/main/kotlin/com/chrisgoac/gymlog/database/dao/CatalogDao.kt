@@ -21,6 +21,9 @@ interface CatalogDao {
     @Query("SELECT * FROM catalog_exercises WHERE id = :id")
     suspend fun findById(id: String): CatalogExerciseEntity?
 
+    @Query("SELECT id, nombre FROM catalog_exercises WHERE id IN (:ids)")
+    suspend fun names(ids: List<String>): List<ExerciseName>
+
     @Query("SELECT importedVersion FROM catalog_meta WHERE id = 0")
     suspend fun importedVersion(): Int?
 

@@ -82,6 +82,7 @@ private class EditorHistory : HistoryRepository {
     }
     override suspend fun changeGym(sessionId: String, gymId: String?) = error("not used")
     override suspend fun deleteSession(sessionId: String) = error("not used")
+    override suspend fun finishWithDuration(sessionId: String, durationSeconds: Int): Int = error("not used")
 }
 
 private class EditorGyms : WorkoutRepository {

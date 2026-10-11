@@ -142,4 +142,9 @@
     </plurals>
     <string name="train_finish_summary_volume">Volumen: %1$s kg·rep</string>
     <string name="train_finish_summary_close">Listo</string>
+    <!-- Starting while a workout is active (Train or Routines). -->
+    <string name="train_active_choice_title">Tienes un entrenamiento en curso</string>
+    <string name="train_active_choice_message">Termina o continúa el entrenamiento que ya empezaste antes de empezar otro.</string>
+    <string name="train_active_choice_continue">Continuar el actual</string>
+    <string name="train_active_choice_cancel">Cancelar</string>
 </resources>

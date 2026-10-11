@@ -87,7 +87,7 @@ class WorkoutConvergenceTest {
         private val runnerFor = { _: GymLogDatabase -> runner }
         private val exercises = OfflineExerciseRepository(manager, runnerFor)
         val routines = OfflineRoutineRepository(manager, runnerFor, exercises, newId = ::nextId)
-        val workouts = OfflineWorkoutRepository(manager, runnerFor, exercises, now = { now }, newId = ::nextId)
+        val workouts = OfflineWorkoutRepository(manager, runnerFor, now = { now }, newId = ::nextId)
         val log = OfflineWorkoutLogRepository(manager, runnerFor, newId = ::nextId)
         val history = OfflineHistoryRepository(manager, runnerFor, exercises, routines, now = { now })
         val finish = FinishWorkoutUseCase(workouts, workouts)

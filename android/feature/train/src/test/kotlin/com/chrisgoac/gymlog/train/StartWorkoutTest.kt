@@ -235,4 +235,67 @@ class StartWorkoutTest {
         assertNotNull(vm.state.value.startError)
         job.cancel()
     }
+
+    // ---- Starting while a workout is active ----
+
+    @Test fun `starting a routine while one is active asks instead of opening it`() = runTest {
+        val repo = FakeWorkouts()
+        val vm = viewModel(repo)
+        val events = mutableListOf<TrainEvent>()
+        val collector = launch { vm.eventFlow.collect { events += it } }
+        vm.startFree()
+        advanceUntilIdle()
+        assertEquals(listOf<TrainEvent>(TrainEvent.OpenWorkout("s1")), events)
+        assertNull(vm.activeChoice.value)
+
+        vm.startRoutine("r1") // e.g. "Empezar" on the Routines tab
+        advanceUntilIdle()
+
+        assertEquals("s1", vm.activeChoice.value)
+        assertEquals(1, events.size) // nothing opened silently
+        assertEquals(1, repo.createdSessions)
+        assertTrue(!vm.state.value.starting)
+        collector.cancel()
+    }
+
+    @Test fun `continue opens the running workout and clears the prompt`() = runTest {
+        val repo = FakeWorkouts()
+        val vm = viewModel(repo)
+        val events = mutableListOf<TrainEvent>()
+        val collector = launch { vm.eventFlow.collect { events += it } }
+        vm.startFree()
+        advanceUntilIdle()
+        vm.startFree() // free start from Train while active
+        advanceUntilIdle()
+        assertEquals("s1", vm.activeChoice.value)
+
+        vm.continueActive()
+        advanceUntilIdle()
+
+        assertNull(vm.activeChoice.value)
+        assertEquals(listOf<TrainEvent>(TrainEvent.OpenWorkout("s1"), TrainEvent.OpenWorkout("s1")), events)
+        vm.continueActive() // a second tap does nothing
+        advanceUntilIdle()
+        assertEquals(2, events.size)
+        collector.cancel()
+    }
+
+    @Test fun `cancel neither starts nor opens anything`() = runTest {
+        val repo = FakeWorkouts()
+        val vm = viewModel(repo)
+        val events = mutableListOf<TrainEvent>()
+        val collector = launch { vm.eventFlow.collect { events += it } }
+        vm.startFree()
+        advanceUntilIdle()
+        vm.startRoutine("r1")
+        advanceUntilIdle()
+
+        vm.dismissActiveChoice()
+        advanceUntilIdle()
+
+        assertNull(vm.activeChoice.value)
+        assertEquals(1, events.size)
+        assertEquals(1, repo.createdSessions)
+        collector.cancel()
+    }
 }

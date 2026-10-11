@@ -28,7 +28,8 @@ data class HistoryFilter(
 data class HistoryItem(
     val sessionId: String,
     val startedAt: Long,
-    val durationSeconds: Int,
+    /** Null = an abandoned unfinished session ("Sin terminar", [ActiveWorkoutPolicy]). */
+    val durationSeconds: Int?,
     val gymId: String?,
     /** Null for no gym or a gym that no longer exists. */
     val gymName: String?,
@@ -39,7 +40,7 @@ data class HistoryItem(
     val volume: Double,
 )
 
-/** Newest-first finished sessions up to the requested limit; [hasMore] = older matches exist. */
+/** Newest-first history sessions up to the requested limit; [hasMore] = older matches exist. */
 data class HistoryPage(val items: List<HistoryItem>, val hasMore: Boolean)
 
 /** A finished (or any live) session with its full ordered detail. */
@@ -51,7 +52,8 @@ data class HistoryDetail(
 )
 
 /**
- * Read side of finished workouts plus the two history edits. Reads are scoped SQL (limit + indexes),
+ * Read side of the workout history (finished sessions and abandoned unfinished ones, never the
+ * active workout of [ActiveWorkoutPolicy]) plus the history edits. Reads are scoped SQL (limit + indexes),
  * never the whole table; writes are one local mutation each and never wait for the network.
  */
 interface HistoryRepository {
@@ -65,6 +67,15 @@ interface HistoryRepository {
      * @throws WorkoutRowMissingException; [WorkoutStartException.GymUnavailable]
      */
     suspend fun changeGym(sessionId: String, gymId: String?)
+
+    /**
+     * Finishes an abandoned session with a duration the user typed (never `now - start`, which for
+     * an abandoned workout would be hours or days). One mutation; a session already finished keeps
+     * its stored duration, which is returned.
+     * @throws WorkoutRowMissingException; [IllegalArgumentException] for a duration outside
+     * 1..[ActiveWorkoutPolicy.MAX_FINISH_MINUTES] minutes
+     */
+    suspend fun finishWithDuration(sessionId: String, durationSeconds: Int): Int
 
     /**
      * Tombstones the session and every live exercise and set in ONE logical mutation (the local

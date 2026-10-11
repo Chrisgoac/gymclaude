@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import com.chrisgoac.gymlog.designsystem.theme.GymLogTheme
 import com.chrisgoac.gymlog.domain.SyncUiState
 import com.chrisgoac.gymlog.domain.exercise.searchKey
@@ -38,6 +39,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import org.junit.Assert.assertEquals
+import android.os.Looper
+import java.time.Duration
+import org.robolectric.Shadows.shadowOf
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -79,6 +83,14 @@ private class ScreenHistory : HistoryRepository {
         calls += "delete:$sessionId"
         detail.value = null
     }
+
+    override suspend fun finishWithDuration(sessionId: String, durationSeconds: Int): Int {
+        calls += "finish:$sessionId:$durationSeconds"
+        detail.value = detail.value?.let { d ->
+            d.copy(workout = d.workout.copy(session = d.workout.session.copy(durationSeconds = durationSeconds)), summary = d.summary.copy(durationSeconds = durationSeconds))
+        }
+        return durationSeconds
+    }
 }
 
 private class Gyms : WorkoutRepository {
@@ -119,6 +131,13 @@ class HistoryScreensTest {
         rule.waitForIdle()
     }
 
+    /** The search is debounced: let its pause elapse. */
+    private fun settleSearch() {
+        rule.mainClock.advanceTimeBy(HistoryListViewModel.QUERY_DEBOUNCE_MILLIS + 50)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(HistoryListViewModel.QUERY_DEBOUNCE_MILLIS + 50))
+        rule.waitForIdle()
+    }
+
     @Test fun listShowsRowsAndTheSyncIndicator(): Unit = with(rule) {
         showList(SyncUiState.Pending(2))
         onNodeWithText("2 cambios pendientes de enviar").assertExists()
@@ -130,12 +149,12 @@ class HistoryScreensTest {
     @Test fun textFilterIsAccentInsensitiveAndNoResultsOffersClearing(): Unit = with(rule) {
         showList()
         onNode(hasSetTextAction()).performTextInput("TIRON")
-        waitForIdle()
+        settleSearch()
         onNodeWithText("Tirón").assertExists()
         onAllNodesWithText("Empuje").assertCountEquals(0)
 
         onNode(hasSetTextAction()).performTextInput("zzz")
-        waitForIdle()
+        settleSearch()
         onNodeWithText("SIN RESULTADOS").assertExists()
         onNodeWithText("Quitar filtros").performClick()
         waitForIdle()
@@ -204,5 +223,44 @@ class HistoryScreensTest {
         waitForIdle()
         assertEquals(listOf("delete:s1"), repo.calls)
         assertEquals(1, left)
+    }
+
+    // ---- Abandoned sessions ----
+
+    @Test fun unfinishedRowsCarryTheSinTerminarBadgeAndNoDuration(): Unit = with(rule) {
+        repo.items.value = listOf(
+            HistoryItem("s7", NOW - 2 * DAY, null, null, null, "Pierna", null, 1, 2, 300.0),
+            HistoryItem("s1", NOW - 3 * DAY, 2700, "g1", "Casa", "Empuje", null, 2, 6, 4800.0),
+        )
+        showList()
+        onNodeWithText("SIN TERMINAR").assertExists()
+        onNodeWithText("1 ejercicio · 2 series").assertExists()
+        onNodeWithText("2 ejercicios · 6 series · 45 min").assertExists()
+    }
+
+    @Test fun anUnfinishedDetailIsFinishedWithTheTypedMinutesAndHidesEditing(): Unit = with(rule) {
+        val open = aggregate().let { it.copy(session = it.session.copy(durationSeconds = null)) }
+        repo.detail.value = HistoryDetail(open, "Casa", "Empuje", open.summary(0))
+        val viewModel = HistoryDetailViewModel(repo, Gyms(), "s1")
+        setContent { GymLogTheme { HistoryDetailScreen(viewModel, onBack = {}, onEdit = {}) } }
+        waitForIdle()
+
+        onNodeWithText("SIN TERMINAR").assertExists()
+        onAllNodesWithText("Editar entreno").assertCountEquals(0)
+        onNode(hasScrollAction()).performScrollToNode(hasText("Terminar entreno"))
+        onNode(hasSetTextAction()).assertExists()
+        onNode(hasText("60") and hasSetTextAction()).assertExists()
+
+        onNode(hasSetTextAction()).performTextReplacement("0")
+        onNodeWithText("Terminar entreno").performScrollTo().performClick()
+        waitForIdle()
+        onNodeWithText("Escribe un número de minutos entre 1 y 1440.").assertExists()
+        assertTrue(repo.calls.isEmpty())
+
+        onNode(hasSetTextAction()).performTextReplacement("45")
+        onNodeWithText("Terminar entreno").performScrollTo().performClick()
+        waitForIdle()
+        assertEquals(listOf("finish:s1:2700"), repo.calls)
+        onAllNodesWithText("SIN TERMINAR").assertCountEquals(0)
     }
 }

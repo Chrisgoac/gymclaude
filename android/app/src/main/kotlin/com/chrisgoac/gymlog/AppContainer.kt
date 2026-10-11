@@ -152,7 +152,7 @@ class AppContainer(private val application: Application) {
 
     /** Workout sessions (active workout, start flows, weekly summary) of the open account; writes are local (outbox). */
     private val offlineWorkouts =
-        OfflineWorkoutRepository(databases, ::localMutationRunner, exerciseRepository, now = syncClock::nowMillis)
+        OfflineWorkoutRepository(databases, ::localMutationRunner, now = syncClock::nowMillis)
     val workoutRepository: WorkoutRepository = offlineWorkouts
 
     /** Set logging inside a workout (sets, order, notes, history for suggestions); local writes only. */

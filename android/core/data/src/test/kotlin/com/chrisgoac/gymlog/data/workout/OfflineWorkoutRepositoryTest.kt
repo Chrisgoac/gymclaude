@@ -23,6 +23,10 @@ import com.chrisgoac.gymlog.model.PushMutation
 import com.chrisgoac.gymlog.model.RecordId
 import com.chrisgoac.gymlog.model.SyncTable
 import com.chrisgoac.gymlog.model.WorkoutSessionOperation
+import com.chrisgoac.gymlog.model.WorkoutSessionRecord
+import com.chrisgoac.gymlog.database.dao.CUSTOM_EXERCISE_NAMES_SQL
+import com.chrisgoac.gymlog.database.dao.LIVE_EXERCISES_FOR_SESSION_SQL
+import com.chrisgoac.gymlog.database.dao.LIVE_SETS_FOR_SESSION_SQL
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -43,6 +47,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+
+private const val HOUR = 60L * 60 * 1000
+private const val DAY = 24 * HOUR
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -73,7 +80,7 @@ class OfflineWorkoutRepositoryTest {
         return Stack(
             database,
             OfflineRoutineRepository(manager, runnerFor, exercises, newId = nextId),
-            OfflineWorkoutRepository(manager, runnerFor, exercises, now = { now }, newId = nextId),
+            OfflineWorkoutRepository(manager, runnerFor, now = { now }, newId = nextId),
             runner,
         )
     }
@@ -347,5 +354,122 @@ class OfflineWorkoutRepositoryTest {
         assertEquals(2, summary.weekSessions)
         assertEquals(3, summary.weeklyGoal)
         assertEquals(0, summary.streakWeeks)
+    }
+
+    @Test fun `the weekly summary counts an abandoned unfinished session of this week too (PWA parity)`() = runTest {
+        val s = memory()
+        now = 1_800_000_000_000L // Friday 2027-01-15 08:00 UTC: 13 h earlier is the same week in every zone
+        val start = now
+        now = start - 13 * HOUR
+        s.workouts.startFreeWorkout(null) // abandoned by the time it is read
+        now = start
+
+        assertNull(s.workouts.observeActiveWorkout().first())
+        assertEquals(1, s.workouts.observeTrainingSummary().first().weekSessions)
+    }
+
+    // ---- Active window (12 h) ----
+
+    @Test fun `a months-old unfinished session is not active and does not block starting`() = runTest {
+        val s = memory()
+        now = 100 * DAY
+        val old = s.workouts.startFreeWorkout(null)
+        now += 90 * DAY
+
+        assertNull(s.workouts.observeActiveWorkout().first())
+        val fresh = s.workouts.startFreeWorkout(null)
+
+        assertFalse(fresh.resumed)
+        assertTrue(fresh.sessionId != old.sessionId)
+        assertEquals(fresh.sessionId, s.workouts.observeActiveWorkout().first()!!.session.id)
+        // The abandoned one is untouched (still unfinished, still live).
+        assertNull(s.workouts.observeWorkout(old.sessionId).first()!!.session.durationSeconds)
+    }
+
+    @Test fun `the window boundary is inclusive at 12 h and stale one millisecond later`() = runTest {
+        val s = memory()
+        now = 10 * DAY
+        val started = s.workouts.startFreeWorkout(null)
+        now += 12 * HOUR
+        assertEquals(started.sessionId, s.workouts.observeActiveWorkout().first()?.session?.id)
+        assertTrue(s.workouts.startFreeWorkout(null).resumed)
+        now += 1
+        assertNull(s.workouts.observeActiveWorkout().first())
+        assertFalse(s.workouts.startFreeWorkout(null).resumed)
+    }
+
+    @Test fun `with two fresh unfinished sessions the newest is active and a start resumes it`() = runTest {
+        val s = memory()
+        now = 10 * DAY
+        val local = s.workouts.startFreeWorkout(null)
+        val synced = "00000000-0000-4000-8000-999999999999"
+        s.runner.run(
+            LocalMutation {
+                put(WorkoutSessionRecord(id = RecordId(synced), updatedAt = nextTimestamp(SyncTable.WORKOUT_SESSIONS, RecordId(synced)), deletedAt = null, fecha = now + 1_000))
+            },
+        )
+        now += 2_000
+
+        assertEquals(synced, s.workouts.observeActiveWorkout().first()!!.session.id)
+        val again = s.workouts.startFreeWorkout(null)
+        assertTrue(again.resumed)
+        assertEquals(synced, again.sessionId)
+        assertTrue(local.sessionId != synced)
+    }
+
+    // ---- Scoped reads ----
+
+    @Test fun `observeWorkout reads one workout out of a large history with index-scoped queries`() = runTest {
+        val s = memory()
+        s.seedCatalog()
+        s.runner.run(LocalMutation { put(com.chrisgoac.gymlog.model.ExerciseRecord(RecordId("custom-1"), nextTimestamp(SyncTable.EXERCISES, RecordId("custom-1")), null, nombre = "Mi press", grupoMuscular = "pecho", equipamiento = "barra", tipo = "compuesto", esPersonalizado = true)) })
+        // 1,500 past sessions x 3 exercises x 4 sets = 18,000 set rows that must not be read.
+        s.db.runInTransaction {
+            for (n in 0 until 1_500) {
+                val session = "hist-$n"
+                s.db.openHelper.writableDatabase.execSQL(
+                    "INSERT INTO workout_sessions (id, updatedAt, fecha, duracionSegundos) VALUES ('$session', 1, ${n * 1000L}, 3600)",
+                )
+                for (e in 0 until 3) {
+                    val le = "$session-le$e"
+                    s.db.openHelper.writableDatabase.execSQL(
+                        "INSERT INTO logged_exercises (id, updatedAt, sessionId, exerciseId, orden) VALUES ('$le', 1, '$session', 'seed-press', $e)",
+                    )
+                    for (k in 0 until 4) {
+                        s.db.openHelper.writableDatabase.execSQL(
+                            "INSERT INTO logged_sets (id, updatedAt, loggedExerciseId, orden, peso, reps) VALUES ('$le-s$k', 1, '$le', $k, 50.0, 10)",
+                        )
+                    }
+                }
+            }
+        }
+        assertEquals(18_000, s.db.query("SELECT COUNT(*) FROM logged_sets", null).use { it.moveToFirst(); it.getInt(0) })
+        now = 10 * DAY
+        val id = s.workouts.startFreeWorkout(null).sessionId
+        val log = OfflineWorkoutLogRepository(FakeManager(s.db), { s.runner }, newId = { "00000000-0000-4000-8000-%012d".format(++ids) })
+        val press = log.addExercise(id, "seed-press")
+        val mine = log.addExercise(id, "custom-1")
+        log.addSet(press, 80.0, 5)
+        log.addSet(press, 82.5, 4)
+        log.addSet(mine, 30.0, 12)
+
+        val workout = s.workouts.observeWorkout(id).first()!!
+
+        assertEquals(listOf("Press de banca", "Mi press"), workout.exercises.map { it.exerciseName })
+        assertEquals(listOf(listOf(80.0 to 5, 82.5 to 4), listOf(30.0 to 12)), workout.exercises.map { e -> e.sets.map { it.weight to it.reps } })
+        assertEquals(workout, s.workouts.observeActiveWorkout().first())
+
+        // Every query of the read is an index probe: no full scan of sessions, exercises or sets.
+        fun plan(sql: String) = s.db.query("EXPLAIN QUERY PLAN $sql", null).use { c -> buildList { while (c.moveToNext()) add(c.getString(3)) } }
+        val sets = plan(LIVE_SETS_FOR_SESSION_SQL.replace(":sessionId", "'$id'"))
+        assertTrue(sets.toString(), sets.any { "index_logged_exercises_sessionId" in it })
+        assertTrue(sets.toString(), sets.any { "index_logged_sets_loggedExerciseId" in it })
+        val exercises = plan(LIVE_EXERCISES_FOR_SESSION_SQL.replace(":sessionId", "'$id'"))
+        assertTrue(exercises.toString(), exercises.any { "index_logged_exercises_sessionId" in it })
+        val names = plan(CUSTOM_EXERCISE_NAMES_SQL.replace(":ids", "'seed-press', 'custom-1'"))
+        for (step in sets + exercises + names) {
+            assertFalse(step, Regex("""^SCAN (ls|le|logged_sets|logged_exercises|exercises)\b""").containsMatchIn(step) && "INDEX" !in step)
+        }
+        assertTrue(names.toString(), names.any { "PRIMARY KEY" in it || "sqlite_autoindex" in it })
     }
 }

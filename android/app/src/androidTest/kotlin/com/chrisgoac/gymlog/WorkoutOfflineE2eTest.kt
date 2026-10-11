@@ -97,7 +97,7 @@ class WorkoutOfflineE2eTest {
         val runnerFor = { _: GymLogDatabase -> runner }
         val exercises = OfflineExerciseRepository(manager, runnerFor)
         val routines = OfflineRoutineRepository(manager, runnerFor, exercises)
-        val workouts = OfflineWorkoutRepository(manager, runnerFor, exercises)
+        val workouts = OfflineWorkoutRepository(manager, runnerFor)
         val restTimer = RestTimerController(MemoryTimerStore(), NoAlarm)
         runBlocking {
             db.catalogDao().upsertAll(

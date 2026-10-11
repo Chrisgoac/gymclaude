@@ -28,6 +28,7 @@ import com.chrisgoac.gymlog.model.PushMutation
 import com.chrisgoac.gymlog.model.RecordId
 import com.chrisgoac.gymlog.model.SyncTable
 import com.chrisgoac.gymlog.model.WorkoutSessionOperation
+import com.chrisgoac.gymlog.model.WorkoutSessionRecord
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -80,7 +81,7 @@ class OfflineHistoryRepositoryTest {
         val exercises = OfflineExerciseRepository(manager, runnerFor)
         val nextId = { "00000000-0000-4000-8000-%012d".format(++ids) }
         val routines = OfflineRoutineRepository(manager, runnerFor, exercises, newId = nextId)
-        val workouts = OfflineWorkoutRepository(manager, runnerFor, exercises, now = { now }, newId = nextId)
+        val workouts = OfflineWorkoutRepository(manager, runnerFor, now = { now }, newId = nextId)
         return Stack(
             database, routines, workouts,
             OfflineWorkoutLogRepository(manager, runnerFor, newId = nextId),
@@ -401,5 +402,86 @@ class OfflineHistoryRepositoryTest {
         assertNull(s.history.observeDetail(id).first())
         val live = s.db!!.query("SELECT COUNT(*) FROM logged_sets WHERE deletedAt IS NULL", null).use { it.moveToFirst(); it.getInt(0) }
         assertEquals(0, live)
+    }
+
+    // ---- Abandoned (unfinished, older than the active window) sessions ----
+
+    @Test fun `abandoned unfinished sessions are listed as unfinished, the active one is not`() = runTest {
+        val s = memory(); s.seed()
+        // Created in chronological order, as they would be in real life.
+        val monthsOld = s.workout(at = now - 90 * DAY, finished = false)
+        val finished = s.workout(at = now - 2 * DAY)
+        val yesterday = s.workout(at = now - DAY, finished = false)
+        val active = s.workout(at = now - 60_000L, finished = false)
+
+        val page = s.history.observeHistory(HistoryFilter(), 10).first()
+
+        assertEquals(listOf(yesterday, finished, monthsOld), page.items.map { it.sessionId })
+        assertNull(page.items.first { it.sessionId == yesterday }.durationSeconds)
+        assertNull(page.items.first { it.sessionId == monthsOld }.durationSeconds)
+        assertEquals(1800, page.items.first { it.sessionId == finished }.durationSeconds)
+        assertFalse(active in page.items.map { it.sessionId })
+        // Text and period filters see them too.
+        assertEquals(listOf(yesterday, finished, monthsOld), s.history.observeHistory(HistoryFilter(query = "press"), 10).first().items.map { it.sessionId })
+        assertEquals(listOf(yesterday, finished), s.history.observeHistory(HistoryFilter(period = HistoryPeriod.WEEKS_4), 10).first().items.map { it.sessionId })
+    }
+
+    @Test fun `with two unfinished sessions inside the window only the newest is active`() = runTest {
+        val s = memory(); s.seed()
+        val older = s.workout(at = now - 3 * 60 * 60_000L, finished = false)
+        // A second unfinished session arrives (e.g. pulled from another device), newer than the first.
+        val synced = "00000000-0000-4000-8000-999999999999"
+        s.runner.run(
+            LocalMutation {
+                put(WorkoutSessionRecord(id = RecordId(synced), updatedAt = nextTimestamp(SyncTable.WORKOUT_SESSIONS, RecordId(synced)), deletedAt = null, fecha = now - 30_000L))
+            },
+        )
+
+        assertEquals(synced, s.workouts.observeActiveWorkout().first()!!.session.id)
+        assertEquals(listOf(older), s.history.observeHistory(HistoryFilter(), 10).first().items.map { it.sessionId })
+    }
+
+    @Test fun `finishing an abandoned session writes the typed duration, never now minus start, in one mutation`() = runTest {
+        val s = memory(); s.seed()
+        val id = s.workout(at = now - 40 * DAY, finished = false)
+        val before = outbox(s.db!!).size
+        now += 100
+
+        assertEquals(45 * 60, s.history.finishWithDuration(id, 45 * 60))
+
+        val rows = outbox(s.db!!).drop(before)
+        val op = rows.single().operations.single() as WorkoutSessionOperation
+        assertEquals(45 * 60, op.record.duracionSegundos)
+        val item = s.history.observeHistory(HistoryFilter(), 10).first().items.single()
+        assertEquals(45 * 60, item.durationSeconds)
+
+        // Already finished: the stored duration stays and nothing is written.
+        assertEquals(45 * 60, s.history.finishWithDuration(id, 90 * 60))
+        assertEquals(before + 1, outbox(s.db!!).size)
+    }
+
+    @Test fun `finishing with a duration validates the range and the session`() = runTest {
+        val s = memory(); s.seed()
+        val id = s.workout(at = now - 2 * DAY, finished = false)
+        for (bad in listOf(0, 59, 24 * 60 * 60 + 1)) {
+            try {
+                s.history.finishWithDuration(id, bad)
+                fail("accepted $bad")
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        try {
+            s.history.finishWithDuration("missing", 3600)
+            fail("finished a missing session")
+        } catch (_: WorkoutRowMissingException) {
+        }
+        assertNull(s.history.observeHistory(HistoryFilter(), 10).first().items.single().durationSeconds)
+    }
+
+    @Test fun `an abandoned session can be deleted from history`() = runTest {
+        val s = memory(); s.seed()
+        val id = s.workout(at = now - 30 * DAY, finished = false)
+        s.history.deleteSession(id)
+        assertTrue(s.history.observeHistory(HistoryFilter(), 10).first().items.isEmpty())
     }
 }

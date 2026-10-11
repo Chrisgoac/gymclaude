@@ -4,8 +4,7 @@ import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.LocalMutation
 import com.chrisgoac.gymlog.database.LocalMutationRunner
 import com.chrisgoac.gymlog.database.UserDatabaseManager
-import com.chrisgoac.gymlog.database.entity.WorkoutSessionEntity
-import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
+import com.chrisgoac.gymlog.domain.workout.ActiveWorkoutPolicy
 import com.chrisgoac.gymlog.domain.workout.Gym
 import com.chrisgoac.gymlog.domain.workout.StartedWorkout
 import com.chrisgoac.gymlog.domain.workout.WorkoutFinishRepository
@@ -13,10 +12,7 @@ import com.chrisgoac.gymlog.domain.workout.WorkoutLimits
 import com.chrisgoac.gymlog.domain.workout.WorkoutRowMissingException
 import com.chrisgoac.gymlog.domain.workout.TrainingSummary
 import com.chrisgoac.gymlog.domain.workout.WorkoutAggregate
-import com.chrisgoac.gymlog.domain.workout.WorkoutExercise
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
-import com.chrisgoac.gymlog.domain.workout.WorkoutSession
-import com.chrisgoac.gymlog.domain.workout.WorkoutSet
 import com.chrisgoac.gymlog.domain.workout.WorkoutStartException
 import com.chrisgoac.gymlog.model.GymRecord
 import com.chrisgoac.gymlog.model.LoggedExerciseRecord
@@ -37,14 +33,18 @@ import java.util.UUID
 /**
  * Workouts over the open account's Room database. Starting a workout is ONE [LocalMutation]
  * (session row + logged-exercise rows + outbox; the runner chunks it past 50 operations). The
- * one-active-session invariant is checked INSIDE that transaction, so concurrent or repeated
- * starts converge on a single session; a second start returns the existing one.
+ * one-active-session invariant ([ActiveWorkoutPolicy]: newest unfinished session within the last
+ * 12 h) is checked INSIDE that transaction, so concurrent or repeated starts converge on a single
+ * session; a second start returns the existing one. Reads are scoped to one workout (see
+ * [readWorkout]), never whole tables.
+ *
+ * The weekly training summary counts every live session of the week, finished or not (PWA
+ * `getResumenSemana` parity), so an abandoned session still counts as a day trained.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class OfflineWorkoutRepository(
     private val databases: UserDatabaseManager,
     private val runnerFor: (GymLogDatabase) -> LocalMutationRunner,
-    private val exercises: ExerciseRepository,
     /** Server-corrected wall clock; stamps the session's `fecha`. */
     private val now: () -> Long = System::currentTimeMillis,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
@@ -57,45 +57,13 @@ class OfflineWorkoutRepository(
         if (open == null) {
             flowOf(null)
         } else {
-            open.database.workoutSessionDao().observeActive()
-                .map { it.firstOrNull()?.id }
-                .distinctUntilChanged()
-                .flatMapLatest { id -> if (id == null) flowOf(null) else observeWorkout(id) }
+            open.database.workoutSessionDao().observeActiveSessionId(now)
+                .flatMapLatest { id -> if (id == null) flowOf(null) else open.database.observeWorkoutRows(id) }
         }
     }.distinctUntilChanged()
 
     override fun observeWorkout(sessionId: String): Flow<WorkoutAggregate?> = databases.current.flatMapLatest { open ->
-        if (open == null) {
-            flowOf(null)
-        } else {
-            val database = open.database
-            combine(
-                database.workoutSessionDao().observeLive(),
-                database.loggedExerciseDao().observeLive(),
-                database.loggedSetDao().observeLive(),
-                exercises.observeExercises().map { all -> all.associate { it.id to it.name } },
-            ) { sessions, loggedExercises, loggedSets, names ->
-                val session = sessions.firstOrNull { it.id == sessionId } ?: return@combine null
-                val setsByExercise = loggedSets.groupBy { it.loggedExerciseId }
-                WorkoutAggregate(
-                    session = session.toDomain(),
-                    exercises = loggedExercises
-                        .filter { it.sessionId == sessionId }
-                        .sortedWith(compareBy({ it.orden }, { it.id }))
-                        .map { row ->
-                            WorkoutExercise(
-                                id = row.id,
-                                exerciseId = row.exerciseId,
-                                exerciseName = names[row.exerciseId],
-                                position = row.orden,
-                                sets = setsByExercise[row.id].orEmpty()
-                                    .sortedWith(compareBy({ it.orden }, { it.id }))
-                                    .map { WorkoutSet(it.id, it.orden, it.peso, it.reps, it.esCalentamiento == true) },
-                            )
-                        },
-                )
-            }
-        }
+        if (open == null) flowOf(null) else open.database.observeWorkoutRows(sessionId)
     }.distinctUntilChanged()
 
     override fun observeGyms(): Flow<List<Gym>> = databases.current.flatMapLatest { open ->
@@ -129,8 +97,9 @@ class OfflineWorkoutRepository(
         val database = checkNotNull(databases.current.value) { "No account database is open" }.database
         return runnerFor(database).run(
             LocalMutation {
-                // Inside the transaction: two racing starts cannot both see "no active workout".
-                database.workoutSessionDao().findActive().firstOrNull()?.let { return@LocalMutation StartedWorkout(it.id, resumed = true) }
+                // Inside the transaction: two racing starts cannot both see "no active workout". Same
+                // definition as observeActiveWorkout: an unfinished session older than the window is abandoned.
+                database.workoutSessionDao().findActiveSessionId(now())?.let { return@LocalMutation StartedWorkout(it, resumed = true) }
 
                 if (gymId != null) {
                     val gym = find(SyncTable.GYMS, RecordId(gymId)) as? GymRecord
@@ -203,5 +172,3 @@ class OfflineWorkoutRepository(
         const val GOAL_SETTING = "objetivoSemanal"
     }
 }
-
-private fun WorkoutSessionEntity.toDomain() = WorkoutSession(id, routineId, gymId, fecha, duracionSegundos, notas)

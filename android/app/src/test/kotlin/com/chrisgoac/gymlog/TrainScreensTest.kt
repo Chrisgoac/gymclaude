@@ -23,6 +23,13 @@ import com.chrisgoac.gymlog.train.TrainHomeViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
+import com.chrisgoac.gymlog.navigation.GymLogApp
+import com.chrisgoac.gymlog.navigation.GymLogDestination
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,6 +40,8 @@ import org.robolectric.annotation.GraphicsMode
 private class MemoryWorkouts : WorkoutRepository {
     val active = MutableStateFlow<WorkoutAggregate?>(null)
     val startedGyms = mutableListOf<String?>()
+    /** Like the real repository: with an active workout a start writes nothing and returns it as resumed. */
+    var resumeExisting = false
     override fun observeActiveWorkout(): Flow<WorkoutAggregate?> = active
     override fun observeWorkout(sessionId: String): Flow<WorkoutAggregate?> = active
     override fun observeGyms(): Flow<List<Gym>> = MutableStateFlow(listOf(Gym("g1", "Central")))
@@ -42,6 +51,7 @@ private class MemoryWorkouts : WorkoutRepository {
         return StartedWorkout("s1", resumed = false)
     }
     override suspend fun startRoutineWorkout(routineId: String, gymId: String?): StartedWorkout {
+        active.value?.takeIf { resumeExisting }?.let { return StartedWorkout(it.session.id, resumed = true) }
         startedGyms += gymId
         return StartedWorkout("s2", resumed = false)
     }
@@ -102,5 +112,40 @@ class TrainScreensTest {
         rule.onNodeWithText("Entrenamiento libre").assertDoesNotExist()
         rule.onNodeWithText("Continuar").performClick()
         assertEquals(listOf("s9"), opened)
+    }
+
+    @Test fun startingFromRoutinesWhileActiveAsksAndContinueOpensTheRunningWorkout() {
+        val workouts = MemoryWorkouts().apply {
+            active.value = WorkoutAggregate(WorkoutSession("s9", null, null, 1_000L, null, null), emptyList())
+            resumeExisting = true
+        }
+        var nav: NavHostController? = null
+        rule.setContent {
+            GymLogTheme {
+                val controller = rememberNavController()
+                nav = controller
+                GymLogApp(navController = controller, workouts = workouts, routines = OneRoutine())
+            }
+        }
+        rule.onNodeWithText("Rutinas").performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithContentDescription("Empezar la rutina Push").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Tienes un entrenamiento en curso").assertExists()
+        // "Cancelar" starts and opens nothing.
+        rule.onNodeWithText("Cancelar").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Tienes un entrenamiento en curso").assertDoesNotExist()
+        assertTrue(nav!!.currentDestination!!.hasRoute(GymLogDestination.Routines::class))
+
+        rule.onNodeWithContentDescription("Empezar la rutina Push").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Continuar el actual").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Tienes un entrenamiento en curso").assertDoesNotExist()
+        val destination = nav!!.currentBackStackEntry!!
+        assertTrue(destination.destination.hasRoute(GymLogDestination.ActiveWorkout::class))
+        assertEquals("s9", destination.toRoute<GymLogDestination.ActiveWorkout>().sessionId)
     }
 }

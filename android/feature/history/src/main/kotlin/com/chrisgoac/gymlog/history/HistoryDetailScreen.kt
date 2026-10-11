@@ -29,6 +29,12 @@ import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.domain.workout.SetValidation
 import com.chrisgoac.gymlog.domain.workout.WorkoutExercise
 import com.chrisgoac.gymlog.feature.history.R
+import com.chrisgoac.gymlog.designsystem.component.HierroTextField
+import com.chrisgoac.gymlog.domain.workout.ActiveWorkoutPolicy
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import java.text.DateFormat
 import java.util.Date
 
@@ -50,6 +56,8 @@ fun HistoryDetailScreen(viewModel: HistoryDetailViewModel, onBack: () -> Unit, m
         onConfirmDelete = viewModel::confirmDelete,
         modifier = modifier,
         onEdit = onEdit,
+        onFinishMinutes = viewModel::onFinishMinutes,
+        onFinish = viewModel::finishWithDuration,
     )
 }
 
@@ -67,6 +75,8 @@ internal fun HistoryDetailContent(
     modifier: Modifier = Modifier,
     /** Opens the full editor; null hides the action. */
     onEdit: (() -> Unit)? = null,
+    onFinishMinutes: (String) -> Unit = {},
+    onFinish: () -> Unit = {},
 ) {
     Column(modifier.fillMaxSize()) {
         HierroScreenHeader(stringResource(R.string.history_detail_title)) { HierroHeaderAction(stringResource(R.string.history_back), onBack) }
@@ -84,7 +94,9 @@ internal fun HistoryDetailContent(
                         title = stringResource(R.string.history_detail_error_title),
                     )
                 }
-                is HistoryDetailUiState.Found -> foundItems(state, onOpenGymPicker, onCloseGymPicker, onChangeGym, onRequestDelete, onCancelDelete, onConfirmDelete, onEdit)
+                is HistoryDetailUiState.Found -> foundItems(
+                    state, onOpenGymPicker, onCloseGymPicker, onChangeGym, onRequestDelete, onCancelDelete, onConfirmDelete, onEdit, onFinishMinutes, onFinish,
+                )
             }
         }
     }
@@ -99,6 +111,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.foundItems(
     onCancelDelete: () -> Unit,
     onConfirmDelete: () -> Unit,
     onEdit: (() -> Unit)?,
+    onFinishMinutes: (String) -> Unit,
+    onFinish: () -> Unit,
 ) {
     val detail = state.detail
     val session = detail.workout.session
@@ -109,20 +123,24 @@ private fun androidx.compose.foundation.lazy.LazyListScope.foundItems(
                 Modifier.semantics { heading() },
                 HierroTheme.typography.title,
             )
+            if (state.unfinished) UnfinishedBadge()
             HierroText(detail.routineName ?: stringResource(R.string.history_free_workout))
+            val counts = exercisesText(detail.summary.exerciseCount) + " · " + setsText(detail.summary.setCount)
             HierroText(
-                durationText(detail.summary.durationSeconds) + " · " + exercisesText(detail.summary.exerciseCount) + " · " + setsText(detail.summary.setCount),
+                if (state.unfinished) counts else durationText(detail.summary.durationSeconds) + " · " + counts,
                 color = HierroTheme.colors.textMuted,
             )
             HierroText(
                 stringResource(R.string.history_volume, SetValidation.formatWeight(Math.round(detail.summary.volume * 10) / 10.0)),
                 color = HierroTheme.colors.textMuted,
             )
-            if (onEdit != null) {
+            // An unfinished session is finished first (below); the editor only takes finished workouts.
+            if (onEdit != null && !state.unfinished) {
                 HierroButton(stringResource(R.string.history_detail_edit), onEdit, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
             }
         }
     }
+    if (state.unfinished) item(key = "finish") { FinishCard(state, onFinishMinutes, onFinish) }
     item(key = "gym") {
         HierroCard {
             HierroText(stringResource(R.string.history_detail_gym, detail.gymName ?: stringResource(R.string.history_gym_none)))
@@ -169,6 +187,26 @@ private fun ExerciseDetail(exercise: WorkoutExercise) {
                 color = HierroTheme.colors.textMuted,
             )
         }
+    }
+}
+
+/** Finishes an abandoned session with a typed duration (prefilled 60 min), never "now minus start". */
+@Composable
+private fun FinishCard(state: HistoryDetailUiState.Found, onMinutes: (String) -> Unit, onFinish: () -> Unit) {
+    HierroCard {
+        HierroText(stringResource(R.string.history_detail_finish_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.title)
+        HierroText(stringResource(R.string.history_detail_finish_message))
+        HierroTextField(
+            value = state.finishMinutes,
+            onValueChange = onMinutes,
+            label = stringResource(R.string.history_detail_finish_minutes),
+            enabled = !state.finishing,
+            errorMessage = if (state.finishInvalid) stringResource(R.string.history_detail_finish_invalid, ActiveWorkoutPolicy.MAX_FINISH_MINUTES) else null,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onFinish() }),
+        )
+        if (state.finishFailed) HierroText(stringResource(R.string.history_detail_finish_failed), color = HierroTheme.colors.error)
+        HierroButton(stringResource(R.string.history_detail_finish_button), onFinish, Modifier.fillMaxWidth(), loading = state.finishing)
     }
 }
 

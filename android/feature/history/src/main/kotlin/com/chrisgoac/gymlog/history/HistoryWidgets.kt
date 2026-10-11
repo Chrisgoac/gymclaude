@@ -99,3 +99,15 @@ internal fun exercisesText(count: Int): String = pluralStringResource(R.plurals.
 
 @Composable
 internal fun setsText(count: Int): String = pluralStringResource(R.plurals.history_sets, count, count)
+
+/** "SIN TERMINAR": an abandoned session (older than the active window, never finished). */
+@Composable
+internal fun UnfinishedBadge(modifier: Modifier = Modifier) {
+    val colors = HierroTheme.colors
+    HierroText(
+        stringResource(R.string.history_unfinished_badge).uppercase(),
+        modifier.border(HierroShape.border, colors.error).padding(horizontal = 8.dp, vertical = 2.dp),
+        HierroTheme.typography.label,
+        colors.error,
+    )
+}
