@@ -37,7 +37,8 @@
     <string name="train_streak_none">Sin racha todavía</string>
 
     <string name="train_coach_title">Coach</string>
-    <string name="train_coach_pro">Pro · próximamente</string>
+    <string name="train_coach_pro">Solo Pro</string>
+    <string name="train_coach_open">Pregunta a tu entrenador IA</string>
     <string name="train_body">Cuerpo</string>
     <string name="train_achievements">Logros</string>
 

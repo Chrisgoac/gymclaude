@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="es">
+    <string name="coach_title">Coach</string>
+    <string name="coach_back">Atrás</string>
+    <string name="coach_loading">Cargando el coach</string>
+
+    <string name="coach_locked_title">Coach Pro</string>
+    <string name="coach_locked_message">El coach con IA es parte de GymLog Pro: analiza tu semana, tus estancamientos y tus medidas para orientarte. Necesitas una suscripción Pro activa para usarlo.</string>
+
+    <string name="coach_empty_title">Pregúntale a tu coach</string>
+    <string name="coach_empty_message">Responde con tus entrenamientos, estancamientos y medidas recientes. Elige una sugerencia o escribe tu pregunta.</string>
+    <string name="coach_disclaimer">Esto es orientación general de entrenamiento, no consejo médico. Ante dolor o dudas de salud, consulta a un profesional.</string>
+    <string name="coach_suggestions">Sugerencias</string>
+
+    <string name="coach_you">Tú</string>
+    <string name="coach_assistant">Coach</string>
+    <string name="coach_spoken_message">%1$s: %2$s</string>
+    <string name="coach_report">Reportar</string>
+    <string name="coach_report_description">Reportar esta respuesta del coach</string>
+
+    <string name="coach_thinking">El coach está pensando…</string>
+    <string name="coach_writing">El coach está escribiendo…</string>
+    <string name="coach_incomplete">Respuesta incompleta</string>
+    <string name="coach_retry">Reintentar</string>
+    <string name="coach_dismiss">Descartar</string>
+    <string name="coach_failure_interrupted">Se cortó la conexión antes de terminar. Lo recibido no se guarda.</string>
+    <string name="coach_failure_busy">El coach todavía está respondiendo a este mensaje. Reintenta en un momento.</string>
+    <string name="coach_failure_unavailable">El coach no está disponible ahora mismo. Reintenta más tarde.</string>
+    <string name="coach_failure_session">Tu sesión necesita atención: vuelve a iniciar sesión para usar el coach.</string>
+    <string name="coach_failure_rejected">El coach no pudo procesar este mensaje.</string>
+    <string name="coach_failure_no_account">No hay ninguna cuenta abierta.</string>
+
+    <string name="coach_offline">Sin conexión. El coach necesita internet: no se guarda nada para enviarlo después.</string>
+    <string name="coach_report_sent">Gracias. Revisaremos esta respuesta.</string>
+    <string name="coach_close">Cerrar</string>
+
+    <string name="coach_question">Tu pregunta</string>
+    <string name="coach_send">Enviar</string>
+
+    <string name="coach_report_title">Reportar respuesta</string>
+    <string name="coach_report_message">¿Qué problema tiene esta respuesta?</string>
+    <string name="coach_report_inaccurate">Incorrecta</string>
+    <string name="coach_report_harmful">Peligrosa</string>
+    <string name="coach_report_medical">Da consejo médico</string>
+    <string name="coach_report_offensive">Ofensiva</string>
+    <string name="coach_report_other">Otro motivo</string>
+    <string name="coach_report_selected">seleccionado</string>
+    <string name="coach_report_submit">Enviar reporte</string>
+    <string name="coach_report_cancel">Cancelar</string>
+    <string name="coach_report_failed">No se pudo enviar el reporte. Inténtalo de nuevo.</string>
+</resources>

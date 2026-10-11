@@ -88,6 +88,10 @@ import com.chrisgoac.gymlog.network.ServerClock
 import com.chrisgoac.gymlog.network.SyncApi
 import com.chrisgoac.gymlog.network.createSyncApi
 import com.chrisgoac.gymlog.network.createMediaApi
+import com.chrisgoac.gymlog.network.createCoachApi
+import com.chrisgoac.gymlog.data.coach.OfflineCoachRepository
+import com.chrisgoac.gymlog.domain.stats.GymFilter
+import com.chrisgoac.gymlog.navigation.CoachServices
 import com.chrisgoac.gymlog.data.media.OfflineMediaRepository
 import com.chrisgoac.gymlog.domain.media.MediaRepository
 import com.chrisgoac.gymlog.media.CameraCaptureTargets
@@ -255,8 +259,8 @@ class AppContainer(private val application: Application) {
     )
 
     /** Progress statistics of the open account (server-corrected clock, device time zone); read-only. */
-    val statsRepository: StatsRepository =
-        OfflineStatsRepository(databases, now = syncClock::nowMillis, zone = ZoneId::systemDefault)
+    private val offlineStats = OfflineStatsRepository(databases, now = syncClock::nowMillis, zone = ZoneId::systemDefault)
+    val statsRepository: StatsRepository = offlineStats
 
     /**
      * Pro entitlement. TODO(Plan 5): replace with the Play Billing + server entitlement reader; until then
@@ -264,6 +268,25 @@ class AppContainer(private val application: Application) {
      */
     val entitlements: EntitlementReader = object : EntitlementReader {
         override fun observeIsPro(): Flow<Boolean> = flowOf(false)
+    }
+
+    /** Validated network reachability (the Coach needs it; sync's bootstrap retry listens to it too). */
+    private val connectivity by lazy { ConnectivityMonitor(application) }
+
+    /**
+     * The Pro Coach of the open account: the synced thread plus streamed turns. The snapshot is read from Room
+     * for every turn over all gyms (the PWA's default "todos" filter; Android has no global gym filter).
+     */
+    val coachServices: CoachServices by lazy {
+        CoachServices(
+            repository = OfflineCoachRepository(
+                databases, ::localMutationRunner,
+                api = createCoachApi(BuildConfig.API_BASE_URL, authSession, serverClock),
+                snapshot = { offlineStats.readCoachSnapshot(GymFilter.All) },
+            ),
+            entitlements = entitlements,
+            online = connectivity.online,
+        )
     }
 
     /** Progress screens: stats, entitlement, local-midnight ticker and the server-corrected clock in the device zone. */
@@ -498,7 +521,6 @@ class AppContainer(private val application: Application) {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) syncTriggers.onForeground() },
         )
-        val connectivity = ConnectivityMonitor(application)
         appScope.launch { BootstrapAutoRetry(rootStateMachine.state, connectivity.online, rootStateMachine::retryBootstrap).run() }
     }
 

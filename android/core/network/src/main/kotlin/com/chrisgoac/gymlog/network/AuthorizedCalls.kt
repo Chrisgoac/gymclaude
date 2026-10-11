@@ -3,6 +3,7 @@ package com.chrisgoac.gymlog.network
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
+import io.ktor.client.request.prepareRequest
 import io.ktor.client.request.request
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -84,34 +85,119 @@ internal class AuthorizedCalls(
     private class Sent(val response: HttpResponse, val requestId: String)
 
     private suspend fun send(expectedUserId: String, forceRefresh: Boolean, configure: HttpRequestBuilder.() -> Unit): Sent {
-        val token = try {
-            auth.accessToken(expectedUserId, forceRefresh)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            throw tokenUnavailable(expectedUserId, "Access token unavailable: ${e.message}", e)
-        } ?: throw tokenUnavailable(expectedUserId, "No access token", null)
+        val token = token(expectedUserId, forceRefresh)
         val requestId = requestIdFactory()
         val response = try {
             client.request {
                 configure()
-                header(HttpHeaders.Authorization, "Bearer $token")
-                header("x-request-id", requestId)
-                header(HttpHeaders.Accept, ContentType.Application.Json.toString())
+                authorize(token, requestId, ContentType.Application.Json.toString())
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             throw SyncApiException.Transport(e)
         }
+        observeDate(response)
+        return Sent(response, requestId)
+    }
+
+    /**
+     * Like [execute] but the 2xx body is handed to [consume] while it streams (never buffered whole). A 401
+     * before any body is retried once with a refreshed token; any other non-2xx is read and mapped as in
+     * [execute], except that a 403 whose body carries a route-level code (e.g. `PRO_REQUIRED`) is an
+     * [SyncApiException.Api], not a session problem. Failures while reading are [SyncApiException.Transport];
+     * whatever [consume]'s own callbacks throw is rethrown unchanged.
+     */
+    suspend fun <T> stream(
+        expectedUserId: String,
+        accept: String,
+        configure: HttpRequestBuilder.() -> Unit,
+        consume: suspend (HttpResponse) -> T,
+    ): T {
+        var forceRefresh = false
+        while (true) {
+            val token = token(expectedUserId, forceRefresh)
+            val requestId = requestIdFactory()
+            val outcome: StreamOutcome<T> = try {
+                client.prepareRequest {
+                    configure()
+                    authorize(token, requestId, accept)
+                }.execute { response ->
+                    observeDate(response)
+                    val status = response.status.value
+                    when {
+                        status == HTTP_UNAUTHORIZED && !forceRefresh -> StreamOutcome.RetryWithFreshToken
+                        status !in 200..299 -> throw failure(expectedUserId, response, response.bodyAsText(), requestId)
+                        else -> StreamOutcome.Done(consume(response))
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: DownstreamFailure) {
+                throw e.cause
+            } catch (e: SyncApiException) {
+                throw e
+            } catch (e: Exception) {
+                throw SyncApiException.Transport(e)
+            }
+            when (outcome) {
+                is StreamOutcome.Done -> return outcome.value
+                StreamOutcome.RetryWithFreshToken -> forceRefresh = true
+            }
+        }
+    }
+
+    /** Wraps what a stream consumer's own callback threw, so it is not mistaken for a transport failure. */
+    class DownstreamFailure(override val cause: Throwable) : Exception(cause)
+
+    private sealed interface StreamOutcome<out T> {
+        data object RetryWithFreshToken : StreamOutcome<Nothing>
+        class Done<T>(val value: T) : StreamOutcome<T>
+    }
+
+    private fun failure(expectedUserId: String, response: HttpResponse, text: String, requestId: String): SyncApiException {
+        val status = response.status.value
+        val retryAfter = response.headers[HttpHeaders.RetryAfter]
+        val reqId = response.headers["x-request-id"] ?: requestId
+        if (status == HTTP_FORBIDDEN) {
+            val routeError = NetworkErrorMapper.mapApiError(status, retryAfter, text, reqId)
+            if (routeError.rawCode in ROUTE_FORBIDDEN_CODES) return routeError
+        }
+        if (status == HTTP_UNAUTHORIZED || status == HTTP_FORBIDDEN) {
+            return if (auth.state.value == AuthState.SignedIn(expectedUserId)) {
+                SyncApiException.SessionRejected("HTTP $status with an active session")
+            } else {
+                SyncApiException.SessionRequired("HTTP $status")
+            }
+        }
+        return NetworkErrorMapper.map(status, retryAfter, text, reqId)
+    }
+
+    private suspend fun token(expectedUserId: String, forceRefresh: Boolean): String = try {
+        auth.accessToken(expectedUserId, forceRefresh)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        throw tokenUnavailable(expectedUserId, "Access token unavailable: ${e.message}", e)
+    } ?: throw tokenUnavailable(expectedUserId, "No access token", null)
+
+    private fun HttpRequestBuilder.authorize(token: String, requestId: String, accept: String) {
+        header(HttpHeaders.Authorization, "Bearer $token")
+        header("x-request-id", requestId)
+        header(HttpHeaders.Accept, accept)
+    }
+
+    private fun observeDate(response: HttpResponse) {
         response.headers[HttpHeaders.Date]
             ?.let { runCatching { ZonedDateTime.parse(it.trim(), DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() }.getOrNull() }
             ?.let(serverClock::observe)
-        return Sent(response, requestId)
     }
 
     private companion object {
         const val HTTP_UNAUTHORIZED = 401
         const val HTTP_FORBIDDEN = 403
+
+        /** 403 codes that are a route's own answer (entitlement), not an authentication failure. */
+        val ROUTE_FORBIDDEN_CODES = setOf("PRO_REQUIRED")
     }
 }

@@ -9,7 +9,12 @@ import com.chrisgoac.gymlog.database.dao.StatBestSetRow
 import com.chrisgoac.gymlog.database.dao.StatExerciseVolumeRow
 import com.chrisgoac.gymlog.database.dao.StatsDao
 import com.chrisgoac.gymlog.domain.exercise.MuscleGroup
+import com.chrisgoac.gymlog.domain.body.BodyMetrics
+import com.chrisgoac.gymlog.domain.math.BodyEntry
 import com.chrisgoac.gymlog.domain.stats.BalanceRow
+import com.chrisgoac.gymlog.domain.stats.BodySeries
+import com.chrisgoac.gymlog.domain.stats.CoachSnapshot
+import com.chrisgoac.gymlog.domain.stats.CoachSnapshotInput
 import com.chrisgoac.gymlog.domain.stats.ExerciseInfo
 import com.chrisgoac.gymlog.domain.stats.ExerciseRecords
 import com.chrisgoac.gymlog.domain.stats.GymFilter
@@ -146,6 +151,53 @@ class OfflineStatsRepository(
 
     override fun observeProgressionSuggestions(gym: GymFilter): Flow<List<ProgressionSuggestion>> =
         observeStalls(gym).map(Insights::suggestions)
+
+    /**
+     * The Coach snapshot (`recogerSnapshot`) of the open account, read now in one transaction: the worst
+     * stalls, this week (sessions, volume vs last week, records), per-group weekly volume / days since
+     * trained / goals and the body summary. Read fresh for every Coach turn, so a historical edit or a
+     * sync is reflected in the next one. Never contains photos, ids or URLs.
+     */
+    suspend fun readCoachSnapshot(gym: GymFilter): CoachSnapshot {
+        val database = checkNotNull(databases.current.value) { "No account database is open" }.database
+        return database.withTransaction {
+            val dao = database.statsDao()
+            val at = Instant.ofEpochMilli(now())
+            val z = zone()
+            val thisWeek = Periods.weekStart(at, z).toEpochMilli()
+            val previousWeek = Periods.weekStart(Instant.ofEpochMilli(thisWeek - 1), z).toEpochMilli()
+            val volumes = volumeRows(dao, previousWeek, gym)
+            val weekExerciseIds = volumes.exercises.filter { it.startedAt >= thisWeek }.map { it.exerciseId }.distinct()
+            val best = weekExerciseIds.chunked(CHUNK).flatMap { dao.bestSetsAroundWeek(it, thisWeek, gym.gymId) }
+            val recordRows = StatRows(emptyList(), volumes.exercises, best.toSets(volumes.exercises, gym))
+            val spans = dao.exerciseSpans(gym.gymId)
+            val infos = infos(dao, (volumes.exercises.map { it.exerciseId } + spans.map { it.exerciseId }).distinct())
+            val lastTrained = WorkoutStats.lastTrainedByMuscle(
+                StatRows(emptyList(), spans.map { StatExercise(it.firstLoggedExerciseId, "", it.exerciseId, it.lastStartedAt, gym.gymId) }, emptyList()),
+                infos,
+                gym,
+            )
+            // listAllMetrics: live rows sorted by date (stable over the primary key order).
+            val metrics = database.bodyMetricDao().getAll().filter { it.deletedAt == null }.sortedBy { it.fecha }
+            val custom = SettingsCodec.customMetrics(dao.setting(BodyMetrics.CUSTOM_SETTING_KEY))
+            val body = metrics.groupBy { it.tipo }.map { (type, rows) ->
+                BodySeries(type, BodyMetrics.resolve(type, custom).label, rows.map { BodyEntry(it.valor, Instant.ofEpochMilli(it.fecha)) })
+            }
+            Insights.coachSnapshot(
+                CoachSnapshotInput(
+                    stalls = stalls(dao, gym),
+                    week = WorkoutStats.weeklySummary(volumes, gym, at, z),
+                    weeklyTarget = weeklyTarget(dao.setting(WEEKLY_TARGET_KEY)),
+                    weekRecords = WorkoutStats.weekRecords(recordRows, infos, gym, at, z),
+                    weekVolumeByGroup = WorkoutStats.weekVolumeByMuscle(volumes, infos, gym, at, z),
+                    lastTrained = lastTrained,
+                    volumeTargets = volumeGoals(dao.setting(VOLUME_GOALS_KEY)),
+                    now = at.toEpochMilli(),
+                    body = body,
+                ),
+            )
+        }
+    }
 
     /**
      * Re-runs [read] (in one transaction) on every commit to [STATS_TABLES]; [empty] while no account

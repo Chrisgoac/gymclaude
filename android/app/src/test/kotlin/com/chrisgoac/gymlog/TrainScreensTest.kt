@@ -74,11 +74,16 @@ private class OneRoutine : RoutineRepository {
 class TrainScreensTest {
     @get:Rule val rule = createComposeRule()
 
-    private fun show(workouts: MemoryWorkouts, opened: MutableList<String> = mutableListOf(), onAchievements: () -> Unit = {}): TrainHomeViewModel {
+    private fun show(
+        workouts: MemoryWorkouts,
+        opened: MutableList<String> = mutableListOf(),
+        onAchievements: () -> Unit = {},
+        onOpenCoach: (() -> Unit)? = null,
+    ): TrainHomeViewModel {
         val viewModel = TrainHomeViewModel(workouts, OneRoutine(), StartWorkoutUseCase(workouts))
         rule.setContent {
             GymLogTheme {
-                TrainHomeScreen(viewModel, onOpenWorkout = { opened += it }, onOpenBody = {}, onOpenAchievements = onAchievements)
+                TrainHomeScreen(viewModel, onOpenWorkout = { opened += it }, onOpenBody = {}, onOpenAchievements = onAchievements, onOpenCoach = onOpenCoach)
             }
         }
         rule.waitForIdle()
@@ -98,7 +103,15 @@ class TrainScreensTest {
         rule.waitForIdle()
         assertEquals(listOf<String?>("g1"), workouts.startedGyms)
 
-        rule.onNodeWithContentDescription("Coach, Pro · próximamente").performScrollTo().assertIsNotEnabled()
+        rule.onNodeWithContentDescription("Coach, Solo Pro").performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test fun aProAccountOpensTheCoachFromItsCard() {
+        var opened = 0
+        show(MemoryWorkouts(), onOpenCoach = { opened++ })
+
+        rule.onNodeWithContentDescription("Coach. Pregunta a tu entrenador IA").performScrollTo().performClick()
+        assertEquals(1, opened)
     }
 
     @Test fun theWeekAndStreakCardOpensAchievementsAndSaysSo() {

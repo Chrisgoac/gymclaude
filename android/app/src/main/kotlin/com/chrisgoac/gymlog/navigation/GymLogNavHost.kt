@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -63,6 +64,7 @@ import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
 import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import com.chrisgoac.gymlog.train.ActiveWorkoutChoice
@@ -112,6 +114,9 @@ import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.R
 import androidx.lifecycle.createSavedStateHandle
 import com.chrisgoac.gymlog.domain.entitlement.EntitlementReader
+import com.chrisgoac.gymlog.domain.coach.CoachRepository
+import com.chrisgoac.gymlog.coach.CoachScreen
+import com.chrisgoac.gymlog.coach.CoachViewModel
 import com.chrisgoac.gymlog.domain.stats.GymFilter
 import com.chrisgoac.gymlog.domain.stats.StatsFilter
 import com.chrisgoac.gymlog.domain.stats.StatsRepository
@@ -194,6 +199,16 @@ class MediaServices(
     fun clock(): PhotoClock = PhotoClock(now(), zone())
 }
 
+/**
+ * What the Coach route needs: the thread + streamed turns, the Pro entitlement (presentation only: the
+ * server decides) and connectivity (the Coach needs the network and never queues a question).
+ */
+class CoachServices(
+    val repository: CoachRepository,
+    val entitlements: EntitlementReader,
+    val online: Flow<Boolean>,
+)
+
 /** What the Achievements route needs: the streak (stats), unlocked milestones + records, and the device zone dates are shown in. */
 class AchievementsServices(
     val stats: StatsRepository,
@@ -218,6 +233,7 @@ fun GymLogApp(
     body: BodyServices? = null,
     achievements: AchievementsServices? = null,
     media: MediaServices? = null,
+    coach: CoachServices? = null,
     syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
     onOpenWorkoutHandled: () -> Unit = {},
@@ -240,7 +256,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, body, achievements, media, syncState)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, body, achievements, media, coach, syncState)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -279,6 +295,7 @@ private fun GymLogNavHost(
     body: BodyServices?,
     achievements: AchievementsServices?,
     media: MediaServices?,
+    coach: CoachServices?,
     syncState: Flow<SyncUiState>?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
@@ -328,12 +345,19 @@ private fun GymLogNavHost(
                     if (trainViewModel == null) {
                         SmokeScreen(GymLogDestination.Train, navController, showSecondaryCards = true)
                     } else {
+                        // Presentation only: the Coach card opens for Pro accounts; the server re-checks every request.
+                        val isPro by remember(coach) { coach?.entitlements?.observeIsPro()?.catch { emit(false) } ?: flowOf(false) }.collectAsState(false)
                         TrainHomeScreen(
                             trainViewModel,
                             onOpenWorkout = { navController.navigate(GymLogDestination.ActiveWorkout(it)) { launchSingleTop = true } },
                             onOpenBody = { navController.navigate(GymLogDestination.Body) },
                             onOpenAchievements = { navController.navigate(GymLogDestination.Achievements) },
                             onSettings = { navController.navigate(GymLogDestination.Settings) },
+                            onOpenCoach = if (coach != null && isPro) {
+                                { navController.navigate(GymLogDestination.Coach) { launchSingleTop = true } }
+                            } else {
+                                null
+                            },
                         )
                     }
                 }
@@ -538,7 +562,16 @@ private fun GymLogNavHost(
                     }
                 }
             }
-            composable<GymLogDestination.Coach> { SmokeScreen(GymLogDestination.Coach, navController, secondary = true) }
+            composable<GymLogDestination.Coach> {
+                if (coach == null) {
+                    SmokeScreen(GymLogDestination.Coach, navController, secondary = true)
+                } else {
+                    // Entry-scoped: the turn survives rotation; leaving the Coach stops it, and the unanswered
+                    // question is offered for retry (same message id) when the Coach is opened again.
+                    val viewModel = viewModel { CoachViewModel(coach.repository, coach.entitlements, coach.online, createSavedStateHandle()) }
+                    CoachScreen(viewModel, onBack = { navController.popBackStack() })
+                }
+            }
             composable<GymLogDestination.Body> {
                 if (body == null) {
                     SmokeScreen(GymLogDestination.Body, navController, secondary = true)

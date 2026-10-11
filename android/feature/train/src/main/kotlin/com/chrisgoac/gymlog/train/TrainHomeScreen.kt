@@ -32,7 +32,7 @@ import java.util.Date
 
 /**
  * Train home: resume the active workout, or start the next routine / a free workout, with the
- * gym selection, the weekly summary and the (not yet available) Coach entry.
+ * gym selection, the weekly summary and the Pro Coach entry (opens the Coach only for Pro accounts).
  * Navigation is by callback; this screen never creates a workout by itself.
  */
 @Composable
@@ -42,6 +42,7 @@ fun TrainHomeScreen(
     onOpenBody: () -> Unit,
     onOpenAchievements: () -> Unit,
     onSettings: (() -> Unit)? = null,
+    onOpenCoach: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
@@ -56,6 +57,7 @@ fun TrainHomeScreen(
         onOpenBody = onOpenBody,
         onOpenAchievements = onOpenAchievements,
         onSettings = onSettings,
+        onOpenCoach = onOpenCoach,
         modifier = modifier,
     )
 }
@@ -72,6 +74,8 @@ internal fun TrainHomeContent(
     onOpenBody: () -> Unit,
     onOpenAchievements: () -> Unit,
     onSettings: (() -> Unit)? = null,
+    /** Null while the account is not Pro (presentation only): the entry is shown locked. */
+    onOpenCoach: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize()) {
@@ -149,7 +153,7 @@ internal fun TrainHomeContent(
                             }
                         }
                     }
-                    item(key = "coach") { CoachEntry() }
+                    item(key = "coach") { CoachEntry(onOpenCoach) }
                     item(key = "body") {
                         HierroCard(onClick = onOpenBody) { HierroText(stringResource(R.string.train_body), style = HierroTheme.typography.title) }
                     }
@@ -216,14 +220,22 @@ private fun GymOption(name: String, selected: Boolean, selectedLabel: String, on
     )
 }
 
-/** Visibly Pro and inert: the Coach arrives in a later plan, so this routes nowhere. */
+/** Opens the Coach for Pro accounts; otherwise visibly Pro and inert (the server re-checks Pro anyway). */
 @Composable
-private fun CoachEntry() {
+private fun CoachEntry(onOpen: (() -> Unit)?) {
     val title = stringResource(R.string.train_coach_title)
-    val pro = stringResource(R.string.train_coach_pro)
-    HierroCard(Modifier.semantics { disabled(); contentDescription = "$title, $pro" }) {
-        HierroText(title, style = HierroTheme.typography.title, color = HierroTheme.colors.textMuted)
-        HierroText(pro, style = HierroTheme.typography.label, color = HierroTheme.colors.accent)
+    if (onOpen != null) {
+        val description = stringResource(R.string.train_coach_open)
+        HierroCard(onClick = onOpen, contentDescription = "$title. $description") {
+            HierroText(title, style = HierroTheme.typography.title)
+            HierroText(description, color = HierroTheme.colors.textMuted)
+        }
+    } else {
+        val pro = stringResource(R.string.train_coach_pro)
+        HierroCard(Modifier.semantics { disabled(); contentDescription = "$title, $pro" }) {
+            HierroText(title, style = HierroTheme.typography.title, color = HierroTheme.colors.textMuted)
+            HierroText(pro, style = HierroTheme.typography.label, color = HierroTheme.colors.accent)
+        }
     }
 }
 
