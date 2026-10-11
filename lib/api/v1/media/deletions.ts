@@ -77,7 +77,7 @@ export async function enqueueReleasedMediaKey(
     table: string;
     userId: string;
     before: { key: unknown; deletedAt: number | null } | null;
-    after: { key: unknown; deletedAt: unknown };
+    after: { key?: unknown; deletedAt: unknown };
     at: number;
   },
 ): Promise<void> {
