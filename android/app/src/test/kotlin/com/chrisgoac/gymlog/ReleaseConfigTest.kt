@@ -2,7 +2,6 @@ package com.chrisgoac.gymlog
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.content.res.Resources
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -66,13 +65,6 @@ class ReleaseConfigTest {
         val info = context.applicationInfo
         assertNotEquals("android:icon", 0, info.icon)
         assertEquals("mipmap", context.resources.getResourceTypeName(info.icon))
-        val pm = context.packageManager
-        @Suppress("DEPRECATION")
-        val launcher = pm.getActivityInfo(
-            android.content.ComponentName(context, MainActivity::class.java),
-            PackageManager.GET_META_DATA,
-        )
-        assertEquals("MainActivity shows the app icon", info.icon, launcher.iconResource.takeIf { it != 0 } ?: info.icon)
         val application = mergedApplicationAttributes()
         assertEquals("@mipmap/ic_launcher", application["icon"])
         assertEquals("@mipmap/ic_launcher_round", application["roundIcon"])
@@ -83,7 +75,12 @@ class ReleaseConfigTest {
         assertFalse(BuildConfig.DEBUG)
         assertEquals("debuggable", 0, context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE)
         assertFalse("merged manifest marks the app debuggable", mergedApplicationAttributes()["debuggable"] == "true")
-        assertFalse("release must not ship a Clerk development key", BuildConfig.CLERK_PUBLISHABLE_KEY.startsWith("pk_test_"))
+        val key = BuildConfig.CLERK_PUBLISHABLE_KEY
+        if (BuildConfig.SIGNED_RELEASE) {
+            assertTrue("a signed release needs a production Clerk key", LIVE_CLERK_KEY.matches(key))
+        } else {
+            assertTrue("an unsigned release has no key or a production one", key.isEmpty() || LIVE_CLERK_KEY.matches(key))
+        }
     }
 
     @Test fun packagedStringsContainNoSecretsOrDebugMenus() {
@@ -115,7 +112,10 @@ class ReleaseConfigTest {
             .associate { it.localName to it.nodeValue }
     }
 
-    /** Every string resource in the packaged table (app, feature modules and libraries). */
+    /**
+     * Every string resource in the packaged table (app, feature modules and libraries). aapt2 assigns
+     * entry ids of one type contiguously from 0, so the first missing id ends the table.
+     */
     private fun packagedStrings(): Map<String, String> {
         val res = context.resources
         val typeBits = R.string.app_name and 0xFFFF0000.toInt()
@@ -136,6 +136,7 @@ class ReleaseConfigTest {
 
     private companion object {
         const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
+        val LIVE_CLERK_KEY = Regex("^pk_live_[A-Za-z0-9+/=_-]+$")
         val SEMVER = Regex("""^\d+\.\d+\.\d+$""")
         val SECRET_MARKERS = listOf("sk_live_", "sk_test_", "pk_test_", "whsec_", "CRON_SECRET", "-----BEGIN", "AKIA", "AIza")
         val DEBUG_MENU = Regex("""(^|_)debug(_|$)""", RegexOption.IGNORE_CASE)

@@ -2,9 +2,14 @@ name: android
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
     paths: ["android/**", "contracts/**", ".github/workflows/android.yml"]
   pull_request:
     paths: ["android/**", "contracts/**", ".github/workflows/android.yml"]
+
+permissions:
+  contents: read
 
 concurrency:
   group: android-${{ github.ref }}
@@ -66,11 +71,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      # Signing happens only when every secret exists (never on forks); otherwise the bundle is unsigned.
-      KEYSTORE_BASE64: ${{ secrets.GYMLOG_KEYSTORE_BASE64 }}
-      GYMLOG_KEYSTORE_PASSWORD: ${{ secrets.GYMLOG_KEYSTORE_PASSWORD }}
-      GYMLOG_KEY_ALIAS: ${{ secrets.GYMLOG_KEY_ALIAS }}
-      GYMLOG_KEY_PASSWORD: ${{ secrets.GYMLOG_KEY_PASSWORD }}
+      # Public Clerk key from a repository variable (not a secret). Empty → unsigned build-health bundle only.
+      GYMLOG_CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
+      # Play needs strictly increasing version codes; github.run_number restarts if this workflow is renamed or
+      # recreated, so set the VERSION_CODE_OFFSET repository variable above the last uploaded code if that happens.
+      VERSION_CODE_OFFSET: ${{ vars.VERSION_CODE_OFFSET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
@@ -83,13 +88,29 @@ jobs:
           packages: 'platform-tools'
       - run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Decode upload keystore
-        if: ${{ github.event_name == 'push' && env.KEYSTORE_BASE64 != '' && env.GYMLOG_KEYSTORE_PASSWORD != '' && env.GYMLOG_KEY_ALIAS != '' && env.GYMLOG_KEY_PASSWORD != '' }}
+      # Signing only for pushes to main and v* tags, and only when every secret exists (never on PRs or forks).
+      # The secrets live in this step's env; they reach the Gradle step through GITHUB_ENV only when signing.
+      - name: Prepare upload keystore
+        if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.GYMLOG_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.GYMLOG_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.GYMLOG_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.GYMLOG_KEY_PASSWORD }}
         run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "Signing secrets missing: building an unsigned bundle."
+            exit 0
+          fi
           keystore="$RUNNER_TEMP/gymlog-upload.jks"
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
-          echo "GYMLOG_KEYSTORE_FILE=$keystore" >> "$GITHUB_ENV"
-      - run: ./gradlew testReleaseUnitTest lintRelease bundleRelease -Pgymlog.versionCode=${{ github.run_number }}
+          {
+            echo "GYMLOG_KEYSTORE_FILE=$keystore"
+            echo "GYMLOG_KEYSTORE_PASSWORD=$STORE_PASSWORD"
+            echo "GYMLOG_KEY_ALIAS=$KEY_ALIAS"
+            echo "GYMLOG_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+      - run: ./gradlew testReleaseUnitTest lintRelease bundleRelease -Pgymlog.versionCode=$(( GITHUB_RUN_NUMBER + ${VERSION_CODE_OFFSET:-0} ))
       - name: Remove keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/gymlog-upload.jks"
