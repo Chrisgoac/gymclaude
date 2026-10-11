@@ -64,6 +64,7 @@ export async function putPrivateObject(key: string, body: Uint8Array, contentTyp
       Body: body,
       ContentType: contentType,
       CacheControl: 'private, max-age=300',
+      ContentDisposition: 'inline',
     }),
   );
 }

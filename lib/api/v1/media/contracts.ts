@@ -25,13 +25,21 @@ export const MEDIA_LIMITS = {
 
 export const PROGRESS_ANGLES = ['frente', 'lado', 'espalda'] as const;
 
-/** Campos de formulario de una subida de foto de ejercicio. `id` opcional = id del registro local. */
+/**
+ * Campos de formulario de una subida de foto de ejercicio. `id` opcional = id del registro local.
+ *
+ * Semántica de reintento: repetir una subida con el mismo `id` (p. ej. tras perder la respuesta)
+ * NO sube un segundo objeto: devuelve el objeto original (misma `objectKey`) con una URL firmada
+ * nueva, aunque los bytes reenviados difieran. Un `id` ya usado en cualquiera de las dos tablas de
+ * fotos por otro registro/usuario → 409 RECORD_ID_CONFLICT; un `id` propio ya borrado → 409
+ * MEDIA_DELETED. Si no se envía `id`, lo genera el servidor.
+ */
 export const ExerciseMediaFieldsSchema = z
   .object({ id: RecordIdSchema.optional(), exerciseId: RecordIdSchema })
   .strict();
 export type ExerciseMediaFields = z.infer<typeof ExerciseMediaFieldsSchema>;
 
-/** Campos de formulario de una subida de foto de progreso. */
+/** Campos de formulario de una subida de foto de progreso (misma semántica de reintento). */
 export const ProgressMediaFieldsSchema = z
   .object({
     id: RecordIdSchema.optional(),

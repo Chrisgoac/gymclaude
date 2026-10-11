@@ -330,6 +330,19 @@ describe.skipIf(!url)('media service (integration)', () => {
     expect(await row('exercise_photos', id)).toMatchObject({ user_id: owner });
   });
 
+  it('refuses an upload id already used in the other photo table', async () => {
+    const userId = newUser();
+    const { storage, service } = setup();
+    const id = `ph-${randomUUID()}`;
+    await service.upload(userId, { kind: 'progress', fields: { id, fecha: NOW, angulo: 'frente' }, bytes: jpeg(10, 10), declaredMime: 'image/jpeg' });
+    const err = await expectApiError(
+      service.upload(userId, { kind: 'exercise', fields: { id, exerciseId: 'e1' }, bytes: jpeg(10, 10), declaredMime: 'image/jpeg' }),
+    );
+    expect(err).toMatchObject({ status: 409, code: 'RECORD_ID_CONFLICT' });
+    expect(storage.putPrivate).toHaveBeenCalledTimes(1);
+    expect(await row('exercise_photos', id)).toBeUndefined();
+  });
+
   it("refuses to attach a photo to another user's exercise", async () => {
     const owner = newUser();
     const intruder = newUser();
@@ -492,6 +505,22 @@ describe.skipIf(!url)('media service (integration)', () => {
     expect(vi.mocked(storage.remove).mock.calls.filter(([k]) => k === up.objectKey)).toHaveLength(1);
     // La fila sigue como tombstone para que la sync lo propague.
     expect(await row('progress_photos', up.mediaId)).toMatchObject({ deleted_at: String(NOW) });
+  });
+
+  it("is not cancelled by another user's live row that copies the key", async () => {
+    const owner = newUser();
+    const intruder = newUser();
+    const { storage, service, setNow } = setup();
+    const up = await service.upload(owner, { kind: 'exercise', fields: { exerciseId: 'e1' }, bytes: jpeg(10, 10), declaredMime: 'image/jpeg' });
+    await service.delete(owner, up.mediaId);
+    // Un cliente ajeno sincroniza una fila viva con la clave del dueño para bloquear el borrado.
+    await db.execute(sql`INSERT INTO progress_photos (id, user_id, updated_at, server_updated_at, url, key, fecha, angulo)
+      VALUES (${`copy-${randomUUID()}`}, ${intruder}, ${NOW}, ${NOW}, 'x', ${up.objectKey}, ${NOW}, 'frente')`);
+
+    setNow(NOW + MEDIA_DELETION_DELAY_MS);
+    await service.processDeletions();
+    expect(storage.remove).toHaveBeenCalledWith(up.objectKey);
+    expect(await pending(up.objectKey)).toBeUndefined();
   });
 
   it('cancels the deletion when the row is live again and retries failed deletions later', async () => {

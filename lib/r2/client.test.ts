@@ -52,7 +52,7 @@ describe('private R2 helpers', () => {
     const [put] = send.mock.calls[0] as unknown as [PutObjectCommand];
     const [del] = send.mock.calls[1] as unknown as [DeleteObjectCommand];
     expect(put).toBeInstanceOf(PutObjectCommand);
-    expect(put.input).toMatchObject({ Bucket: 'gymlog-test', Key: 'users/abc/exercise/1', ContentType: 'image/jpeg' });
+    expect(put.input).toMatchObject({ Bucket: 'gymlog-test', Key: 'users/abc/exercise/1', ContentType: 'image/jpeg', ContentDisposition: 'inline' });
     expect(put.input).not.toHaveProperty('ACL');
     expect(del).toBeInstanceOf(DeleteObjectCommand);
     expect(del.input).toEqual({ Bucket: 'gymlog-test', Key: 'users/abc/exercise/1' });

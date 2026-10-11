@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { exercisePhotos, mediaDeletions, progressPhotos, syncChanges } from '@/db/schema';
+import { exercisePhotos, exercises, mediaDeletions, progressPhotos, syncChanges } from '@/db/schema';
 import type { PoolDb, PoolTx } from '@/db/pool';
 import { ApiError } from '@/lib/api/v1/errors';
 import { lockUserSync } from '@/lib/api/v1/sync/lock';
@@ -193,6 +193,14 @@ export function validateMediaBytes(bytes: Uint8Array, declaredMime: string): Ima
   return { ...info, bytes: bytes.byteLength };
 }
 
+/** 400 si el ejercicio existe y es de otro usuario (ids desconocidos se toleran, como en la sync). */
+async function assertOwnedExercise(q: PoolDb | PoolTx, userId: string, exerciseId: string): Promise<void> {
+  const found = await q.select({ userId: exercises.userId }).from(exercises).where(eq(exercises.id, exerciseId));
+  if (found.some((r) => r.userId !== userId)) {
+    throw new ApiError(400, 'INVALID_REFERENCE', 'Record references an unavailable record', false);
+  }
+}
+
 function parseFields(input: MediaUploadInput): ExerciseMediaFields | ProgressMediaFields {
   const schema = input.kind === 'exercise' ? ExerciseMediaFieldsSchema : ProgressMediaFieldsSchema;
   const parsed = schema.safeParse(input.fields);
@@ -256,10 +264,18 @@ export function createMediaService(deps: MediaServiceDeps) {
     const adapter = adapterFor(kind);
     const mediaId = fields.id ?? uuid();
 
-    // Antes de subir: referencias ajenas y reintentos se resuelven sin tocar R2.
-    if (kind === 'exercise') await adapter.assertReferences(db as unknown as PoolTx, userId, fields as never);
+    // Antes de subir: referencias ajenas y reintentos se resuelven sin tocar R2 (vía rápida; se
+    // repite dentro de la transacción). El id debe estar libre en las DOS tablas de fotos, porque
+    // readGrant/delete resuelven por id sin tipo.
+    const assertExerciseReference = (q: PoolDb | PoolTx) =>
+      kind === 'exercise' ? assertOwnedExercise(q, userId, (fields as ExerciseMediaFields).exerciseId) : Promise.resolve();
+    await assertExerciseReference(db);
     const previous = await findRow(kind, mediaId);
     if (previous) return replayExisting(userId, kind, previous);
+    const otherKind = MEDIA_KINDS.find((k) => k !== kind)!;
+    if (await findRow(otherKind, mediaId)) {
+      throw new ApiError(409, 'RECORD_ID_CONFLICT', 'Record id is not available', false);
+    }
 
     const objectKey = mediaObjectKey(userId, kind, uuid());
     try {
@@ -273,6 +289,10 @@ export function createMediaService(deps: MediaServiceDeps) {
     try {
       inserted = await db.transaction(async (tx) => {
         await lockUserSync(tx, userId);
+        await assertExerciseReference(tx);
+        const otherTable = TABLES[otherKind].table;
+        const [taken] = await tx.select({ id: otherTable.id }).from(otherTable).where(eq(otherTable.id, mediaId));
+        if (taken) throw new ApiError(409, 'RECORD_ID_CONFLICT', 'Record id is not available', false);
         const at = now();
         const domain =
           kind === 'exercise'
@@ -402,11 +422,12 @@ export function createMediaService(deps: MediaServiceDeps) {
     for (const { object_key: key, user_id: owner, attempts } of claimed.rows) {
       const done = () => db.delete(mediaDeletions).where(eq(mediaDeletions.objectKey, key));
       const live = await db.execute(sql`
-        SELECT 1 FROM exercise_photos WHERE key = ${key} AND deleted_at IS NULL
+        SELECT 1 FROM exercise_photos WHERE key = ${key} AND user_id = ${owner} AND deleted_at IS NULL
         UNION ALL
-        SELECT 1 FROM progress_photos WHERE key = ${key} AND deleted_at IS NULL
+        SELECT 1 FROM progress_photos WHERE key = ${key} AND user_id = ${owner} AND deleted_at IS NULL
         LIMIT 1`);
-      // En uso de nuevo, o una clave fuera del namespace del dueño: nunca se borra.
+      // En uso de nuevo por su dueño, o una clave fuera de su namespace: nunca se borra. Una fila
+      // ajena que copie la clave (vía sync) no cancela nada: solo cuenta la del dueño.
       if (live.rows.length > 0 || !isOwnedByUser(owner, key)) {
         await done();
         result.cancelled++;
