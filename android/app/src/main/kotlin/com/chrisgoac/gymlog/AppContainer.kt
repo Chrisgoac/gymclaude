@@ -60,6 +60,12 @@ import com.chrisgoac.gymlog.domain.media.CaptureSlot
 import com.chrisgoac.gymlog.domain.media.PhotoCaptureTargets
 import com.chrisgoac.gymlog.navigation.ProgressServices
 import com.chrisgoac.gymlog.domain.entitlement.EntitlementReader
+import com.chrisgoac.gymlog.billing.DataStoreEntitlementCache
+import com.chrisgoac.gymlog.data.billing.GooglePlayBillingClient
+import com.chrisgoac.gymlog.data.billing.PlayBillingRepository
+import com.chrisgoac.gymlog.domain.billing.BillingEntitlementReader
+import com.chrisgoac.gymlog.domain.billing.BillingRepository
+import com.chrisgoac.gymlog.network.createBillingApi
 import com.chrisgoac.gymlog.domain.time.DayRollover
 import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.domain.routine.RoutineRepository
@@ -139,7 +145,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.async
@@ -268,12 +273,13 @@ class AppContainer(private val application: Application) {
     val statsRepository: StatsRepository = offlineStats
 
     /**
-     * Pro entitlement. TODO(Plan 5): replace with the Play Billing + server entitlement reader; until then
-     * nobody is Pro, so the intelligent-report action shows locked.
+     * Pro entitlement for the AI entry points, from the server-verified [billing] entitlement (Play purchase state
+     * is presentation only). Delegates lazily: [billing] needs the root state machine, built further down.
      */
     val entitlements: EntitlementReader = object : EntitlementReader {
-        override fun observeIsPro(): Flow<Boolean> = flowOf(false)
+        override fun observeIsPro(): Flow<Boolean> = billingEntitlements.observeIsPro()
     }
+    private val billingEntitlements by lazy { BillingEntitlementReader(billing) }
 
     /** Validated network reachability (the Coach needs it; sync's bootstrap retry listens to it too). */
     private val connectivity by lazy { ConnectivityMonitor(application) }
@@ -459,6 +465,25 @@ class AppContainer(private val application: Application) {
     val rootStateMachine: RootStateMachine = RootStateMachine(authSession, databases, bootstrapRunner, appScope, clerkConfigured, startupGate = { startupSweep.await() })
         .also { it.start() }
 
+    /**
+     * Google Play Billing verified by the server; the entitlement is cached per account (DataStore under
+     * `users/<hash>/`) for offline presentation. Re-verifies the account's purchases on start, sign-in and foreground.
+     */
+    private val playBilling: PlayBillingRepository by lazy {
+        PlayBillingRepository(
+            client = GooglePlayBillingClient(application),
+            api = createBillingApi(BuildConfig.API_BASE_URL, authSession, serverClock),
+            cache = DataStoreEntitlementCache(accountPrefs),
+            currentUserId = rootStateMachine.state
+                .map { (it as? RootState.Ready)?.userId }
+                .stateIn(appScope, SharingStarted.Eagerly, (rootStateMachine.state.value as? RootState.Ready)?.userId),
+            scope = appScope,
+            now = syncClock::nowMillis,
+            log = { message, error -> Log.w("GymLogBilling", message, error) },
+        )
+    }
+    val billing: BillingRepository get() = playBilling
+
     private val syncEnvironment = AppSyncEnvironment(
         rootStateMachine.state, syncRepository, syncScheduler, retryGate,
         afterSync = offlineMedia::sweep, // pulled photo tombstones evict cached copies and queued originals
@@ -538,8 +563,14 @@ class AppContainer(private val application: Application) {
         startAchievementReconciliation()
         appScope.launch { RestTimerAccountWatcher(rootStateMachine.state, restTimer::detach).run() }
         appScope.launch { resumeQueuedMedia() }
+        playBilling.start()
         ProcessLifecycleOwner.get().lifecycle.addObserver(
-            LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) syncTriggers.onForeground() },
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_START) {
+                    syncTriggers.onForeground()
+                    playBilling.onForeground()
+                }
+            },
         )
         appScope.launch { BootstrapAutoRetry(rootStateMachine.state, connectivity.online, rootStateMachine::retryBootstrap).run() }
     }

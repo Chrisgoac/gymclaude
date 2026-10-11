@@ -11,6 +11,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.exifinterface)
+    implementation(libs.play.billing.ktx)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

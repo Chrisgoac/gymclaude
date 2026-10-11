@@ -18,6 +18,7 @@ clerk = "1.1.11"
 work = "2.11.2"
 datastore = "1.2.1"
 exifinterface = "1.4.2"
+play-billing = "9.1.0"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
@@ -53,6 +54,7 @@ androidx-work-testing = { module = "androidx.work:work-testing", version.ref = "
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "exifinterface" }
 clerk-android-api = { module = "com.clerk:clerk-android-api", version.ref = "clerk" }
+play-billing-ktx = { module = "com.android.billingclient:billing-ktx", version.ref = "play-billing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

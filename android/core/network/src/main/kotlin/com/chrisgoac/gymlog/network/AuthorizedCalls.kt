@@ -183,7 +183,7 @@ internal class AuthorizedCalls(
         const val HTTP_UNAUTHORIZED = 401
         const val HTTP_FORBIDDEN = 403
 
-        /** 403 codes that are a route's own answer (entitlement), not an authentication failure. */
-        val ROUTE_FORBIDDEN_CODES = setOf("PRO_REQUIRED")
+        /** 403 codes that are a route's own answer (entitlement, purchase owner), not an authentication failure. */
+        val ROUTE_FORBIDDEN_CODES = setOf("PRO_REQUIRED", "PURCHASE_ACCOUNT_MISMATCH")
     }
 }
