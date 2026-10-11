@@ -139,7 +139,7 @@ internal fun ExerciseListContent(
 @Composable
 private fun ExerciseRow(exercise: Exercise, onClick: () -> Unit) {
     val description = stringResource(
-        if (exercise.isCustom) R.string.exercise_row_description_custom else R.string.exercise_row_description,
+        if (exercise.isCustom) R.string.exercises_exercise_row_description_custom else R.string.exercises_exercise_row_description,
         exercise.name, exercise.muscleGroup.label, exercise.equipment.label, exercise.type.label,
     )
     HierroCard(Modifier.semantics(mergeDescendants = true) { contentDescription = description }, onClick = onClick) {
@@ -149,7 +149,7 @@ private fun ExerciseRow(exercise: Exercise, onClick: () -> Unit) {
             color = HierroTheme.colors.textMuted,
         )
         if (exercise.isCustom) {
-            HierroText(stringResource(R.string.exercise_custom_badge).uppercase(), style = HierroTheme.typography.label, color = HierroTheme.colors.accent)
+            HierroText(stringResource(R.string.exercises_exercise_custom_badge).uppercase(), style = HierroTheme.typography.label, color = HierroTheme.colors.accent)
         }
     }
 }

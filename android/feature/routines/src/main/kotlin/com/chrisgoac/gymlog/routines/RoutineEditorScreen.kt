@@ -53,13 +53,13 @@ fun RoutineEditorScreen(
     val state by viewModel.state.collectAsState()
     val picker by viewModel.pickerResults.collectAsState()
     LaunchedEffect(state.done) { if (state.done) onDone() }
-    val title = stringResource(if (state.routineId == null) R.string.editor_title_new else R.string.editor_title_edit)
+    val title = stringResource(if (state.routineId == null) R.string.routines_editor_title_new else R.string.routines_editor_title_edit)
     Column(modifier.fillMaxSize()) {
         HierroScreenHeader(title) { HierroHeaderAction(stringResource(R.string.routines_back), onBack) }
         when {
             state.loading -> HierroLoadingState(stringResource(R.string.routines_loading))
             state.unavailable -> Column(Modifier.padding(16.dp)) {
-                HierroEmptyState(stringResource(R.string.editor_unavailable_title), stringResource(R.string.editor_unavailable_message))
+                HierroEmptyState(stringResource(R.string.routines_editor_unavailable_title), stringResource(R.string.routines_editor_unavailable_message))
             }
             else -> EditorForm(state, picker, viewModel)
         }
@@ -75,22 +75,22 @@ private fun EditorForm(state: RoutineEditorUiState, pickerResults: List<Exercise
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "name") {
-            HierroTextField(input.name, vm::onName, stringResource(R.string.editor_name), errorMessage = state.message(null, RoutineField.NAME))
+            HierroTextField(input.name, vm::onName, stringResource(R.string.routines_editor_name), errorMessage = state.message(null, RoutineField.NAME))
         }
         item(key = "description") {
             HierroTextField(
-                input.description, vm::onDescription, stringResource(R.string.editor_description),
+                input.description, vm::onDescription, stringResource(R.string.routines_editor_description),
                 singleLine = false, errorMessage = state.message(null, RoutineField.DESCRIPTION),
             )
         }
         item(key = "exercises-title") {
             HierroText(
-                stringResource(R.string.editor_exercises_title).uppercase(),
+                stringResource(R.string.routines_editor_exercises_title).uppercase(),
                 Modifier.semantics { heading() }, HierroTheme.typography.label, HierroTheme.colors.textMuted,
             )
         }
         if (input.exercises.isEmpty()) {
-            item(key = "exercises-empty") { HierroText(stringResource(R.string.editor_exercises_empty), color = HierroTheme.colors.textMuted) }
+            item(key = "exercises-empty") { HierroText(stringResource(R.string.routines_editor_exercises_empty), color = HierroTheme.colors.textMuted) }
         }
         items(input.exercises, key = { it.key }) { exercise ->
             val index = input.exercises.indexOf(exercise)
@@ -106,19 +106,19 @@ private fun EditorForm(state: RoutineEditorUiState, pickerResults: List<Exercise
             if (state.pickerOpen) {
                 ExercisePicker(state.pickerQuery, pickerResults, vm::onPickerQuery, vm::addExercise, vm::closePicker)
             } else {
-                HierroButton(stringResource(R.string.editor_add_exercise), vm::openPicker, variant = HierroButtonVariant.Secondary)
+                HierroButton(stringResource(R.string.routines_editor_add_exercise), vm::openPicker, variant = HierroButtonVariant.Secondary)
             }
         }
         item(key = "actions") {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (state.saveFailed) {
                     HierroText(
-                        stringResource(R.string.editor_save_failed),
+                        stringResource(R.string.routines_editor_save_failed),
                         Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         color = HierroTheme.colors.error,
                     )
                 }
-                HierroButton(stringResource(R.string.editor_save), vm::save, loading = state.saving, loadingLabel = stringResource(R.string.editor_saving))
+                HierroButton(stringResource(R.string.routines_editor_save), vm::save, loading = state.saving, loadingLabel = stringResource(R.string.routines_editor_saving))
                 if (state.routineId != null) ManageCard(state, vm)
             }
         }
@@ -133,46 +133,46 @@ private fun ExerciseCard(
     canMoveDown: Boolean,
     vm: RoutineEditorViewModel,
 ) {
-    val name = exercise.exerciseName ?: stringResource(R.string.editor_missing_exercise)
-    val up = stringResource(R.string.editor_exercise_up_description, name)
-    val down = stringResource(R.string.editor_exercise_down_description, name)
-    val remove = stringResource(R.string.editor_exercise_remove_description, name)
+    val name = exercise.exerciseName ?: stringResource(R.string.routines_editor_missing_exercise)
+    val up = stringResource(R.string.routines_editor_exercise_up_description, name)
+    val down = stringResource(R.string.routines_editor_exercise_down_description, name)
+    val remove = stringResource(R.string.routines_editor_exercise_remove_description, name)
     val key = exercise.key
     HierroCard {
         HierroText(name, style = HierroTheme.typography.title)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HierroButton(
-                stringResource(R.string.editor_exercise_up), { vm.moveUp(key) }, contentDescription = up, variant = HierroButtonVariant.Secondary, enabled = canMoveUp,
+                stringResource(R.string.routines_editor_exercise_up), { vm.moveUp(key) }, contentDescription = up, variant = HierroButtonVariant.Secondary, enabled = canMoveUp,
             )
             HierroButton(
-                stringResource(R.string.editor_exercise_down), { vm.moveDown(key) }, contentDescription = down, variant = HierroButtonVariant.Secondary, enabled = canMoveDown,
+                stringResource(R.string.routines_editor_exercise_down), { vm.moveDown(key) }, contentDescription = down, variant = HierroButtonVariant.Secondary, enabled = canMoveDown,
             )
             HierroButton(
-                stringResource(R.string.editor_exercise_remove), { vm.remove(key) }, contentDescription = remove, variant = HierroButtonVariant.Secondary,
+                stringResource(R.string.routines_editor_exercise_remove), { vm.remove(key) }, contentDescription = remove, variant = HierroButtonVariant.Secondary,
             )
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HierroTextField(
-                exercise.sets, { vm.onSets(key, it) }, stringResource(R.string.editor_sets), Modifier.weight(1f),
+                exercise.sets, { vm.onSets(key, it) }, stringResource(R.string.routines_editor_sets), Modifier.weight(1f),
                 errorMessage = state.message(key, RoutineField.SETS), keyboardOptions = NumberKeyboard,
             )
             HierroTextField(
-                exercise.restSeconds, { vm.onRest(key, it) }, stringResource(R.string.editor_rest), Modifier.weight(1f),
+                exercise.restSeconds, { vm.onRest(key, it) }, stringResource(R.string.routines_editor_rest), Modifier.weight(1f),
                 errorMessage = state.message(key, RoutineField.REST), keyboardOptions = NumberKeyboard,
             )
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HierroTextField(
-                exercise.repsMin, { vm.onRepsMin(key, it) }, stringResource(R.string.editor_reps_min), Modifier.weight(1f),
+                exercise.repsMin, { vm.onRepsMin(key, it) }, stringResource(R.string.routines_editor_reps_min), Modifier.weight(1f),
                 errorMessage = state.message(key, RoutineField.REPS_MIN), keyboardOptions = NumberKeyboard,
             )
             HierroTextField(
-                exercise.repsMax, { vm.onRepsMax(key, it) }, stringResource(R.string.editor_reps_max), Modifier.weight(1f),
+                exercise.repsMax, { vm.onRepsMax(key, it) }, stringResource(R.string.routines_editor_reps_max), Modifier.weight(1f),
                 errorMessage = state.message(key, RoutineField.REPS_MAX), keyboardOptions = NumberKeyboard,
             )
         }
         HierroTextField(
-            exercise.notes, { vm.onNotes(key, it) }, stringResource(R.string.editor_notes),
+            exercise.notes, { vm.onNotes(key, it) }, stringResource(R.string.routines_editor_notes),
             singleLine = false, errorMessage = state.message(key, RoutineField.NOTES),
         )
     }
@@ -187,20 +187,20 @@ private fun ExercisePicker(
     onClose: () -> Unit,
 ) {
     HierroCard {
-        HierroText(stringResource(R.string.picker_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.label, HierroTheme.colors.textMuted)
-        HierroTextField(query, onQuery, stringResource(R.string.picker_search))
-        if (results.isEmpty()) HierroText(stringResource(R.string.picker_empty), color = HierroTheme.colors.textMuted)
+        HierroText(stringResource(R.string.routines_picker_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.label, HierroTheme.colors.textMuted)
+        HierroTextField(query, onQuery, stringResource(R.string.routines_picker_search))
+        if (results.isEmpty()) HierroText(stringResource(R.string.routines_picker_empty), color = HierroTheme.colors.textMuted)
         results.take(PICKER_LIMIT).forEach { exercise ->
-            val description = stringResource(R.string.picker_add_description, exercise.name)
+            val description = stringResource(R.string.routines_picker_add_description, exercise.name)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     HierroText(exercise.name)
                     HierroText("${exercise.muscleGroup.label} · ${exercise.equipment.label}", color = HierroTheme.colors.textMuted)
                 }
-                HierroButton(stringResource(R.string.picker_add), { onAdd(exercise) }, contentDescription = description, variant = HierroButtonVariant.Secondary)
+                HierroButton(stringResource(R.string.routines_picker_add), { onAdd(exercise) }, contentDescription = description, variant = HierroButtonVariant.Secondary)
             }
         }
-        HierroButton(stringResource(R.string.picker_done), onClose)
+        HierroButton(stringResource(R.string.routines_picker_done), onClose)
     }
 }
 
@@ -210,16 +210,16 @@ private const val PICKER_LIMIT = 30
 private fun ManageCard(state: RoutineEditorUiState, vm: RoutineEditorViewModel) {
     HierroCard {
         if (state.confirmingDelete) {
-            HierroText(stringResource(R.string.editor_delete_confirm_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.title, HierroTheme.colors.error)
-            HierroText(stringResource(R.string.editor_delete_confirm_message))
-            HierroButton(stringResource(R.string.editor_delete_confirm), vm::confirmDelete, loading = state.saving, variant = HierroButtonVariant.Secondary)
-            HierroButton(stringResource(R.string.editor_delete_cancel), vm::cancelDelete, enabled = !state.saving)
+            HierroText(stringResource(R.string.routines_editor_delete_confirm_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.title, HierroTheme.colors.error)
+            HierroText(stringResource(R.string.routines_editor_delete_confirm_message))
+            HierroButton(stringResource(R.string.routines_editor_delete_confirm), vm::confirmDelete, loading = state.saving, variant = HierroButtonVariant.Secondary)
+            HierroButton(stringResource(R.string.routines_editor_delete_cancel), vm::cancelDelete, enabled = !state.saving)
         } else {
             HierroButton(
-                stringResource(if (state.archived) R.string.editor_restore else R.string.editor_archive), vm::archiveToggle,
+                stringResource(if (state.archived) R.string.routines_editor_restore else R.string.routines_editor_archive), vm::archiveToggle,
                 variant = HierroButtonVariant.Secondary, enabled = !state.saving,
             )
-            HierroButton(stringResource(R.string.editor_delete), vm::askDelete, variant = HierroButtonVariant.Secondary, enabled = !state.saving)
+            HierroButton(stringResource(R.string.routines_editor_delete), vm::askDelete, variant = HierroButtonVariant.Secondary, enabled = !state.saving)
         }
     }
 }
@@ -229,17 +229,17 @@ private fun RoutineEditorUiState.message(exerciseKey: String?, field: RoutineFie
     issue(exerciseKey, field)?.let { error ->
         stringResource(
             when (error) {
-                RoutineError.REQUIRED -> R.string.error_name_required
-                RoutineError.TOO_LONG -> if (field == RoutineField.NAME) R.string.error_name_too_long else R.string.error_text_too_long
-                RoutineError.NOT_A_NUMBER -> R.string.error_number
-                RoutineError.NOT_POSITIVE -> R.string.error_positive
+                RoutineError.REQUIRED -> R.string.routines_error_name_required
+                RoutineError.TOO_LONG -> if (field == RoutineField.NAME) R.string.routines_error_name_too_long else R.string.routines_error_text_too_long
+                RoutineError.NOT_A_NUMBER -> R.string.routines_error_number
+                RoutineError.NOT_POSITIVE -> R.string.routines_error_positive
                 RoutineError.TOO_LARGE -> when (field) {
-                    RoutineField.SETS -> R.string.error_sets_large
-                    RoutineField.REST -> R.string.error_rest_large
-                    else -> R.string.error_reps_large
+                    RoutineField.SETS -> R.string.routines_error_sets_large
+                    RoutineField.REST -> R.string.routines_error_rest_large
+                    else -> R.string.routines_error_reps_large
                 }
-                RoutineError.RANGE_INVERTED -> R.string.error_range
-                RoutineError.DUPLICATE_KEY -> R.string.error_duplicate
+                RoutineError.RANGE_INVERTED -> R.string.routines_error_range
+                RoutineError.DUPLICATE_KEY -> R.string.routines_error_duplicate
             },
         )
     }

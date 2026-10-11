@@ -30,7 +30,7 @@ import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 @Composable
 internal fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = HierroTheme.colors
-    val selectedText = stringResource(R.string.exercise_selected)
+    val selectedText = stringResource(R.string.exercises_exercise_selected)
     Box(
         modifier
             .heightIn(min = HierroShape.minTouchTarget)

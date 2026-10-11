@@ -41,21 +41,21 @@ internal interface ExerciseLogActions {
 /** One exercise of the active workout: context lines (target, last time, suggestion) and its set rows. */
 @Composable
 internal fun ExerciseLogCard(exercise: ExerciseLogUi, actions: ExerciseLogActions, modifier: Modifier = Modifier) {
-    val name = exercise.name ?: stringResource(R.string.workout_unknown_exercise)
+    val name = exercise.name ?: stringResource(R.string.train_workout_unknown_exercise)
     HierroCard(modifier) {
         HierroText(name, Modifier.semantics { heading() }, HierroTheme.typography.title)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!exercise.isFirst) {
-                SmallAction(stringResource(R.string.workout_exercise_up), stringResource(R.string.workout_exercise_up_description, name)) {
+                SmallAction(stringResource(R.string.train_workout_exercise_up), stringResource(R.string.train_workout_exercise_up_description, name)) {
                     actions.onMoveExercise(exercise.id, -1)
                 }
             }
             if (!exercise.isLast) {
-                SmallAction(stringResource(R.string.workout_exercise_down), stringResource(R.string.workout_exercise_down_description, name)) {
+                SmallAction(stringResource(R.string.train_workout_exercise_down), stringResource(R.string.train_workout_exercise_down_description, name)) {
                     actions.onMoveExercise(exercise.id, +1)
                 }
             }
-            SmallAction(stringResource(R.string.workout_exercise_remove), stringResource(R.string.workout_exercise_remove_description, name)) {
+            SmallAction(stringResource(R.string.train_workout_exercise_remove), stringResource(R.string.train_workout_exercise_remove_description, name)) {
                 actions.onRemoveExercise(exercise.id)
             }
         }
@@ -64,11 +64,11 @@ internal fun ExerciseLogCard(exercise: ExerciseLogUi, actions: ExerciseLogAction
             SetRow(set, isFirst = index == 0, isLast = index == exercise.sets.lastIndex, actions = actions)
         }
         HierroButton(
-            stringResource(R.string.workout_add_set),
+            stringResource(R.string.train_workout_add_set),
             { actions.onAddSet(exercise.id) },
             Modifier.fillMaxWidth(),
             variant = HierroButtonVariant.Secondary,
-            contentDescription = stringResource(R.string.workout_add_set_description, name),
+            contentDescription = stringResource(R.string.train_workout_add_set_description, name),
         )
     }
 }
@@ -83,17 +83,17 @@ private fun ContextLines(exercise: ExerciseLogUi) {
                     target.repsMin != null && target.repsMax != null && target.repsMin != target.repsMax -> "${target.repsMin}–${target.repsMax}"
                     else -> (target.repsMax ?: target.repsMin)?.toString() ?: "—"
                 }
-                add(stringResource(R.string.workout_target_sets_reps, target.sets?.toString() ?: "—", reps))
+                add(stringResource(R.string.train_workout_target_sets_reps, target.sets?.toString() ?: "—", reps))
             }
-            target.restSeconds?.takeIf { it > 0 }?.let { add(stringResource(R.string.workout_target_rest, it)) }
+            target.restSeconds?.takeIf { it > 0 }?.let { add(stringResource(R.string.train_workout_target_rest, it)) }
         }
-        if (parts.isNotEmpty()) HierroText(stringResource(R.string.workout_target, parts.joinToString(" · ")), style = HierroTheme.typography.label, color = muted)
+        if (parts.isNotEmpty()) HierroText(stringResource(R.string.train_workout_target, parts.joinToString(" · ")), style = HierroTheme.typography.label, color = muted)
     }
     val previous = exercise.previous
     val date = exercise.previousDate
     if (previous != null && date != null) {
         HierroText(
-            stringResource(R.string.workout_previous, SetValidation.formatWeight(previous.weight), previous.reps, DateFormat.getDateInstance(DateFormat.SHORT).format(Date(date))),
+            stringResource(R.string.train_workout_previous, SetValidation.formatWeight(previous.weight), previous.reps, DateFormat.getDateInstance(DateFormat.SHORT).format(Date(date))),
             style = HierroTheme.typography.label,
             color = muted,
         )
@@ -102,7 +102,7 @@ private fun ContextLines(exercise: ExerciseLogUi) {
     val suggestion = exercise.suggestion
     if (badge != null && suggestion != null) {
         HierroText(
-            stringResource(R.string.workout_suggestion, badge, SetValidation.formatWeight(suggestion.weight), suggestion.reps),
+            stringResource(R.string.train_workout_suggestion, badge, SetValidation.formatWeight(suggestion.weight), suggestion.reps),
             style = HierroTheme.typography.label,
             color = HierroTheme.colors.accent,
         )
@@ -112,16 +112,16 @@ private fun ContextLines(exercise: ExerciseLogUi) {
 @Composable
 private fun SetRow(set: SetRowUi, isFirst: Boolean, isLast: Boolean, actions: ExerciseLogActions) {
     HierroSetRow(
-        badge = if (set.warmup) stringResource(R.string.workout_set_warmup_badge) else set.number.toString(),
+        badge = if (set.warmup) stringResource(R.string.train_workout_set_warmup_badge) else set.number.toString(),
         weightText = set.weightText,
         repsText = set.repsText,
         onWeight = { actions.onWeight(set.id, it) },
         onReps = { actions.onReps(set.id, it) },
         labels = SetRowLabels(
-            weight = stringResource(R.string.workout_set_weight),
-            reps = stringResource(R.string.workout_set_reps),
-            weightDescription = stringResource(R.string.workout_set_weight_description, set.number),
-            repsDescription = stringResource(R.string.workout_set_reps_description, set.number),
+            weight = stringResource(R.string.train_workout_set_weight),
+            reps = stringResource(R.string.train_workout_set_reps),
+            weightDescription = stringResource(R.string.train_workout_set_weight_description, set.number),
+            repsDescription = stringResource(R.string.train_workout_set_reps_description, set.number),
         ),
         weightError = set.weightError?.let { weightErrorText(it) },
         repsError = set.repsError?.let { repsErrorText(it) },
@@ -129,36 +129,36 @@ private fun SetRow(set: SetRowUi, isFirst: Boolean, isLast: Boolean, actions: Ex
         trailing = {
             if (set.completed) {
                 HierroButton(
-                    stringResource(R.string.workout_set_completed),
+                    stringResource(R.string.train_workout_set_completed),
                     { actions.onReopen(set.id) },
-                    contentDescription = stringResource(R.string.workout_set_reopen_description, set.number),
+                    contentDescription = stringResource(R.string.train_workout_set_reopen_description, set.number),
                 )
             } else {
                 HierroButton(
-                    stringResource(R.string.workout_set_complete),
+                    stringResource(R.string.train_workout_set_complete),
                     { actions.onComplete(set.id) },
                     variant = HierroButtonVariant.Secondary,
-                    contentDescription = stringResource(R.string.workout_set_complete_description, set.number),
+                    contentDescription = stringResource(R.string.train_workout_set_complete_description, set.number),
                 )
             }
         },
     ) {
         set.previous?.let { previous ->
             HierroText(
-                stringResource(R.string.workout_set_previous, SetValidation.formatWeight(previous.weight), previous.reps),
+                stringResource(R.string.train_workout_set_previous, SetValidation.formatWeight(previous.weight), previous.reps),
                 Modifier.padding(end = 4.dp),
                 HierroTheme.typography.label,
                 HierroTheme.colors.textMuted,
             )
         }
         SmallAction(
-            stringResource(if (set.warmup) R.string.workout_set_warmup_on else R.string.workout_set_warmup),
-            stringResource(R.string.workout_set_warmup_description, set.number),
+            stringResource(if (set.warmup) R.string.train_workout_set_warmup_on else R.string.train_workout_set_warmup),
+            stringResource(R.string.train_workout_set_warmup_description, set.number),
             selected = set.warmup,
         ) { actions.onWarmup(set.id, !set.warmup) }
-        if (!isFirst) SmallAction("↑", stringResource(R.string.workout_set_up_description, set.number)) { actions.onMoveSet(set.id, -1) }
-        if (!isLast) SmallAction("↓", stringResource(R.string.workout_set_down_description, set.number)) { actions.onMoveSet(set.id, +1) }
-        SmallAction("✕", stringResource(R.string.workout_set_remove_description, set.number)) { actions.onRemoveSet(set.id) }
+        if (!isFirst) SmallAction("↑", stringResource(R.string.train_workout_set_up_description, set.number)) { actions.onMoveSet(set.id, -1) }
+        if (!isLast) SmallAction("↓", stringResource(R.string.train_workout_set_down_description, set.number)) { actions.onMoveSet(set.id, +1) }
+        SmallAction("✕", stringResource(R.string.train_workout_set_remove_description, set.number)) { actions.onRemoveSet(set.id) }
     }
 }
 
@@ -169,7 +169,7 @@ private fun SmallAction(text: String, description: String, selected: Boolean = f
 @Composable
 private fun weightErrorText(error: SetFieldError): String = stringResource(
     when (error) {
-        SetFieldError.TOO_LARGE -> R.string.workout_field_too_large_weight
+        SetFieldError.TOO_LARGE -> R.string.train_workout_field_too_large_weight
         else -> error.messageRes()
     },
 )
@@ -177,16 +177,16 @@ private fun weightErrorText(error: SetFieldError): String = stringResource(
 @Composable
 private fun repsErrorText(error: SetFieldError): String = stringResource(
     when (error) {
-        SetFieldError.TOO_LARGE -> R.string.workout_field_too_large_reps
+        SetFieldError.TOO_LARGE -> R.string.train_workout_field_too_large_reps
         else -> error.messageRes()
     },
 )
 
 private fun SetFieldError.messageRes(): Int = when (this) {
-    SetFieldError.REQUIRED -> R.string.workout_field_required
-    SetFieldError.NOT_A_NUMBER -> R.string.workout_field_not_a_number
-    SetFieldError.NOT_INTEGER -> R.string.workout_field_not_integer
-    SetFieldError.NEGATIVE -> R.string.workout_field_negative
-    SetFieldError.TOO_LARGE -> R.string.workout_field_too_large_reps
-    SetFieldError.ZERO_REPS -> R.string.workout_field_zero_reps
+    SetFieldError.REQUIRED -> R.string.train_workout_field_required
+    SetFieldError.NOT_A_NUMBER -> R.string.train_workout_field_not_a_number
+    SetFieldError.NOT_INTEGER -> R.string.train_workout_field_not_integer
+    SetFieldError.NEGATIVE -> R.string.train_workout_field_negative
+    SetFieldError.TOO_LARGE -> R.string.train_workout_field_too_large_reps
+    SetFieldError.ZERO_REPS -> R.string.train_workout_field_zero_reps
 }

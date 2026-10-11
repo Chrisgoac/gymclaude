@@ -115,42 +115,42 @@ internal fun ActiveWorkoutContent(
         return
     }
     Column(modifier.fillMaxSize().imePadding()) {
-        HierroScreenHeader(stringResource(R.string.workout_title)) {
-            HierroHeaderAction(stringResource(R.string.workout_back), onBack)
+        HierroScreenHeader(stringResource(R.string.train_workout_title)) {
+            HierroHeaderAction(stringResource(R.string.train_workout_back), onBack)
         }
         restTimer()
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when (state.status) {
-                WorkoutLogStatus.Loading -> item(key = "loading") { HierroLoadingState(stringResource(R.string.workout_loading)) }
+                WorkoutLogStatus.Loading -> item(key = "loading") { HierroLoadingState(stringResource(R.string.train_workout_loading)) }
                 WorkoutLogStatus.Missing -> item(key = "missing") {
-                    HierroEmptyState(stringResource(R.string.workout_missing_title), stringResource(R.string.workout_missing_message))
+                    HierroEmptyState(stringResource(R.string.train_workout_missing_title), stringResource(R.string.train_workout_missing_message))
                 }
                 WorkoutLogStatus.Failed -> item(key = "failed") {
                     HierroErrorState(
                         message = stringResource(R.string.train_error_message),
-                        retryLabel = stringResource(R.string.workout_retry),
+                        retryLabel = stringResource(R.string.train_workout_retry),
                         onRetry = onRetry,
-                        title = stringResource(R.string.workout_error_title),
+                        title = stringResource(R.string.train_workout_error_title),
                     )
                 }
                 WorkoutLogStatus.Ready -> {
                     item(key = "started") {
                         HierroText(
-                            stringResource(R.string.workout_started, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(state.startedAt ?: 0L))),
+                            stringResource(R.string.train_workout_started, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(state.startedAt ?: 0L))),
                             color = HierroTheme.colors.textMuted,
                         )
                     }
                     if (state.writeFailed) {
                         item(key = "write-failed") {
                             HierroCard {
-                                HierroText(stringResource(R.string.workout_write_failed), color = HierroTheme.colors.error)
-                                HierroButton(stringResource(R.string.workout_dismiss), onDismissError, variant = HierroButtonVariant.Secondary)
+                                HierroText(stringResource(R.string.train_workout_write_failed), color = HierroTheme.colors.error)
+                                HierroButton(stringResource(R.string.train_workout_dismiss), onDismissError, variant = HierroButtonVariant.Secondary)
                             }
                         }
                     }
                     if (state.exercises.isEmpty()) {
                         item(key = "empty") {
-                            HierroEmptyState(stringResource(R.string.workout_empty_title), stringResource(R.string.workout_empty_message))
+                            HierroEmptyState(stringResource(R.string.train_workout_empty_title), stringResource(R.string.train_workout_empty_message))
                         }
                     }
                     // Keyed by the stable logged-exercise id: focus and typed text survive reorders and re-emissions.
@@ -159,16 +159,16 @@ internal fun ActiveWorkoutContent(
                         if (state.pickerOpen) {
                             ExerciseSearch(state.pickerQuery, pickerResults, onPickerQuery, onPick, onClosePicker)
                         } else {
-                            HierroButton(stringResource(R.string.workout_add_exercise), onOpenPicker, Modifier.fillMaxWidth())
+                            HierroButton(stringResource(R.string.train_workout_add_exercise), onOpenPicker, Modifier.fillMaxWidth())
                         }
                     }
                     item(key = "notes") {
                         HierroTextField(
                             value = state.notes,
                             onValueChange = onNotes,
-                            label = stringResource(R.string.workout_notes),
+                            label = stringResource(R.string.train_workout_notes),
                             singleLine = false,
-                            errorMessage = if (state.notesTooLong) stringResource(R.string.workout_notes_too_long) else null,
+                            errorMessage = if (state.notesTooLong) stringResource(R.string.train_workout_notes_too_long) else null,
                         )
                     }
                     if (canFinish) item(key = "finish") { FinishCard(finish, state.notesTooLong, onFinish, onConfirmFinishEmpty, onCancelFinish) }
@@ -188,25 +188,25 @@ private fun ExerciseSearch(
 ) {
     HierroCard {
         HierroText(
-            stringResource(R.string.workout_picker_title).uppercase(),
+            stringResource(R.string.train_workout_picker_title).uppercase(),
             Modifier.semantics { heading() },
             HierroTheme.typography.label,
             HierroTheme.colors.textMuted,
         )
-        HierroTextField(query, onQuery, stringResource(R.string.workout_picker_search))
-        if (results.isEmpty()) HierroText(stringResource(R.string.workout_picker_empty), color = HierroTheme.colors.textMuted)
+        HierroTextField(query, onQuery, stringResource(R.string.train_workout_picker_search))
+        if (results.isEmpty()) HierroText(stringResource(R.string.train_workout_picker_empty), color = HierroTheme.colors.textMuted)
         results.take(MAX_RESULTS).forEach { exercise ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 HierroText(exercise.name, Modifier.weight(1f))
                 HierroButton(
-                    stringResource(R.string.workout_picker_add),
+                    stringResource(R.string.train_workout_picker_add),
                     { onPick(exercise) },
                     variant = HierroButtonVariant.Secondary,
-                    contentDescription = stringResource(R.string.workout_picker_add_description, exercise.name),
+                    contentDescription = stringResource(R.string.train_workout_picker_add_description, exercise.name),
                 )
             }
         }
-        HierroButton(stringResource(R.string.workout_picker_close), onClose, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
+        HierroButton(stringResource(R.string.train_workout_picker_close), onClose, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
     }
 }
 
@@ -224,17 +224,17 @@ private fun FinishCard(
     HierroCard {
         when (finish) {
             FinishUiState.ConfirmEmpty -> {
-                HierroText(stringResource(R.string.finish_empty_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.title)
-                HierroText(stringResource(R.string.finish_empty_message))
-                HierroButton(stringResource(R.string.finish_empty_confirm), onConfirmEmpty, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
-                HierroButton(stringResource(R.string.finish_empty_cancel), onCancel, Modifier.fillMaxWidth())
+                HierroText(stringResource(R.string.train_finish_empty_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.title)
+                HierroText(stringResource(R.string.train_finish_empty_message))
+                HierroButton(stringResource(R.string.train_finish_empty_confirm), onConfirmEmpty, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
+                HierroButton(stringResource(R.string.train_finish_empty_cancel), onCancel, Modifier.fillMaxWidth())
             }
             else -> {
                 if (finish == FinishUiState.Failed) {
-                    HierroText(stringResource(R.string.finish_failed), color = HierroTheme.colors.error)
+                    HierroText(stringResource(R.string.train_finish_failed), color = HierroTheme.colors.error)
                 }
                 HierroButton(
-                    stringResource(R.string.finish_button),
+                    stringResource(R.string.train_finish_button),
                     onFinish,
                     Modifier.fillMaxWidth(),
                     enabled = !notesTooLong,
@@ -249,22 +249,22 @@ private fun FinishCard(
 @Composable
 internal fun FinishSummaryContent(summary: WorkoutSummary, onDone: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize()) {
-        HierroScreenHeader(stringResource(R.string.finish_summary_title))
+        HierroScreenHeader(stringResource(R.string.train_finish_summary_title))
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "stats") {
                 HierroCard {
-                    HierroText(stringResource(R.string.finish_summary_done), Modifier.semantics { heading() }, HierroTheme.typography.title)
+                    HierroText(stringResource(R.string.train_finish_summary_done), Modifier.semantics { heading() }, HierroTheme.typography.title)
                     val minutes = summary.durationSeconds / 60
                     HierroText(
-                        if (minutes < 60) stringResource(R.string.finish_summary_duration_minutes, minutes)
-                        else stringResource(R.string.finish_summary_duration_hours, minutes / 60, minutes % 60),
+                        if (minutes < 60) stringResource(R.string.train_finish_summary_duration_minutes, minutes)
+                        else stringResource(R.string.train_finish_summary_duration_hours, minutes / 60, minutes % 60),
                     )
-                    HierroText(pluralStringResource(R.plurals.finish_summary_exercises, summary.exerciseCount, summary.exerciseCount))
-                    HierroText(pluralStringResource(R.plurals.finish_summary_sets, summary.setCount, summary.setCount))
-                    HierroText(stringResource(R.string.finish_summary_volume, SetValidation.formatWeight(Math.round(summary.volume * 10) / 10.0)))
+                    HierroText(pluralStringResource(R.plurals.train_finish_summary_exercises, summary.exerciseCount, summary.exerciseCount))
+                    HierroText(pluralStringResource(R.plurals.train_finish_summary_sets, summary.setCount, summary.setCount))
+                    HierroText(stringResource(R.string.train_finish_summary_volume, SetValidation.formatWeight(Math.round(summary.volume * 10) / 10.0)))
                 }
             }
-            item(key = "done") { HierroButton(stringResource(R.string.finish_summary_close), onDone, Modifier.fillMaxWidth()) }
+            item(key = "done") { HierroButton(stringResource(R.string.train_finish_summary_close), onDone, Modifier.fillMaxWidth()) }
         }
     }
 }

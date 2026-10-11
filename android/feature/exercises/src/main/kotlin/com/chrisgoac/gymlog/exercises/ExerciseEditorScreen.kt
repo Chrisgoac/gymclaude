@@ -47,13 +47,13 @@ fun ExerciseEditorScreen(
 ) {
     val state by viewModel.state.collectAsState()
     LaunchedEffect(state.savedId) { state.savedId?.let(onSaved) }
-    val title = stringResource(if (state.exerciseId == null) R.string.editor_title_new else R.string.editor_title_edit)
+    val title = stringResource(if (state.exerciseId == null) R.string.exercises_editor_title_new else R.string.exercises_editor_title_edit)
     Column(modifier.fillMaxSize()) {
         HierroScreenHeader(title) { HierroHeaderAction(stringResource(R.string.exercises_back), onBack) }
         when {
             state.loading -> HierroLoadingState(stringResource(R.string.exercises_loading))
             state.unavailable -> Column(Modifier.padding(16.dp)) {
-                HierroEmptyState(stringResource(R.string.editor_unavailable_title), stringResource(R.string.editor_unavailable_message))
+                HierroEmptyState(stringResource(R.string.exercises_editor_unavailable_title), stringResource(R.string.exercises_editor_unavailable_message))
             }
             else -> EditorForm(state, viewModel)
         }
@@ -67,34 +67,34 @@ private fun EditorForm(state: ExerciseEditorUiState, vm: ExerciseEditorViewModel
         Modifier.verticalScroll(rememberScrollState()).imePadding().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        HierroTextField(input.name, vm::onName, stringResource(R.string.editor_name), errorMessage = state.error(ExerciseField.NAME))
-        ChoiceRow(stringResource(R.string.editor_muscle), MuscleGroup.entries, input.muscleGroup, { it.label }, vm::onMuscleGroup)
-        ChoiceRow(stringResource(R.string.editor_equipment), Equipment.entries, input.equipment, { it.label }, vm::onEquipment)
-        ChoiceRow(stringResource(R.string.editor_type), ExerciseType.entries, input.type, { it.label }, vm::onType)
+        HierroTextField(input.name, vm::onName, stringResource(R.string.exercises_editor_name), errorMessage = state.error(ExerciseField.NAME))
+        ChoiceRow(stringResource(R.string.exercises_editor_muscle), MuscleGroup.entries, input.muscleGroup, { it.label }, vm::onMuscleGroup)
+        ChoiceRow(stringResource(R.string.exercises_editor_equipment), Equipment.entries, input.equipment, { it.label }, vm::onEquipment)
+        ChoiceRow(stringResource(R.string.exercises_editor_type), ExerciseType.entries, input.type, { it.label }, vm::onType)
         HierroTextField(
-            input.incrementKg, vm::onIncrementKg, stringResource(R.string.editor_increment),
+            input.incrementKg, vm::onIncrementKg, stringResource(R.string.exercises_editor_increment),
             errorMessage = state.error(ExerciseField.INCREMENT_KG),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         )
         HierroTextField(
-            input.videoUrl, vm::onVideoUrl, stringResource(R.string.editor_video),
+            input.videoUrl, vm::onVideoUrl, stringResource(R.string.exercises_editor_video),
             errorMessage = state.error(ExerciseField.VIDEO_URL),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         )
-        HierroTextField(input.description, vm::onDescription, stringResource(R.string.editor_description), singleLine = false, errorMessage = state.error(ExerciseField.DESCRIPTION))
-        HierroTextField(input.execution, vm::onExecution, stringResource(R.string.editor_execution), singleLine = false, errorMessage = state.error(ExerciseField.EXECUTION))
-        HierroTextField(input.notes, vm::onNotes, stringResource(R.string.editor_notes), singleLine = false, errorMessage = state.error(ExerciseField.NOTES))
+        HierroTextField(input.description, vm::onDescription, stringResource(R.string.exercises_editor_description), singleLine = false, errorMessage = state.error(ExerciseField.DESCRIPTION))
+        HierroTextField(input.execution, vm::onExecution, stringResource(R.string.exercises_editor_execution), singleLine = false, errorMessage = state.error(ExerciseField.EXECUTION))
+        HierroTextField(input.notes, vm::onNotes, stringResource(R.string.exercises_editor_notes), singleLine = false, errorMessage = state.error(ExerciseField.NOTES))
         HierroCard {
-            HierroText(stringResource(R.string.photos_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.label, HierroTheme.colors.textMuted)
-            HierroButton(stringResource(R.string.photos_add), onClick = {}, enabled = false, variant = HierroButtonVariant.Secondary)
-            HierroText(stringResource(R.string.photos_unavailable), color = HierroTheme.colors.textMuted)
+            HierroText(stringResource(R.string.exercises_photos_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.label, HierroTheme.colors.textMuted)
+            HierroButton(stringResource(R.string.exercises_photos_add), onClick = {}, enabled = false, variant = HierroButtonVariant.Secondary)
+            HierroText(stringResource(R.string.exercises_photos_unavailable), color = HierroTheme.colors.textMuted)
         }
         if (state.saveFailed) {
-            HierroText(stringResource(R.string.editor_save_failed), Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = HierroTheme.colors.error)
+            HierroText(stringResource(R.string.exercises_editor_save_failed), Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = HierroTheme.colors.error)
         }
         HierroButton(
-            stringResource(R.string.editor_save), vm::save,
-            loading = state.saving, loadingLabel = stringResource(R.string.editor_saving),
+            stringResource(R.string.exercises_editor_save), vm::save,
+            loading = state.saving, loadingLabel = stringResource(R.string.exercises_editor_saving),
         )
     }
 }
@@ -103,13 +103,13 @@ private fun EditorForm(state: ExerciseEditorUiState, vm: ExerciseEditorViewModel
 private fun ExerciseEditorUiState.error(field: ExerciseField): String? = errors[field]?.let { error ->
     stringResource(
         when (error) {
-            ExerciseFieldError.NAME_REQUIRED -> R.string.error_name_required
-            ExerciseFieldError.NAME_TOO_LONG -> R.string.error_name_too_long
-            ExerciseFieldError.VIDEO_URL_INVALID -> R.string.error_video_invalid
-            ExerciseFieldError.VIDEO_URL_TOO_LONG -> R.string.error_video_too_long
-            ExerciseFieldError.TEXT_TOO_LONG -> R.string.error_text_too_long
-            ExerciseFieldError.INCREMENT_NOT_A_NUMBER -> R.string.error_increment_number
-            ExerciseFieldError.INCREMENT_NOT_POSITIVE -> R.string.error_increment_positive
+            ExerciseFieldError.NAME_REQUIRED -> R.string.exercises_error_name_required
+            ExerciseFieldError.NAME_TOO_LONG -> R.string.exercises_error_name_too_long
+            ExerciseFieldError.VIDEO_URL_INVALID -> R.string.exercises_error_video_invalid
+            ExerciseFieldError.VIDEO_URL_TOO_LONG -> R.string.exercises_error_video_too_long
+            ExerciseFieldError.TEXT_TOO_LONG -> R.string.exercises_error_text_too_long
+            ExerciseFieldError.INCREMENT_NOT_A_NUMBER -> R.string.exercises_error_increment_number
+            ExerciseFieldError.INCREMENT_NOT_POSITIVE -> R.string.exercises_error_increment_positive
         },
     )
 }

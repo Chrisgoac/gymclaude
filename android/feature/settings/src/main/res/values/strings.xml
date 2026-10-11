@@ -3,45 +3,45 @@
     <string name="settings_title">Ajustes</string>
     <string name="settings_back">Atrás</string>
 
-    <string name="sync_title">Sincronización</string>
-    <string name="sync_synced">Todo sincronizado</string>
-    <plurals name="sync_pending">
+    <string name="settings_sync_title">Sincronización</string>
+    <string name="settings_sync_synced">Todo sincronizado</string>
+    <plurals name="settings_sync_pending">
         <item quantity="one">%d cambio pendiente de enviar</item>
         <item quantity="other">%d cambios pendientes de enviar</item>
     </plurals>
-    <plurals name="sync_offline">
+    <plurals name="settings_sync_offline">
         <item quantity="one">Sin conexión con el servidor. %d cambio guardado en este dispositivo.</item>
         <item quantity="other">Sin conexión con el servidor. %d cambios guardados en este dispositivo.</item>
     </plurals>
-    <string name="sync_session_required">Tu sesión ha caducado. Inicia sesión de nuevo para seguir sincronizando.</string>
-    <plurals name="sync_needs_action">
+    <string name="settings_sync_session_required">Tu sesión ha caducado. Inicia sesión de nuevo para seguir sincronizando.</string>
+    <plurals name="settings_sync_needs_action">
         <item quantity="one">El servidor ha rechazado %d cambio. Revísalo en los detalles.</item>
         <item quantity="other">El servidor ha rechazado %d cambios. Revísalos en los detalles.</item>
     </plurals>
-    <string name="sync_session_rejected">El servidor rechazó la sesión. Tus datos siguen guardados en este dispositivo; vuelve a intentarlo más tarde.</string>
-    <string name="sync_now">Sincronizar ahora</string>
-    <string name="sync_retry">Reintentar</string>
-    <string name="sync_details">Ver detalles</string>
+    <string name="settings_sync_session_rejected">El servidor rechazó la sesión. Tus datos siguen guardados en este dispositivo; vuelve a intentarlo más tarde.</string>
+    <string name="settings_sync_now">Sincronizar ahora</string>
+    <string name="settings_sync_retry">Reintentar</string>
+    <string name="settings_sync_details">Ver detalles</string>
 
-    <string name="diag_title">Detalle de sincronización</string>
-    <string name="diag_empty_title">Sin cambios pendientes</string>
-    <string name="diag_empty_message">Todo lo que has hecho ya está en el servidor.</string>
-    <string name="diag_change">Cambio %1$s</string>
-    <string name="diag_status_rejected">Rechazado</string>
-    <string name="diag_status_queued">En cola</string>
-    <string name="diag_tables">Tablas: %1$s</string>
-    <string name="diag_tables_unknown">Tablas: desconocidas</string>
-    <string name="diag_attempts">Intentos: %1$d</string>
-    <string name="diag_last_error">Último error: %1$s</string>
+    <string name="settings_diag_title">Detalle de sincronización</string>
+    <string name="settings_diag_empty_title">Sin cambios pendientes</string>
+    <string name="settings_diag_empty_message">Todo lo que has hecho ya está en el servidor.</string>
+    <string name="settings_diag_change">Cambio %1$s</string>
+    <string name="settings_diag_status_rejected">Rechazado</string>
+    <string name="settings_diag_status_queued">En cola</string>
+    <string name="settings_diag_tables">Tablas: %1$s</string>
+    <string name="settings_diag_tables_unknown">Tablas: desconocidas</string>
+    <string name="settings_diag_attempts">Intentos: %1$d</string>
+    <string name="settings_diag_last_error">Último error: %1$s</string>
 
-    <string name="account_title">Cuenta</string>
-    <string name="sign_out">Cerrar sesión</string>
-    <string name="sign_out_confirm_title">Cambios sin sincronizar</string>
-    <plurals name="sign_out_confirm_message">
+    <string name="settings_account_title">Cuenta</string>
+    <string name="settings_sign_out">Cerrar sesión</string>
+    <string name="settings_sign_out_confirm_title">Cambios sin sincronizar</string>
+    <plurals name="settings_sign_out_confirm_message">
         <item quantity="one">Tienes %d cambio sin sincronizar. Si cierras sesión ahora se perderá.</item>
         <item quantity="other">Tienes %d cambios sin sincronizar. Si cierras sesión ahora se perderán.</item>
     </plurals>
-    <string name="sign_out_discard">Cerrar sesión y borrar</string>
-    <string name="sign_out_keep">Cancelar</string>
-    <string name="sign_out_failed">No se pudo cerrar sesión. Inténtalo de nuevo.</string>
+    <string name="settings_sign_out_discard">Cerrar sesión y borrar</string>
+    <string name="settings_sign_out_keep">Cancelar</string>
+    <string name="settings_sign_out_failed">No se pudo cerrar sesión. Inténtalo de nuevo.</string>
 </resources>

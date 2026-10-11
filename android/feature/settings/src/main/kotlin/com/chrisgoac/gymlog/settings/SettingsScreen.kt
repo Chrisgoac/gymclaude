@@ -40,18 +40,18 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit, onSyncDetai
 @Composable
 private fun AccountCard(phase: SignOutPhase, viewModel: SettingsViewModel) {
     HierroCard {
-        HierroText(stringResource(R.string.account_title).uppercase(), style = HierroTheme.typography.label, color = HierroTheme.colors.textMuted)
+        HierroText(stringResource(R.string.settings_account_title).uppercase(), style = HierroTheme.typography.label, color = HierroTheme.colors.textMuted)
         when (phase) {
             is SignOutPhase.Confirm -> {
-                HierroText(stringResource(R.string.sign_out_confirm_title).uppercase(), style = HierroTheme.typography.title, color = HierroTheme.colors.error)
-                HierroText(pluralStringResource(R.plurals.sign_out_confirm_message, phase.unsyncedChanges, phase.unsyncedChanges))
-                HierroButton(stringResource(R.string.sign_out_keep), viewModel::cancelSignOut)
-                HierroButton(stringResource(R.string.sign_out_discard), viewModel::confirmDiscard, variant = HierroButtonVariant.Secondary)
+                HierroText(stringResource(R.string.settings_sign_out_confirm_title).uppercase(), style = HierroTheme.typography.title, color = HierroTheme.colors.error)
+                HierroText(pluralStringResource(R.plurals.settings_sign_out_confirm_message, phase.unsyncedChanges, phase.unsyncedChanges))
+                HierroButton(stringResource(R.string.settings_sign_out_keep), viewModel::cancelSignOut)
+                HierroButton(stringResource(R.string.settings_sign_out_discard), viewModel::confirmDiscard, variant = HierroButtonVariant.Secondary)
             }
             else -> {
-                if (phase == SignOutPhase.Failed) HierroText(stringResource(R.string.sign_out_failed), color = HierroTheme.colors.error)
+                if (phase == SignOutPhase.Failed) HierroText(stringResource(R.string.settings_sign_out_failed), color = HierroTheme.colors.error)
                 HierroButton(
-                    stringResource(R.string.sign_out),
+                    stringResource(R.string.settings_sign_out),
                     viewModel::signOut,
                     variant = HierroButtonVariant.Secondary,
                     loading = phase == SignOutPhase.Working,

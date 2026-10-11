@@ -44,7 +44,7 @@ fun ExerciseDetailScreen(
     val deleted by viewModel.deleted.collectAsState()
     LaunchedEffect(deleted) { if (deleted) onBack() }
     Column(modifier.fillMaxSize()) {
-        HierroScreenHeader(stringResource(R.string.detail_title)) {
+        HierroScreenHeader(stringResource(R.string.exercises_detail_title)) {
             HierroHeaderAction(stringResource(R.string.exercises_back), onBack)
         }
         when (val current = state) {
@@ -56,7 +56,7 @@ fun ExerciseDetailScreen(
                 )
             }
             ExerciseDetailUiState.NotFound -> Column(Modifier.padding(16.dp)) {
-                HierroEmptyState(stringResource(R.string.detail_not_found_title), stringResource(R.string.detail_not_found_message))
+                HierroEmptyState(stringResource(R.string.exercises_detail_not_found_title), stringResource(R.string.exercises_detail_not_found_message))
             }
             is ExerciseDetailUiState.Found -> ExerciseDetailContent(current, onEdit, viewModel::delete)
         }
@@ -73,17 +73,17 @@ internal fun ExerciseDetailContent(state: ExerciseDetailUiState.Found, onEdit: (
     ) {
         HierroCard {
             HierroText(exercise.name, Modifier.semantics { heading() }, HierroTheme.typography.title)
-            Fact(stringResource(R.string.detail_muscle), exercise.muscleGroup.label)
-            Fact(stringResource(R.string.detail_equipment), exercise.equipment.label)
-            Fact(stringResource(R.string.detail_type), exercise.type.label)
+            Fact(stringResource(R.string.exercises_detail_muscle), exercise.muscleGroup.label)
+            Fact(stringResource(R.string.exercises_detail_equipment), exercise.equipment.label)
+            Fact(stringResource(R.string.exercises_detail_type), exercise.type.label)
             exercise.incrementKg?.let {
-                Fact(stringResource(R.string.detail_increment), stringResource(R.string.detail_increment_value, formatKg(it)))
+                Fact(stringResource(R.string.exercises_detail_increment), stringResource(R.string.exercises_detail_increment_value, formatKg(it)))
             }
-            if (!exercise.isCustom) HierroText(stringResource(R.string.detail_catalog_note), color = HierroTheme.colors.textMuted)
+            if (!exercise.isCustom) HierroText(stringResource(R.string.exercises_detail_catalog_note), color = HierroTheme.colors.textMuted)
         }
-        TextSection(R.string.detail_description, exercise.description)
-        TextSection(R.string.detail_execution, exercise.execution)
-        TextSection(R.string.detail_notes, exercise.notes)
+        TextSection(R.string.exercises_detail_description, exercise.description)
+        TextSection(R.string.exercises_detail_execution, exercise.execution)
+        TextSection(R.string.exercises_detail_notes, exercise.notes)
         exercise.videoUrl?.let { url -> VideoButton(url) }
         PhotosCard()
         if (exercise.isCustom) ManageCard(state, confirmingDelete, { confirmingDelete = it }, onEdit, onDelete)
@@ -108,16 +108,16 @@ private fun TextSection(titleRes: Int, text: String?) {
 @Composable
 private fun VideoButton(url: String) {
     val uriHandler = LocalUriHandler.current
-    HierroButton(stringResource(R.string.detail_video), onClick = { runCatching { uriHandler.openUri(url) } }, variant = HierroButtonVariant.Secondary)
+    HierroButton(stringResource(R.string.exercises_detail_video), onClick = { runCatching { uriHandler.openUri(url) } }, variant = HierroButtonVariant.Secondary)
 }
 
 /** Photos arrive with cloud storage (a later plan): shown disabled with the reason, never a fake upload. */
 @Composable
 private fun PhotosCard() {
     HierroCard {
-        HierroText(stringResource(R.string.photos_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.label, HierroTheme.colors.textMuted)
-        HierroButton(stringResource(R.string.photos_add), onClick = {}, enabled = false, variant = HierroButtonVariant.Secondary)
-        HierroText(stringResource(R.string.photos_unavailable), color = HierroTheme.colors.textMuted)
+        HierroText(stringResource(R.string.exercises_photos_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.label, HierroTheme.colors.textMuted)
+        HierroButton(stringResource(R.string.exercises_photos_add), onClick = {}, enabled = false, variant = HierroButtonVariant.Secondary)
+        HierroText(stringResource(R.string.exercises_photos_unavailable), color = HierroTheme.colors.textMuted)
     }
 }
 
@@ -130,15 +130,15 @@ private fun ManageCard(
     onDelete: () -> Unit,
 ) {
     HierroCard {
-        if (state.deleteFailed) HierroText(stringResource(R.string.detail_delete_failed), color = HierroTheme.colors.error)
+        if (state.deleteFailed) HierroText(stringResource(R.string.exercises_detail_delete_failed), color = HierroTheme.colors.error)
         if (confirming) {
-            HierroText(stringResource(R.string.detail_delete_confirm_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.title, HierroTheme.colors.error)
-            HierroText(stringResource(R.string.detail_delete_confirm_message))
-            HierroButton(stringResource(R.string.detail_delete_confirm), onDelete, loading = state.deleting, variant = HierroButtonVariant.Secondary)
-            HierroButton(stringResource(R.string.detail_delete_cancel), { setConfirming(false) }, enabled = !state.deleting)
+            HierroText(stringResource(R.string.exercises_detail_delete_confirm_title).uppercase(), Modifier.semantics { heading() }, HierroTheme.typography.title, HierroTheme.colors.error)
+            HierroText(stringResource(R.string.exercises_detail_delete_confirm_message))
+            HierroButton(stringResource(R.string.exercises_detail_delete_confirm), onDelete, loading = state.deleting, variant = HierroButtonVariant.Secondary)
+            HierroButton(stringResource(R.string.exercises_detail_delete_cancel), { setConfirming(false) }, enabled = !state.deleting)
         } else {
-            HierroButton(stringResource(R.string.detail_edit), { onEdit(state.exercise.id) })
-            HierroButton(stringResource(R.string.detail_delete), { setConfirming(true) }, variant = HierroButtonVariant.Secondary)
+            HierroButton(stringResource(R.string.exercises_detail_edit), { onEdit(state.exercise.id) })
+            HierroButton(stringResource(R.string.exercises_detail_delete), { setConfirming(true) }, variant = HierroButtonVariant.Secondary)
         }
     }
 }

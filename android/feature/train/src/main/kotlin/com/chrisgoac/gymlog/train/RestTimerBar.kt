@@ -92,16 +92,16 @@ internal fun RestTimerBar(
     val finished = RestTimer.isFinished(state, nowMillis)
     val time = formatRest(RestTimer.remaining(state, nowMillis))
     val label = when {
-        finished -> stringResource(R.string.rest_finished)
-        paused -> stringResource(R.string.rest_paused, time)
+        finished -> stringResource(R.string.train_rest_finished)
+        paused -> stringResource(R.string.train_rest_paused, time)
         else -> time
     }
     // Only the end is announced (polite live region): a countdown read out every second would be noise.
     val announce = if (finished) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier
-    val spoken = stringResource(if (paused) R.string.rest_description_paused else R.string.rest_description, time)
+    val spoken = stringResource(if (paused) R.string.train_rest_description_paused else R.string.train_rest_description, time)
     HierroCard(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HierroText(stringResource(R.string.rest_title), color = HierroTheme.colors.textMuted)
+            HierroText(stringResource(R.string.train_rest_title), color = HierroTheme.colors.textMuted)
             HierroText(
                 label,
                 modifier = announce.semantics { if (!finished) contentDescription = spoken },
@@ -109,16 +109,16 @@ internal fun RestTimerBar(
             )
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HierroButton(stringResource(R.string.rest_plus_15), { onExtend(15) }, variant = HierroButtonVariant.Secondary)
-            HierroButton(stringResource(R.string.rest_plus_30), { onExtend(30) }, variant = HierroButtonVariant.Secondary)
+            HierroButton(stringResource(R.string.train_rest_plus_15), { onExtend(15) }, variant = HierroButtonVariant.Secondary)
+            HierroButton(stringResource(R.string.train_rest_plus_30), { onExtend(30) }, variant = HierroButtonVariant.Secondary)
             if (!finished) {
                 if (paused) {
-                    HierroButton(stringResource(R.string.rest_resume), onResume, variant = HierroButtonVariant.Secondary)
+                    HierroButton(stringResource(R.string.train_rest_resume), onResume, variant = HierroButtonVariant.Secondary)
                 } else {
-                    HierroButton(stringResource(R.string.rest_pause), onPause, variant = HierroButtonVariant.Secondary)
+                    HierroButton(stringResource(R.string.train_rest_pause), onPause, variant = HierroButtonVariant.Secondary)
                 }
             }
-            HierroButton(stringResource(if (finished) R.string.rest_dismiss else R.string.rest_skip), onSkip, variant = HierroButtonVariant.Secondary)
+            HierroButton(stringResource(if (finished) R.string.train_rest_dismiss else R.string.train_rest_skip), onSkip, variant = HierroButtonVariant.Secondary)
         }
     }
 }

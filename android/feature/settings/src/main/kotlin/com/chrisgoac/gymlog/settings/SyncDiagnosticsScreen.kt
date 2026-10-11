@@ -24,13 +24,13 @@ import com.chrisgoac.gymlog.domain.OutboxDiagnostic
 @Composable
 fun SyncDiagnosticsScreen(diagnostics: List<OutboxDiagnostic>, onBack: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize()) {
-        HierroScreenHeader(stringResource(R.string.diag_title)) {
+        HierroScreenHeader(stringResource(R.string.settings_diag_title)) {
             HierroHeaderAction(stringResource(R.string.settings_back), onBack)
         }
         if (diagnostics.isEmpty()) {
             HierroEmptyState(
-                title = stringResource(R.string.diag_empty_title),
-                message = stringResource(R.string.diag_empty_message),
+                title = stringResource(R.string.settings_diag_empty_title),
+                message = stringResource(R.string.settings_diag_empty_message),
                 modifier = Modifier.padding(16.dp),
             )
         } else {
@@ -49,17 +49,17 @@ fun SyncDiagnosticsScreen(diagnostics: List<OutboxDiagnostic>, onBack: () -> Uni
 private fun DiagnosticRow(entry: OutboxDiagnostic) {
     val colors = HierroTheme.colors
     HierroCard {
-        HierroText(stringResource(R.string.diag_change, entry.mutationIdPrefix), style = HierroTheme.typography.title)
+        HierroText(stringResource(R.string.settings_diag_change, entry.mutationIdPrefix), style = HierroTheme.typography.title)
         HierroText(
-            stringResource(if (entry.rejected) R.string.diag_status_rejected else R.string.diag_status_queued),
+            stringResource(if (entry.rejected) R.string.settings_diag_status_rejected else R.string.settings_diag_status_queued),
             style = HierroTheme.typography.label,
             color = if (entry.rejected) colors.error else colors.textMuted,
         )
         HierroText(
-            if (entry.tables.isEmpty()) stringResource(R.string.diag_tables_unknown)
-            else stringResource(R.string.diag_tables, entry.tables.joinToString(", ")),
+            if (entry.tables.isEmpty()) stringResource(R.string.settings_diag_tables_unknown)
+            else stringResource(R.string.settings_diag_tables, entry.tables.joinToString(", ")),
         )
-        HierroText(stringResource(R.string.diag_attempts, entry.attemptCount))
-        entry.lastErrorCode?.let { HierroText(stringResource(R.string.diag_last_error, it)) }
+        HierroText(stringResource(R.string.settings_diag_attempts, entry.attemptCount))
+        entry.lastErrorCode?.let { HierroText(stringResource(R.string.settings_diag_last_error, it)) }
     }
 }
