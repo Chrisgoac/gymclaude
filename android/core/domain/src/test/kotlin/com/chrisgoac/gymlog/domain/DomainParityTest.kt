@@ -49,7 +49,7 @@ class DomainParityTest {
     fun everyFixtureFileHasARunner() {
         val runners = setOf(
             "period-cases.json", "fecha-cases.json", "num-cases.json", "body-stats-cases.json",
-            "progression.json", "routine-rotation.json", "insight-cases.json",
+            "progression.json", "routine-rotation.json", "insight-cases.json", "achievement-cases.json",
         )
         val files = dir.listFiles { f -> f.extension == "json" }!!.map { it.name }.toSet()
         assertEquals("fixture without a runner (add it to DomainParityTest)", emptySet<String>(), files - runners)

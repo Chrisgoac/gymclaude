@@ -68,6 +68,17 @@ class FinishWorkoutUseCaseTest {
         assertEquals("notas", repo.lastNotes)
     }
 
+    @Test fun `the finish hook fires once for a write and never for a repeated finish`() = runTest {
+        val repo = Fake(aggregate(listOf(set("a", 100.0, 5)))).also { it.now = started + 60_000 }
+        var finished = 0
+        val useCase = FinishWorkoutUseCase(repo, repo, onFinished = { finished++ })
+
+        useCase("s1")
+        useCase("s1")
+
+        assertEquals(1, finished)
+    }
+
     @Test fun `finishing an already finished workout is a successful no-op`() = runTest {
         val repo = Fake(aggregate(listOf(set("a", 100.0, 5)))).also { it.now = started + 60_000 }
         val useCase = FinishWorkoutUseCase(repo, repo)

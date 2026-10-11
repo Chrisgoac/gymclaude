@@ -6,7 +6,17 @@ import android.util.Log
 import androidx.core.content.edit
 import com.chrisgoac.gymlog.auth.ClerkAuthGateway
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
+import com.chrisgoac.gymlog.data.achievement.OfflineAchievementRepository
 import com.chrisgoac.gymlog.data.catalog.CatalogAsset
+import com.chrisgoac.gymlog.domain.achievement.AchievementReconcileScheduler
+import com.chrisgoac.gymlog.domain.achievement.AchievementRepository
+import com.chrisgoac.gymlog.domain.achievement.ReconcileAchievementsUseCase
+import com.chrisgoac.gymlog.domain.history.InvalidationScope
+import com.chrisgoac.gymlog.domain.stats.InvalidatingSyncRepository
+import com.chrisgoac.gymlog.navigation.AchievementsServices
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import com.chrisgoac.gymlog.data.exercise.OfflineExerciseRepository
 import com.chrisgoac.gymlog.data.routine.OfflineRoutineRepository
 import com.chrisgoac.gymlog.data.workout.OfflineWorkoutLogRepository
@@ -171,16 +181,19 @@ class AppContainer(private val application: Application) {
     /** Set logging inside a workout (sets, order, notes, history for suggestions); local writes only. */
     val workoutLogRepository: WorkoutLogRepository = OfflineWorkoutLogRepository(databases, ::localMutationRunner)
 
+    /** Stale-data events (SaveResult scopes) for derived data outside the Room stats queries (Coach snapshot, achievements). */
+    val statsInvalidation: StatsInvalidation = StatsInvalidation()
+
     /** Finish-workout use case: completion write + rest-timer cleanup (the notification shares [restTimer]). */
     val finishWorkout: FinishWorkoutUseCase =
-        FinishWorkoutUseCase(offlineWorkouts, offlineWorkouts, restTimer)
+        FinishWorkoutUseCase(
+            offlineWorkouts, offlineWorkouts, restTimer,
+            onFinished = { statsInvalidation.publish(setOf(InvalidationScope.ACHIEVEMENTS)) },
+        )
 
     /** Finished-workout history (filters, detail, change gym, delete) of the open account; writes are local (outbox). */
     val historyRepository: HistoryRepository =
         OfflineHistoryRepository(databases, ::localMutationRunner, exerciseRepository, routineRepository, now = syncClock::nowMillis)
-
-    /** Stale-data events (SaveResult scopes) for derived data outside the Room stats queries (Coach snapshot, achievements). */
-    val statsInvalidation: StatsInvalidation = StatsInvalidation()
 
     /**
      * Full edit of a past workout: validation against the server clock, then ONE local mutation (conflict-checked);
@@ -215,6 +228,15 @@ class AppContainer(private val application: Application) {
         zone = ZoneId::systemDefault,
     )
 
+    /** Achievements (unlocked milestones, personal records) and their reconciliation; writes are local (outbox). */
+    private val offlineAchievements = OfflineAchievementRepository(databases, ::localMutationRunner)
+    val achievementRepository: AchievementRepository = offlineAchievements
+
+    /** Unlocks / tombstones achievements from the history. Triggered by [startAchievementReconciliation], never by a screen. */
+    val reconcileAchievements = ReconcileAchievementsUseCase(offlineAchievements, now = syncClock::nowMillis, zone = ZoneId::systemDefault)
+
+    val achievementsServices: AchievementsServices = AchievementsServices(statsRepository, achievementRepository, ZoneId::systemDefault)
+
     /** Body measurements (+ the PWA's custom-metric setting) of the open account. */
     val bodyRepository: BodyRepository = OfflineBodyRepository(databases, ::localMutationRunner, now = syncClock::nowMillis)
 
@@ -229,7 +251,9 @@ class AppContainer(private val application: Application) {
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)
 
-    val syncRepository: SyncRepository = SyncRepositoryImpl(databases, syncApi, bootstrapRepository, syncLocks)
+    // A pull that brought rows publishes the invalidation scopes (achievement reconciliation listens to them).
+    val syncRepository: SyncRepository =
+        InvalidatingSyncRepository(SyncRepositoryImpl(databases, syncApi, bootstrapRepository, syncLocks), statsInvalidation)
 
     private val retryGate = RetryAfterGate()
     private val syncScheduler = WorkManagerSyncScheduler({ WorkManager.getInstance(application) }, retryGate)
@@ -286,9 +310,25 @@ class AppContainer(private val application: Application) {
         if (clerkConfigured) SettingsServices(syncUseCases, signOutUseCase) else null
     }
 
+    /**
+     * Reconciles achievements after a finished workout, a history edit and a sync pull (all publish
+     * [InvalidationScope.ACHIEVEMENTS]) and when an account becomes ready; debounced, and deferred while a workout is recorded.
+     */
+    private fun startAchievementReconciliation() {
+        val readyAccounts = rootStateMachine.state.map { (it as? RootState.Ready)?.userId }.distinctUntilChanged().filterNotNull().map { }
+        val workoutActive = offlineWorkouts.observeActiveWorkout().map { it != null }.distinctUntilChanged().catch { emit(false) }
+        val scheduler = AchievementReconcileScheduler(
+            statsInvalidation, readyAccounts, workoutActive,
+            reconcile = { reconcileAchievements() },
+            onError = { Log.w("GymLogAchievements", "Could not reconcile achievements", it) },
+        )
+        appScope.launch { scheduler.run() }
+    }
+
     /** Starts the sync triggers: ready account, foreground, local mutations, connectivity (bootstrap retry). */
     fun startSync() {
         syncTriggers.start()
+        startAchievementReconciliation()
         appScope.launch { RestTimerAccountWatcher(rootStateMachine.state, restTimer::detach).run() }
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) syncTriggers.onForeground() },

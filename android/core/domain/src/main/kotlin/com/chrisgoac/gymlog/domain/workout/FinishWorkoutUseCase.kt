@@ -56,6 +56,8 @@ class FinishWorkoutUseCase(
     private val workouts: WorkoutRepository,
     private val finisher: WorkoutFinishRepository,
     private val restTimer: RestTimerController? = null,
+    /** Called once after a finish that wrote (never for a repeated tap): derived data such as achievements is now stale. */
+    private val onFinished: () -> Unit = {},
 ) {
     suspend operator fun invoke(sessionId: String, notes: String? = null, confirmEmpty: Boolean = false): FinishResult {
         val before = readLive(sessionId) ?: return FinishResult.NotFound
@@ -71,6 +73,7 @@ class FinishWorkoutUseCase(
             return FinishResult.NotFound
         }
         restTimer?.reset()
+        onFinished()
         // Totals come from what is stored now (a sync may have changed rows since [before]).
         val after = readLive(sessionId) ?: before
         return FinishResult.Finished(after.summary(duration), alreadyFinished = false)

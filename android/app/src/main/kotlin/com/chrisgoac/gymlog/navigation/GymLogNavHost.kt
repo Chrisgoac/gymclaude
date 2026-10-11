@@ -100,6 +100,9 @@ import com.chrisgoac.gymlog.domain.stats.GymFilter
 import com.chrisgoac.gymlog.domain.stats.StatsFilter
 import com.chrisgoac.gymlog.domain.stats.StatsRepository
 import com.chrisgoac.gymlog.domain.time.Period
+import com.chrisgoac.gymlog.achievements.AchievementsScreen
+import com.chrisgoac.gymlog.achievements.AchievementsViewModel
+import com.chrisgoac.gymlog.domain.achievement.AchievementRepository
 import com.chrisgoac.gymlog.body.BodyScreen
 import com.chrisgoac.gymlog.body.BodyViewModel
 import com.chrisgoac.gymlog.body.BodyClock
@@ -146,6 +149,13 @@ class BodyServices(
     fun clock(): BodyClock = BodyClock(now(), zone())
 }
 
+/** What the Achievements route needs: the streak (stats), unlocked milestones + records, and the device zone dates are shown in. */
+class AchievementsServices(
+    val stats: StatsRepository,
+    val achievements: AchievementRepository,
+    val zone: () -> ZoneId,
+)
+
 /** Five-tab shell. Route content is smoke-only except Settings; real feature screens replace it in later tasks. */
 @Composable
 fun GymLogApp(
@@ -161,6 +171,7 @@ fun GymLogApp(
     historyEditing: HistoryEditServices? = null,
     progress: ProgressServices? = null,
     body: BodyServices? = null,
+    achievements: AchievementsServices? = null,
     syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
     onOpenWorkoutHandled: () -> Unit = {},
@@ -183,7 +194,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, body, syncState)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, body, achievements, syncState)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -220,6 +231,7 @@ private fun GymLogNavHost(
     historyEditing: HistoryEditServices?,
     progress: ProgressServices?,
     body: BodyServices?,
+    achievements: AchievementsServices?,
     syncState: Flow<SyncUiState>?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
@@ -400,6 +412,7 @@ private fun GymLogNavHost(
                             // TODO(Plan 5): navigate to the intelligent report once it exists; null keeps the action disabled.
                             onOpenReport = null,
                             onOpenBody = body?.let { { navController.navigate(GymLogDestination.Body) { launchSingleTop = true } } },
+                            onOpenAchievements = achievements?.let { { navController.navigate(GymLogDestination.Achievements) { launchSingleTop = true } } },
                         )
                     }
                 }
@@ -477,7 +490,14 @@ private fun GymLogNavHost(
                     BodyScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
                 }
             }
-            composable<GymLogDestination.Achievements> { SmokeScreen(GymLogDestination.Achievements, navController, secondary = true) }
+            composable<GymLogDestination.Achievements> {
+                if (achievements == null) {
+                    SmokeScreen(GymLogDestination.Achievements, navController, secondary = true)
+                } else {
+                    val viewModel = viewModel { AchievementsViewModel(achievements.stats, achievements.achievements, achievements.zone) }
+                    AchievementsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+                }
+            }
             composable<GymLogDestination.Settings> {
                 if (settingsViewModel == null) {
                     SmokeScreen(GymLogDestination.Settings, navController, secondary = true)

@@ -56,6 +56,7 @@ fun ProgressScreen(
     onOpenExercise: (exerciseId: String, filter: StatsFilter) -> Unit,
     onOpenReport: (() -> Unit)? = null,
     onOpenBody: (() -> Unit)? = null,
+    onOpenAchievements: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -68,6 +69,7 @@ fun ProgressScreen(
         onOpenExercise = { id -> onOpenExercise(id, StatsFilter(state.period, state.gym)) },
         onOpenReport = onOpenReport,
         onOpenBody = onOpenBody,
+        onOpenAchievements = onOpenAchievements,
         modifier = modifier,
     )
 }
@@ -82,6 +84,7 @@ internal fun ProgressContent(
     onOpenExercise: (String) -> Unit,
     onOpenReport: (() -> Unit)?,
     onOpenBody: (() -> Unit)? = null,
+    onOpenAchievements: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize()) {
@@ -116,6 +119,11 @@ internal fun ProgressContent(
             if (onOpenBody != null) {
                 item(key = "body") {
                     HierroButton(stringResource(R.string.progress_body_action), onOpenBody, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
+                }
+            }
+            if (onOpenAchievements != null) {
+                item(key = "achievements") {
+                    HierroButton(stringResource(R.string.progress_achievements_action), onOpenAchievements, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
                 }
             }
             item(key = "report") { ReportAction(state.isPro, onOpenReport) }

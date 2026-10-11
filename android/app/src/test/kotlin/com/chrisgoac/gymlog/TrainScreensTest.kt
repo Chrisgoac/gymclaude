@@ -74,11 +74,11 @@ private class OneRoutine : RoutineRepository {
 class TrainScreensTest {
     @get:Rule val rule = createComposeRule()
 
-    private fun show(workouts: MemoryWorkouts, opened: MutableList<String> = mutableListOf()): TrainHomeViewModel {
+    private fun show(workouts: MemoryWorkouts, opened: MutableList<String> = mutableListOf(), onAchievements: () -> Unit = {}): TrainHomeViewModel {
         val viewModel = TrainHomeViewModel(workouts, OneRoutine(), StartWorkoutUseCase(workouts))
         rule.setContent {
             GymLogTheme {
-                TrainHomeScreen(viewModel, onOpenWorkout = { opened += it }, onOpenBody = {}, onOpenAchievements = {})
+                TrainHomeScreen(viewModel, onOpenWorkout = { opened += it }, onOpenBody = {}, onOpenAchievements = onAchievements)
             }
         }
         rule.waitForIdle()
@@ -99,6 +99,14 @@ class TrainScreensTest {
         assertEquals(listOf<String?>("g1"), workouts.startedGyms)
 
         rule.onNodeWithContentDescription("Coach, Pro · próximamente").performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test fun theWeekAndStreakCardOpensAchievementsAndSaysSo() {
+        var opened = 0
+        show(MemoryWorkouts(), onAchievements = { opened++ })
+
+        rule.onNodeWithContentDescription("2 sesiones de 3. Racha: 4 semanas. Ver logros").performScrollTo().performClick()
+        assertEquals(1, opened)
     }
 
     @Test fun activeWorkoutReplacesStartCardsWithContinue() {

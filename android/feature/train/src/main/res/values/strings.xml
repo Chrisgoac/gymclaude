@@ -33,6 +33,7 @@
         <item quantity="one">Racha: %1$d semana</item>
         <item quantity="other">Racha: %1$d semanas</item>
     </plurals>
+    <string name="train_streak_open">Ver logros</string>
     <string name="train_streak_none">Sin racha todavía</string>
 
     <string name="train_coach_title">Coach</string>

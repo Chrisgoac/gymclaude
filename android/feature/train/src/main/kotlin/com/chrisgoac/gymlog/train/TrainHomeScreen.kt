@@ -126,23 +126,24 @@ internal fun TrainHomeContent(
                     }
                     state.summary?.let { summary ->
                         item(key = "summary") {
-                            HierroCard {
+                            // The streak card opens Achievements; one spoken line states what it shows and where it goes.
+                            val sessionsText = pluralStringResource(R.plurals.train_week_sessions, summary.weekSessions, summary.weekSessions, summary.weeklyGoal)
+                            val streakText = if (summary.streakWeeks > 0) {
+                                pluralStringResource(R.plurals.train_streak, summary.streakWeeks, summary.streakWeeks)
+                            } else {
+                                stringResource(R.string.train_streak_none)
+                            }
+                            val open = stringResource(R.string.train_streak_open)
+                            HierroCard(onClick = onOpenAchievements, contentDescription = "$sessionsText. $streakText. $open") {
                                 HierroText(
                                     stringResource(R.string.train_week_title).uppercase(),
                                     Modifier.semantics { heading() },
                                     HierroTheme.typography.label,
                                     HierroTheme.colors.textMuted,
                                 )
+                                HierroText(sessionsText, style = HierroTheme.typography.title)
                                 HierroText(
-                                    pluralStringResource(R.plurals.train_week_sessions, summary.weekSessions, summary.weekSessions, summary.weeklyGoal),
-                                    style = HierroTheme.typography.title,
-                                )
-                                HierroText(
-                                    if (summary.streakWeeks > 0) {
-                                        pluralStringResource(R.plurals.train_streak, summary.streakWeeks, summary.streakWeeks)
-                                    } else {
-                                        stringResource(R.string.train_streak_none)
-                                    },
+                                    streakText,
                                     color = HierroTheme.colors.textMuted,
                                 )
                             }

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:locale="es">
     <string name="progress_title">Progreso</string>
+    <string name="progress_achievements_action">Logros y récords</string>
     <string name="progress_body_action">Peso y medidas corporales</string>
     <string name="progress_back">Atrás</string>
     <string name="progress_loading">Cargando progreso</string>

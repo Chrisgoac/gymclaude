@@ -1,5 +1,7 @@
 package com.chrisgoac.gymlog.domain.stats
 
+import com.chrisgoac.gymlog.domain.SyncRepository
+import com.chrisgoac.gymlog.domain.SyncResult
 import com.chrisgoac.gymlog.domain.history.InvalidationScope
 import com.chrisgoac.gymlog.domain.history.SaveResult
 import com.chrisgoac.gymlog.domain.history.SaveWorkoutDraftUseCase
@@ -82,4 +84,20 @@ class InvalidatingSaveWorkoutDraftUseCase(
 ) : SaveWorkoutDraftUseCase {
     override suspend fun invoke(original: WorkoutAggregate, draft: WorkoutDraft): SaveResult =
         inner(original, draft).also { if (it is SaveResult.Saved) invalidation.publish(it.invalidatedScopes) }
+}
+
+/**
+ * Publishes every [InvalidationScope] after a sync run that pulled rows: a pull can change any
+ * workout, setting or achievement, so derived data outside the Room stats queries (achievement
+ * reconciliation, the Coach snapshot) must re-check. Only a fully applied run counts (Success), never a
+ * retryable or failed one, and a run that pulled nothing publishes nothing.
+ */
+class InvalidatingSyncRepository(
+    private val inner: SyncRepository,
+    private val invalidation: StatsInvalidation,
+) : SyncRepository by inner {
+    override suspend fun syncOnce(userId: String): SyncResult =
+        inner.syncOnce(userId).also { result ->
+            if (result is SyncResult.Success && result.pulled > 0) invalidation.publish(InvalidationScope.entries.toSet())
+        }
 }

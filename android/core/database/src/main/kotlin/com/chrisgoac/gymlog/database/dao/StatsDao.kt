@@ -38,6 +38,9 @@ data class StatExerciseSpanRow(val exerciseId: String, val firstLoggedExerciseId
 /** Name and group of an exercise (catalog or synced row, deleted ones included like the PWA's `bulkGet`). */
 data class StatExerciseInfoRow(val id: String, val nombre: String, val grupoMuscular: String)
 
+/** Heaviest live set weight of one exercise and the earliest session date it was lifted (warm-ups count, as in the PWA). */
+data class StatPersonalRecordRow(val exerciseId: String, val peso: Double, val startedAt: Long)
+
 // Every query keeps only live rows whose parents are live; `:gymId IS NULL` = every gym. Session ranges walk
 // index_workout_sessions_fecha; one exercise's rows come through index_logged_exercises_exerciseId.
 private const val LIVE = "s.deletedAt IS NULL AND le.deletedAt IS NULL AND (:gymId IS NULL OR s.gymId = :gymId)"
@@ -95,6 +98,34 @@ interface StatsDao {
 
     @Query("SELECT id, nombre, grupoMuscular FROM exercises WHERE id IN (:ids)")
     suspend fun syncedInfo(ids: List<String>): List<StatExerciseInfoRow>
+
+    // ---- Achievement evidence (whole history, aggregated in SQL; live rows with live parents only) ----
+
+    @Query("SELECT COUNT(*) FROM workout_sessions WHERE deletedAt IS NULL")
+    suspend fun liveSessionCount(): Int
+
+    /** Σ weight × reps over every live set. */
+    @Query("SELECT COALESCE(SUM(ls.peso * ls.reps), 0.0) $FROM_SETS WHERE s.deletedAt IS NULL AND le.deletedAt IS NULL AND ls.deletedAt IS NULL")
+    suspend fun totalVolume(): Double
+
+    /** Exercises with at least one live set. */
+    @Query("SELECT COUNT(DISTINCT le.exerciseId) $FROM_SETS WHERE s.deletedAt IS NULL AND le.deletedAt IS NULL AND ls.deletedAt IS NULL")
+    suspend fun exercisesWithSets(): Int
+
+    /** Live mesocycles that ended before [now] (`fechaInicio + semanas weeks < now`, strict). */
+    @Query("SELECT COUNT(*) FROM mesocycles WHERE deletedAt IS NULL AND fechaInicio + semanas * 604800000 < :now")
+    suspend fun completedMesocycles(now: Long): Int
+
+    /** Per exercise: its heaviest live set weight and the earliest session date lifting it. */
+    @Query(
+        "SELECT le.exerciseId AS exerciseId, ls.peso AS peso, MIN(s.fecha) AS startedAt $FROM_SETS " +
+            "WHERE s.deletedAt IS NULL AND le.deletedAt IS NULL AND ls.deletedAt IS NULL AND ls.peso = (" +
+            "SELECT MAX(ls2.peso) FROM logged_sets AS ls2 JOIN logged_exercises AS le2 ON le2.id = ls2.loggedExerciseId " +
+            "JOIN workout_sessions AS s2 ON s2.id = le2.sessionId " +
+            "WHERE s2.deletedAt IS NULL AND le2.deletedAt IS NULL AND ls2.deletedAt IS NULL AND le2.exerciseId = le.exerciseId) " +
+            "GROUP BY le.exerciseId",
+    )
+    suspend fun personalRecords(): List<StatPersonalRecordRow>
 
     /** JSON value of a live user setting. */
     @Query("SELECT valor FROM user_settings WHERE id = :key AND deletedAt IS NULL")

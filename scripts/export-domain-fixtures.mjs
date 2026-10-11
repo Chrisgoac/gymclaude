@@ -19,6 +19,9 @@ import {
 } from '../lib/repositories/stats.ts';
 import { detectarEstancamiento, filasEquilibrio, DELOAD_CONSEJO } from '../lib/insights.ts';
 import { filtroAGymId } from '../lib/gym-filter.ts';
+import { LOGROS_DEF, evaluarLogros, calcularRacha } from '../lib/logros.ts';
+import { reconciliarLogros } from '../lib/reconciliar-logros.ts';
+import { getLogroMetricas, listPRs } from '../lib/repositories/stats.ts';
 import { construirSnapshot } from '../lib/coach-snapshot.ts';
 import { db } from '../lib/db/database.ts';
 import { MUSCLE_GROUPS } from '../lib/db/types.ts';
@@ -405,6 +408,264 @@ async function insightCases() {
   };
 }
 
+// ---- achievement-cases.json: lib/logros.ts, lib/reconciliar-logros.ts, getLogroMetricas/listPRs (lib/repositories/stats.ts) ----
+
+const WEEK = 7 * DAY;
+const CANONICAL_PREFIX = 'ach:';
+
+/**
+ * The APPROVED Android reconciliation outcome. The PWA only ever unlocks (reconciliarLogros never revokes and
+ * identifies rows by `clave`, minting a random id); Android also tombstones an achievement whose evidence is gone
+ * after a history edit and revives it when re-earned. Per catalog key:
+ * - earned and a live row exists -> retain (no write; duplicates from other devices are all kept);
+ * - earned, no live row -> unlock: revive the row with the canonical id `ach:<clave>` if present, else the
+ *   tombstoned row with the lowest id, else create `ach:<clave>` (stable logical identity per clave, so devices converge);
+ * - not earned, live rows -> tombstone every live row; not earned and none live -> none.
+ * Keys outside the catalog are never touched.
+ */
+function androidReconcile(met, stored) {
+  const decisions = {};
+  const after = stored.map((row) => ({ ...row }));
+  for (const def of LOGROS_DEF) {
+    const rows = after.filter((row) => row.key === def.clave);
+    const live = rows.filter((row) => row.state === 'live');
+    if (met.includes(def.clave)) {
+      if (live.length > 0) { decisions[def.clave] = 'retain'; continue; }
+      decisions[def.clave] = 'unlock';
+      const canonicalId = CANONICAL_PREFIX + def.clave;
+      const target = rows.find((row) => row.id === canonicalId) ?? [...rows].sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+      if (target) target.state = 'live';
+      else after.push({ id: canonicalId, key: def.clave, state: 'live' });
+    } else if (live.length > 0) {
+      decisions[def.clave] = 'tombstone';
+      live.forEach((row) => { row.state = 'tombstoned'; });
+    } else {
+      decisions[def.clave] = 'none';
+    }
+  }
+  after.sort((a, b) => (a.id < b.id ? -1 : 1));
+  return { decisions, stored: after };
+}
+
+async function seedAchievementData(data) {
+  await Promise.all([db.workoutSessions.clear(), db.loggedExercises.clear(), db.loggedSets.clear(), db.exercises.clear(), db.mesocycles.clear(), db.achievements.clear()]);
+  await seed({ ...data, exercises: EXERCISES });
+  await db.mesocycles.bulkPut(data.mesocycles.map((m) => ({
+    id: m.id, userId: null, nombre: 'Meso', objetivo: 'fuerza', semanas: m.semanas, diasPorSemana: 3, notas: null, progresion: [],
+    fechaInicio: m.fechaInicio, updatedAt: 1, deletedAt: m.deleted ? DELETED : null,
+  })));
+}
+
+/** [id-prefix, count, first ISO, step days, sets per session [peso, reps]] -> live sessions, one exercise each. */
+function trainingBlock(prefix, count, firstIso, stepDays, exerciseId, peso, reps, setCount = 1) {
+  const data = { sessions: [], loggedExercises: [], sets: [] };
+  for (let i = 0; i < count; i++) {
+    const id = `${prefix}${String(i).padStart(3, '0')}`;
+    data.sessions.push(ses(id, new Date(iso(firstIso) + i * stepDays * DAY).toISOString(), null));
+    data.loggedExercises.push(le(`l${id}`, id, exerciseId));
+    for (let k = 0; k < setCount; k++) data.sets.push(set(`t${id}-${k}`, `l${id}`, k, peso, reps));
+  }
+  return data;
+}
+
+const merge = (...parts) => ({
+  sessions: parts.flatMap((p) => p.sessions ?? []),
+  loggedExercises: parts.flatMap((p) => p.loggedExercises ?? []),
+  sets: parts.flatMap((p) => p.sets ?? []),
+  mesocycles: parts.flatMap((p) => p.mesocycles ?? []),
+});
+/** Deleting a session tombstones its logged exercises and sets too, exactly like the PWA's softDeleteSession. */
+function without(data, predicate) {
+  const gone = new Set(data.sessions.filter(predicate).map((s) => s.id));
+  const goneExercises = new Set(data.loggedExercises.filter((x) => gone.has(x.sessionId)).map((x) => x.id));
+  const mark = (row) => ({ ...row, deletedAt: DELETED });
+  return {
+    ...data,
+    sessions: data.sessions.map((s) => (gone.has(s.id) ? mark(s) : s)),
+    loggedExercises: data.loggedExercises.map((x) => (gone.has(x.sessionId) ? mark(x) : x)),
+    sets: data.sets.map((x) => (goneExercises.has(x.loggedExerciseId) ? mark(x) : x)),
+  };
+}
+
+async function achievementScenarios() {
+  const NOW = iso('2026-06-09T20:00:00Z');
+  const press = 'ex-press';
+  // 12 consecutive training weeks (Mondays 2026-03-23 .. 2026-06-08, one session a week, Madrid), 1 exercise.
+  const weekly12 = trainingBlock('w', 12, '2026-03-23T08:00:00Z', 7, press, 100, 5);
+  const weekly12WithoutMiddle = without(weekly12, (s) => s.id === 'w005');
+  const tenSessions = trainingBlock('d', 10, '2026-05-01T08:00:00Z', 1, press, 80, 5);
+  const nineSessions = without(tenSessions, (s) => s.id === 'd009');
+  const heavy = (peso) => trainingBlock('h', 5, '2026-05-01T08:00:00Z', 2, 'ex-squat', peso, 1);
+  const specs = [
+    {
+      name: 'sessions: edit removes then restores a session', zone: 'Europe/Madrid', objetivo: 3, initialStored: [],
+      steps: [
+        { label: '10 sessions earns sessions-10', now: NOW, data: merge(tenSessions) },
+        { label: 'unchanged: nothing to write', now: NOW, data: merge(tenSessions) },
+        { label: 'history edit deletes one session: sessions-10 is tombstoned', now: NOW, data: merge(nineSessions) },
+        { label: 'still 9: nothing to write', now: NOW, data: merge(nineSessions) },
+        { label: 'the session is restored: sessions-10 is re-earned on the same row', now: NOW, data: merge(tenSessions) },
+      ],
+    },
+    {
+      name: 'streak: a missing week breaks the run, restoring it re-earns', zone: 'Europe/Madrid', objetivo: 1, initialStored: [],
+      steps: [
+        { label: '12 weeks in a row earn every streak and 10 sessions', now: NOW, data: merge(weekly12) },
+        { label: 'middle week emptied: best run is 6, racha-8 and racha-12 go', now: NOW, data: merge(weekly12WithoutMiddle) },
+        { label: 'week back: all earned again', now: NOW, data: merge(weekly12) },
+      ],
+    },
+    {
+      name: 'volume boundaries are inclusive', zone: 'UTC', objetivo: 3, initialStored: [],
+      steps: [
+        { label: '500000 exactly earns 100k and 500k', now: NOW, data: merge(heavy(100000)) },
+        { label: 'one kg less than 100k tombstones 100k and 500k', now: NOW, data: merge(trainingBlock('h', 1, '2026-05-01T08:00:00Z', 2, 'ex-squat', 99999, 1)) },
+        { label: '1,000,000 earns all three volume milestones', now: NOW, data: merge(heavy(200000)) },
+      ],
+    },
+    {
+      name: 'mesocycle: completion is strict and tombstones follow deletion', zone: 'Europe/Madrid', objetivo: 3, initialStored: [],
+      steps: [
+        { label: 'ends exactly now: not completed', now: NOW, data: merge({ mesocycles: [{ id: 'm1', semanas: 4, fechaInicio: NOW - 4 * WEEK }] }) },
+        { label: 'one ms later: completed', now: NOW + 1, data: merge({ mesocycles: [{ id: 'm1', semanas: 4, fechaInicio: NOW - 4 * WEEK }] }) },
+        { label: 'mesocycle deleted: planner achievement is tombstoned', now: NOW + 1, data: merge({ mesocycles: [{ id: 'm1', semanas: 4, fechaInicio: NOW - 4 * WEEK, deleted: true }] }) },
+      ],
+    },
+    {
+      name: 'identity: PWA rows, duplicates, tombstones and unknown keys', zone: 'Europe/Madrid', objetivo: 3,
+      initialStored: [
+        { id: 'pwa-uuid-1', key: 'sesiones-10', state: 'live' },
+        { id: 'pwa-uuid-2', key: 'sesiones-10', state: 'live' },
+        { id: 'pwa-uuid-3', key: 'sesiones-50', state: 'tombstoned' },
+        { id: 'zz-old', key: 'mesociclo-1', state: 'tombstoned' },
+        { id: 'aa-old', key: 'mesociclo-1', state: 'tombstoned' },
+        { id: 'future-row', key: 'logro-del-futuro', state: 'live' },
+        { id: 'ach:sesiones-100', key: 'sesiones-100', state: 'tombstoned' },
+        { id: 'pwa-uuid-9', key: 'sesiones-100', state: 'tombstoned' },
+      ],
+      steps: [
+        {
+          label: 'duplicate live rows are retained; tombstoned rows are revived (canonical id first, else lowest id)', now: NOW + 1,
+          data: merge(trainingBlock('p', 120, '2026-01-01T08:00:00Z', 1, press, 60, 8), { mesocycles: [{ id: 'm1', semanas: 1, fechaInicio: NOW - 2 * WEEK }] }),
+        },
+        {
+          label: 'evidence gone: every live duplicate is tombstoned, unknown keys stay', now: NOW + 1,
+          data: merge({ sessions: [], loggedExercises: [], sets: [], mesocycles: [] }),
+        },
+      ],
+    },
+  ];
+  const scenarios = [];
+  for (const spec of specs) {
+    let stored = spec.initialStored;
+    const steps = [];
+    for (const step of spec.steps) {
+      const data = { ...step.data, exercises: EXERCISES };
+      const record = await inZoneAsync(spec.zone, async () => {
+        await seedAchievementData(data);
+        const metrics = await getLogroMetricas(spec.objetivo, step.now);
+        const met = evaluarLogros(metrics);
+        const outcome = androidReconcile(met, stored);
+        // What the PWA would do with the same live rows: add the missing ones, never remove.
+        await db.achievements.bulkPut(stored.filter((row) => row.state === 'live').map((row) => (
+          { id: row.id, userId: null, clave: row.key, fechaDesbloqueo: 1, updatedAt: 1, deletedAt: null }
+        )));
+        const pwaNewlyUnlocked = await reconciliarLogros(spec.objetivo, step.now);
+        return { metrics, met, outcome, pwaNewlyUnlocked, prs: await listPRs() };
+      });
+      steps.push({
+        label: step.label, now: step.now,
+        sessions: step.data.sessions, loggedExercises: step.data.loggedExercises, sets: step.data.sets, mesocycles: step.data.mesocycles,
+        expected: {
+          metrics: { ...record.metrics, volumenTotal: num(record.metrics.volumenTotal) },
+          met: record.met,
+          pwaNewlyUnlocked: record.pwaNewlyUnlocked,
+          decisions: record.outcome.decisions,
+          storedAfter: record.outcome.stored,
+          personalRecords: record.prs,
+        },
+      });
+      stored = record.outcome.stored;
+    }
+    scenarios.push({ name: spec.name, zone: spec.zone, weeklyTarget: spec.objetivo, initialStored: spec.initialStored, steps });
+  }
+  return scenarios;
+}
+
+function achievementStreakCases() {
+  const cases = [];
+  const W = (n) => n * WEEK;
+  const synthetic = [
+    { weeks: [[1, 3], [2, 4], [3, 3]], objetivo: 3, current: W(3) },
+    { weeks: [[1, 3], [2, 3], [3, 1]], objetivo: 3, current: W(3) },
+    { weeks: [[1, 3], [2, 3], [3, 1]], objetivo: 3, current: W(4) },
+    { weeks: [[1, 3], [2, 2], [3, 3], [4, 3], [5, 3]], objetivo: 3, current: W(5) },
+    { weeks: [[1, 1], [3, 1], [4, 1], [6, 1]], objetivo: 1, current: W(7) },
+    { weeks: [], objetivo: 3, current: W(5) },
+    { weeks: [[1, 0], [2, 0]], objetivo: 0, current: W(2) },
+  ];
+  for (const { weeks, objetivo, current } of synthetic) {
+    const semanas = weeks.map(([n, sesiones]) => ({ inicioTs: W(n), sesiones }));
+    cases.push({ name: `synthetic ${JSON.stringify(weeks)} target ${objetivo}`, weeks: semanas, target: objetivo, currentWeekStart: current, expected: calcularRacha(semanas, objetivo, current) });
+  }
+  // Real Monday-local week starts across DST changes (week start offsets differ from exact multiples of 7 days).
+  const real = {
+    'Europe/Madrid': ['2026-03-09T00:00:00', '2026-03-16T00:00:00', '2026-03-23T00:00:00', '2026-03-30T00:00:00', '2026-04-06T00:00:00', '2026-10-19T00:00:00', '2026-10-26T00:00:00', '2026-11-02T00:00:00'],
+    'America/New_York': ['2026-03-02T00:00:00', '2026-03-09T00:00:00', '2026-03-16T00:00:00', '2026-10-26T00:00:00', '2026-11-02T00:00:00', '2026-11-09T00:00:00'],
+  };
+  for (const [zone, starts] of Object.entries(real)) {
+    const instants = starts.map((s) => inZone(zone, () => new Date(s).getTime()));
+    const semanas = instants.map((inicioTs) => ({ inicioTs, sesiones: 3 }));
+    for (const lastIndex of [instants.length - 1, 3]) {
+      cases.push({
+        name: `real weeks @ ${zone}, current week #${lastIndex}`, zone, weeks: semanas, target: 3, currentWeekStart: instants[lastIndex],
+        expected: calcularRacha(semanas, 3, instants[lastIndex]),
+      });
+    }
+  }
+  return cases;
+}
+
+function achievementEvaluateCases() {
+  const base = { sesionesTotales: 0, volumenTotal: 0, prsTotales: 0, mejorRacha: 0, mesociclosCompletados: 0 };
+  const grid = {
+    sesionesTotales: [0, 9, 10, 49, 50, 99, 100, 249, 250, 5000],
+    volumenTotal: [0, 99_999.99, 100_000, 499_999, 500_000, 999_999.5, 1_000_000, 2_500_000],
+    mejorRacha: [0, 3, 4, 7, 8, 11, 12, 52],
+    mesociclosCompletados: [0, 1, 3],
+    prsTotales: [0, 1, 40],
+  };
+  const cases = [];
+  for (const [field, values] of Object.entries(grid)) {
+    for (const value of values) cases.push({ metrics: { ...base, [field]: value }, expected: evaluarLogros({ ...base, [field]: value }) });
+  }
+  const combos = [
+    { sesionesTotales: 55, volumenTotal: 120_000, mejorRacha: 4, mesociclosCompletados: 1, prsTotales: 7 },
+    { sesionesTotales: 300, volumenTotal: 1_200_000, mejorRacha: 12, mesociclosCompletados: 2, prsTotales: 30 },
+  ];
+  for (const m of combos) cases.push({ metrics: m, expected: evaluarLogros(m) });
+  return cases.map((c) => ({ metrics: { ...c.metrics, volumenTotal: num(c.metrics.volumenTotal) }, expected: c.expected }));
+}
+
+async function achievementCases() {
+  return {
+    description: 'Cases for the PWA achievements (lib/logros.ts evaluarLogros/calcularRacha, lib/reconciliar-logros.ts, getLogroMetricas/listPRs in '
+      + 'lib/repositories/stats.ts run on a seeded Dexie database) and the Android port (core:domain achievement/AchievementRules.kt, '
+      + "ReconcileAchievementsUseCase, core:data OfflineAchievementRepository). 'catalog', 'evaluate', 'streak' and every scenario's 'metrics', 'met', "
+      + "'pwaNewlyUnlocked' and 'personalRecords' are what the TypeScript code returns. 'decisions' and 'storedAfter' are the APPROVED ANDROID outcome "
+      + '(see androidReconcile in scripts/export-domain-fixtures.mjs): the PWA never revokes an achievement, Android tombstones one whose evidence a '
+      + 'history edit removed and revives it (same row) when re-earned. Steps of a scenario run in order against the same achievement rows; a step '
+      + "replaces the workout data (an edit) and is reconciled twice (the second run must write nothing). Rows with deletedAt are 'tombstoned'. "
+      + 'Warm-up sets count, as in the PWA. volumenTotal travels as a number (finite in every case).',
+    canonicalIdPrefix: CANONICAL_PREFIX,
+    exercises: EXERCISES,
+    catalog: LOGROS_DEF.map(({ clave, titulo, descripcion }) => ({ clave, titulo, descripcion })),
+    evaluate: achievementEvaluateCases(),
+    streak: achievementStreakCases(),
+    scenarios: await achievementScenarios(),
+  };
+}
+
 export async function buildFixtures() {
   return {
     'period-cases.json': periodCases(),
@@ -412,6 +673,7 @@ export async function buildFixtures() {
     'num-cases.json': numCases(),
     'body-stats-cases.json': bodyStatsCases(),
     'insight-cases.json': await insightCases(),
+    'achievement-cases.json': await achievementCases(),
   };
 }
 

@@ -1,0 +1,6921 @@
+{
+  "description": "Cases for the PWA achievements (lib/logros.ts evaluarLogros/calcularRacha, lib/reconciliar-logros.ts, getLogroMetricas/listPRs in lib/repositories/stats.ts run on a seeded Dexie database) and the Android port (core:domain achievement/AchievementRules.kt, ReconcileAchievementsUseCase, core:data OfflineAchievementRepository). 'catalog', 'evaluate', 'streak' and every scenario's 'metrics', 'met', 'pwaNewlyUnlocked' and 'personalRecords' are what the TypeScript code returns. 'decisions' and 'storedAfter' are the APPROVED ANDROID outcome (see androidReconcile in scripts/export-domain-fixtures.mjs): the PWA never revokes an achievement, Android tombstones one whose evidence a history edit removed and revives it (same row) when re-earned. Steps of a scenario run in order against the same achievement rows; a step replaces the workout data (an edit) and is reconciled twice (the second run must write nothing). Rows with deletedAt are 'tombstoned'. Warm-up sets count, as in the PWA. volumenTotal travels as a number (finite in every case).",
+  "canonicalIdPrefix": "ach:",
+  "exercises": [
+    {
+      "id": "ex-press",
+      "nombre": "Press de banca",
+      "grupoMuscular": "pecho",
+      "deletedAt": null
+    },
+    {
+      "id": "ex-squat",
+      "nombre": "Sentadilla",
+      "grupoMuscular": "cuadriceps",
+      "deletedAt": null
+    },
+    {
+      "id": "ex-curl",
+      "nombre": "Curl de bíceps",
+      "grupoMuscular": "biceps",
+      "deletedAt": null
+    },
+    {
+      "id": "ex-calf",
+      "nombre": "Gemelo de pie",
+      "grupoMuscular": "gemelo",
+      "deletedAt": null
+    },
+    {
+      "id": "ex-row",
+      "nombre": "Remo propio",
+      "grupoMuscular": "espalda",
+      "deletedAt": 1
+    }
+  ],
+  "catalog": [
+    {
+      "clave": "sesiones-10",
+      "titulo": "Calentando",
+      "descripcion": "10 entrenos"
+    },
+    {
+      "clave": "sesiones-50",
+      "titulo": "Constante",
+      "descripcion": "50 entrenos"
+    },
+    {
+      "clave": "sesiones-100",
+      "titulo": "Centurión",
+      "descripcion": "100 entrenos"
+    },
+    {
+      "clave": "sesiones-250",
+      "titulo": "Veterano",
+      "descripcion": "250 entrenos"
+    },
+    {
+      "clave": "volumen-100k",
+      "titulo": "100K",
+      "descripcion": "100.000 kg movidos"
+    },
+    {
+      "clave": "volumen-500k",
+      "titulo": "Medio millón",
+      "descripcion": "500.000 kg movidos"
+    },
+    {
+      "clave": "volumen-1m",
+      "titulo": "Una tonelada x1000",
+      "descripcion": "1.000.000 kg movidos"
+    },
+    {
+      "clave": "racha-4",
+      "titulo": "Racha de 4",
+      "descripcion": "4 semanas seguidas cumpliendo el objetivo"
+    },
+    {
+      "clave": "racha-8",
+      "titulo": "Racha de 8",
+      "descripcion": "8 semanas seguidas cumpliendo el objetivo"
+    },
+    {
+      "clave": "racha-12",
+      "titulo": "Racha de 12",
+      "descripcion": "12 semanas seguidas cumpliendo el objetivo"
+    },
+    {
+      "clave": "mesociclo-1",
+      "titulo": "Planificador",
+      "descripcion": "Completa tu primer mesociclo"
+    }
+  ],
+  "evaluate": [
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": []
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 9,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": []
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 10,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "sesiones-10"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 49,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "sesiones-10"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 50,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "sesiones-10",
+        "sesiones-50"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 99,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "sesiones-10",
+        "sesiones-50"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 100,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "sesiones-10",
+        "sesiones-50",
+        "sesiones-100"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 249,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "sesiones-10",
+        "sesiones-50",
+        "sesiones-100"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 250,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "sesiones-10",
+        "sesiones-50",
+        "sesiones-100",
+        "sesiones-250"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 5000,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "sesiones-10",
+        "sesiones-50",
+        "sesiones-100",
+        "sesiones-250"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": []
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 99999.99,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": []
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 100000,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "volumen-100k"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 499999,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "volumen-100k"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 500000,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "volumen-100k",
+        "volumen-500k"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 999999.5,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "volumen-100k",
+        "volumen-500k"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 1000000,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "volumen-100k",
+        "volumen-500k",
+        "volumen-1m"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 2500000,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "volumen-100k",
+        "volumen-500k",
+        "volumen-1m"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": []
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 3,
+        "mesociclosCompletados": 0
+      },
+      "expected": []
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 4,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "racha-4"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 7,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "racha-4"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 8,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "racha-4",
+        "racha-8"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 11,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "racha-4",
+        "racha-8"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 12,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "racha-4",
+        "racha-8",
+        "racha-12"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 52,
+        "mesociclosCompletados": 0
+      },
+      "expected": [
+        "racha-4",
+        "racha-8",
+        "racha-12"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": []
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 1
+      },
+      "expected": [
+        "mesociclo-1"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 3
+      },
+      "expected": [
+        "mesociclo-1"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 0,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": []
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 1,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": []
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 0,
+        "volumenTotal": 0,
+        "prsTotales": 40,
+        "mejorRacha": 0,
+        "mesociclosCompletados": 0
+      },
+      "expected": []
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 55,
+        "volumenTotal": 120000,
+        "mejorRacha": 4,
+        "mesociclosCompletados": 1,
+        "prsTotales": 7
+      },
+      "expected": [
+        "sesiones-10",
+        "sesiones-50",
+        "volumen-100k",
+        "racha-4",
+        "mesociclo-1"
+      ]
+    },
+    {
+      "metrics": {
+        "sesionesTotales": 300,
+        "volumenTotal": 1200000,
+        "mejorRacha": 12,
+        "mesociclosCompletados": 2,
+        "prsTotales": 30
+      },
+      "expected": [
+        "sesiones-10",
+        "sesiones-50",
+        "sesiones-100",
+        "sesiones-250",
+        "volumen-100k",
+        "volumen-500k",
+        "volumen-1m",
+        "racha-4",
+        "racha-8",
+        "racha-12",
+        "mesociclo-1"
+      ]
+    }
+  ],
+  "streak": [
+    {
+      "name": "synthetic [[1,3],[2,4],[3,3]] target 3",
+      "weeks": [
+        {
+          "inicioTs": 604800000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1209600000,
+          "sesiones": 4
+        },
+        {
+          "inicioTs": 1814400000,
+          "sesiones": 3
+        }
+      ],
+      "target": 3,
+      "currentWeekStart": 1814400000,
+      "expected": {
+        "actual": 3,
+        "mejor": 3
+      }
+    },
+    {
+      "name": "synthetic [[1,3],[2,3],[3,1]] target 3",
+      "weeks": [
+        {
+          "inicioTs": 604800000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1209600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1814400000,
+          "sesiones": 1
+        }
+      ],
+      "target": 3,
+      "currentWeekStart": 1814400000,
+      "expected": {
+        "actual": 2,
+        "mejor": 2
+      }
+    },
+    {
+      "name": "synthetic [[1,3],[2,3],[3,1]] target 3",
+      "weeks": [
+        {
+          "inicioTs": 604800000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1209600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1814400000,
+          "sesiones": 1
+        }
+      ],
+      "target": 3,
+      "currentWeekStart": 2419200000,
+      "expected": {
+        "actual": 0,
+        "mejor": 2
+      }
+    },
+    {
+      "name": "synthetic [[1,3],[2,2],[3,3],[4,3],[5,3]] target 3",
+      "weeks": [
+        {
+          "inicioTs": 604800000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1209600000,
+          "sesiones": 2
+        },
+        {
+          "inicioTs": 1814400000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 2419200000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 3024000000,
+          "sesiones": 3
+        }
+      ],
+      "target": 3,
+      "currentWeekStart": 3024000000,
+      "expected": {
+        "actual": 3,
+        "mejor": 3
+      }
+    },
+    {
+      "name": "synthetic [[1,1],[3,1],[4,1],[6,1]] target 1",
+      "weeks": [
+        {
+          "inicioTs": 604800000,
+          "sesiones": 1
+        },
+        {
+          "inicioTs": 1814400000,
+          "sesiones": 1
+        },
+        {
+          "inicioTs": 2419200000,
+          "sesiones": 1
+        },
+        {
+          "inicioTs": 3628800000,
+          "sesiones": 1
+        }
+      ],
+      "target": 1,
+      "currentWeekStart": 4233600000,
+      "expected": {
+        "actual": 1,
+        "mejor": 2
+      }
+    },
+    {
+      "name": "synthetic [] target 3",
+      "weeks": [],
+      "target": 3,
+      "currentWeekStart": 3024000000,
+      "expected": {
+        "actual": 0,
+        "mejor": 0
+      }
+    },
+    {
+      "name": "synthetic [[1,0],[2,0]] target 0",
+      "weeks": [
+        {
+          "inicioTs": 604800000,
+          "sesiones": 0
+        },
+        {
+          "inicioTs": 1209600000,
+          "sesiones": 0
+        }
+      ],
+      "target": 0,
+      "currentWeekStart": 1209600000,
+      "expected": {
+        "actual": 2,
+        "mejor": 2
+      }
+    },
+    {
+      "name": "real weeks @ Europe/Madrid, current week #7",
+      "zone": "Europe/Madrid",
+      "weeks": [
+        {
+          "inicioTs": 1773010800000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1773615600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1774220400000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1774821600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1775426400000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1792360800000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1792969200000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1793574000000,
+          "sesiones": 3
+        }
+      ],
+      "target": 3,
+      "currentWeekStart": 1793574000000,
+      "expected": {
+        "actual": 3,
+        "mejor": 5
+      }
+    },
+    {
+      "name": "real weeks @ Europe/Madrid, current week #3",
+      "zone": "Europe/Madrid",
+      "weeks": [
+        {
+          "inicioTs": 1773010800000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1773615600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1774220400000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1774821600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1775426400000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1792360800000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1792969200000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1793574000000,
+          "sesiones": 3
+        }
+      ],
+      "target": 3,
+      "currentWeekStart": 1774821600000,
+      "expected": {
+        "actual": 4,
+        "mejor": 5
+      }
+    },
+    {
+      "name": "real weeks @ America/New_York, current week #5",
+      "zone": "America/New_York",
+      "weeks": [
+        {
+          "inicioTs": 1772427600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1773028800000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1773633600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1792987200000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1793595600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1794200400000,
+          "sesiones": 3
+        }
+      ],
+      "target": 3,
+      "currentWeekStart": 1794200400000,
+      "expected": {
+        "actual": 3,
+        "mejor": 3
+      }
+    },
+    {
+      "name": "real weeks @ America/New_York, current week #3",
+      "zone": "America/New_York",
+      "weeks": [
+        {
+          "inicioTs": 1772427600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1773028800000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1773633600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1792987200000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1793595600000,
+          "sesiones": 3
+        },
+        {
+          "inicioTs": 1794200400000,
+          "sesiones": 3
+        }
+      ],
+      "target": 3,
+      "currentWeekStart": 1792987200000,
+      "expected": {
+        "actual": 1,
+        "mejor": 3
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "sessions: edit removes then restores a session",
+      "zone": "Europe/Madrid",
+      "weeklyTarget": 3,
+      "initialStored": [],
+      "steps": [
+        {
+          "label": "10 sessions earns sessions-10",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "d000",
+              "fecha": 1777622400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d001",
+              "fecha": 1777708800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d002",
+              "fecha": 1777795200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d003",
+              "fecha": 1777881600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d004",
+              "fecha": 1777968000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d005",
+              "fecha": 1778054400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d006",
+              "fecha": 1778140800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d007",
+              "fecha": 1778227200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d008",
+              "fecha": 1778313600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d009",
+              "fecha": 1778400000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "ld000",
+              "sessionId": "d000",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld001",
+              "sessionId": "d001",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld002",
+              "sessionId": "d002",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld003",
+              "sessionId": "d003",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld004",
+              "sessionId": "d004",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld005",
+              "sessionId": "d005",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld006",
+              "sessionId": "d006",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld007",
+              "sessionId": "d007",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld008",
+              "sessionId": "d008",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld009",
+              "sessionId": "d009",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            }
+          ],
+          "sets": [
+            {
+              "id": "td000-0",
+              "loggedExerciseId": "ld000",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td001-0",
+              "loggedExerciseId": "ld001",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td002-0",
+              "loggedExerciseId": "ld002",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td003-0",
+              "loggedExerciseId": "ld003",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td004-0",
+              "loggedExerciseId": "ld004",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td005-0",
+              "loggedExerciseId": "ld005",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td006-0",
+              "loggedExerciseId": "ld006",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td007-0",
+              "loggedExerciseId": "ld007",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td008-0",
+              "loggedExerciseId": "ld008",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td009-0",
+              "loggedExerciseId": "ld009",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 10,
+              "volumenTotal": 4000,
+              "prsTotales": 1,
+              "mejorRacha": 2,
+              "mesociclosCompletados": 0
+            },
+            "met": [
+              "sesiones-10"
+            ],
+            "pwaNewlyUnlocked": [
+              "sesiones-10"
+            ],
+            "decisions": {
+              "sesiones-10": "unlock",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:sesiones-10",
+                "key": "sesiones-10",
+                "state": "live"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "peso": 80,
+                "fecha": 1777622400000
+              }
+            ]
+          }
+        },
+        {
+          "label": "unchanged: nothing to write",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "d000",
+              "fecha": 1777622400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d001",
+              "fecha": 1777708800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d002",
+              "fecha": 1777795200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d003",
+              "fecha": 1777881600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d004",
+              "fecha": 1777968000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d005",
+              "fecha": 1778054400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d006",
+              "fecha": 1778140800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d007",
+              "fecha": 1778227200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d008",
+              "fecha": 1778313600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d009",
+              "fecha": 1778400000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "ld000",
+              "sessionId": "d000",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld001",
+              "sessionId": "d001",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld002",
+              "sessionId": "d002",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld003",
+              "sessionId": "d003",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld004",
+              "sessionId": "d004",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld005",
+              "sessionId": "d005",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld006",
+              "sessionId": "d006",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld007",
+              "sessionId": "d007",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld008",
+              "sessionId": "d008",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld009",
+              "sessionId": "d009",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            }
+          ],
+          "sets": [
+            {
+              "id": "td000-0",
+              "loggedExerciseId": "ld000",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td001-0",
+              "loggedExerciseId": "ld001",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td002-0",
+              "loggedExerciseId": "ld002",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td003-0",
+              "loggedExerciseId": "ld003",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td004-0",
+              "loggedExerciseId": "ld004",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td005-0",
+              "loggedExerciseId": "ld005",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td006-0",
+              "loggedExerciseId": "ld006",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td007-0",
+              "loggedExerciseId": "ld007",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td008-0",
+              "loggedExerciseId": "ld008",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td009-0",
+              "loggedExerciseId": "ld009",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 10,
+              "volumenTotal": 4000,
+              "prsTotales": 1,
+              "mejorRacha": 2,
+              "mesociclosCompletados": 0
+            },
+            "met": [
+              "sesiones-10"
+            ],
+            "pwaNewlyUnlocked": [],
+            "decisions": {
+              "sesiones-10": "retain",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:sesiones-10",
+                "key": "sesiones-10",
+                "state": "live"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "peso": 80,
+                "fecha": 1777622400000
+              }
+            ]
+          }
+        },
+        {
+          "label": "history edit deletes one session: sessions-10 is tombstoned",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "d000",
+              "fecha": 1777622400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d001",
+              "fecha": 1777708800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d002",
+              "fecha": 1777795200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d003",
+              "fecha": 1777881600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d004",
+              "fecha": 1777968000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d005",
+              "fecha": 1778054400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d006",
+              "fecha": 1778140800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d007",
+              "fecha": 1778227200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d008",
+              "fecha": 1778313600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d009",
+              "fecha": 1778400000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": 1
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "ld000",
+              "sessionId": "d000",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld001",
+              "sessionId": "d001",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld002",
+              "sessionId": "d002",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld003",
+              "sessionId": "d003",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld004",
+              "sessionId": "d004",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld005",
+              "sessionId": "d005",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld006",
+              "sessionId": "d006",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld007",
+              "sessionId": "d007",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld008",
+              "sessionId": "d008",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld009",
+              "sessionId": "d009",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": 1
+            }
+          ],
+          "sets": [
+            {
+              "id": "td000-0",
+              "loggedExerciseId": "ld000",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td001-0",
+              "loggedExerciseId": "ld001",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td002-0",
+              "loggedExerciseId": "ld002",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td003-0",
+              "loggedExerciseId": "ld003",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td004-0",
+              "loggedExerciseId": "ld004",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td005-0",
+              "loggedExerciseId": "ld005",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td006-0",
+              "loggedExerciseId": "ld006",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td007-0",
+              "loggedExerciseId": "ld007",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td008-0",
+              "loggedExerciseId": "ld008",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td009-0",
+              "loggedExerciseId": "ld009",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": 1
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 9,
+              "volumenTotal": 3600,
+              "prsTotales": 1,
+              "mejorRacha": 2,
+              "mesociclosCompletados": 0
+            },
+            "met": [],
+            "pwaNewlyUnlocked": [],
+            "decisions": {
+              "sesiones-10": "tombstone",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:sesiones-10",
+                "key": "sesiones-10",
+                "state": "tombstoned"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "peso": 80,
+                "fecha": 1777622400000
+              }
+            ]
+          }
+        },
+        {
+          "label": "still 9: nothing to write",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "d000",
+              "fecha": 1777622400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d001",
+              "fecha": 1777708800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d002",
+              "fecha": 1777795200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d003",
+              "fecha": 1777881600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d004",
+              "fecha": 1777968000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d005",
+              "fecha": 1778054400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d006",
+              "fecha": 1778140800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d007",
+              "fecha": 1778227200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d008",
+              "fecha": 1778313600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d009",
+              "fecha": 1778400000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": 1
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "ld000",
+              "sessionId": "d000",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld001",
+              "sessionId": "d001",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld002",
+              "sessionId": "d002",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld003",
+              "sessionId": "d003",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld004",
+              "sessionId": "d004",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld005",
+              "sessionId": "d005",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld006",
+              "sessionId": "d006",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld007",
+              "sessionId": "d007",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld008",
+              "sessionId": "d008",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld009",
+              "sessionId": "d009",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": 1
+            }
+          ],
+          "sets": [
+            {
+              "id": "td000-0",
+              "loggedExerciseId": "ld000",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td001-0",
+              "loggedExerciseId": "ld001",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td002-0",
+              "loggedExerciseId": "ld002",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td003-0",
+              "loggedExerciseId": "ld003",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td004-0",
+              "loggedExerciseId": "ld004",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td005-0",
+              "loggedExerciseId": "ld005",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td006-0",
+              "loggedExerciseId": "ld006",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td007-0",
+              "loggedExerciseId": "ld007",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td008-0",
+              "loggedExerciseId": "ld008",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td009-0",
+              "loggedExerciseId": "ld009",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": 1
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 9,
+              "volumenTotal": 3600,
+              "prsTotales": 1,
+              "mejorRacha": 2,
+              "mesociclosCompletados": 0
+            },
+            "met": [],
+            "pwaNewlyUnlocked": [],
+            "decisions": {
+              "sesiones-10": "none",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:sesiones-10",
+                "key": "sesiones-10",
+                "state": "tombstoned"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "peso": 80,
+                "fecha": 1777622400000
+              }
+            ]
+          }
+        },
+        {
+          "label": "the session is restored: sessions-10 is re-earned on the same row",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "d000",
+              "fecha": 1777622400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d001",
+              "fecha": 1777708800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d002",
+              "fecha": 1777795200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d003",
+              "fecha": 1777881600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d004",
+              "fecha": 1777968000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d005",
+              "fecha": 1778054400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d006",
+              "fecha": 1778140800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d007",
+              "fecha": 1778227200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d008",
+              "fecha": 1778313600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "d009",
+              "fecha": 1778400000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "ld000",
+              "sessionId": "d000",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld001",
+              "sessionId": "d001",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld002",
+              "sessionId": "d002",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld003",
+              "sessionId": "d003",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld004",
+              "sessionId": "d004",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld005",
+              "sessionId": "d005",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld006",
+              "sessionId": "d006",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld007",
+              "sessionId": "d007",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld008",
+              "sessionId": "d008",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "ld009",
+              "sessionId": "d009",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            }
+          ],
+          "sets": [
+            {
+              "id": "td000-0",
+              "loggedExerciseId": "ld000",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td001-0",
+              "loggedExerciseId": "ld001",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td002-0",
+              "loggedExerciseId": "ld002",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td003-0",
+              "loggedExerciseId": "ld003",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td004-0",
+              "loggedExerciseId": "ld004",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td005-0",
+              "loggedExerciseId": "ld005",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td006-0",
+              "loggedExerciseId": "ld006",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td007-0",
+              "loggedExerciseId": "ld007",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td008-0",
+              "loggedExerciseId": "ld008",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "td009-0",
+              "loggedExerciseId": "ld009",
+              "orden": 0,
+              "peso": 80,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 10,
+              "volumenTotal": 4000,
+              "prsTotales": 1,
+              "mejorRacha": 2,
+              "mesociclosCompletados": 0
+            },
+            "met": [
+              "sesiones-10"
+            ],
+            "pwaNewlyUnlocked": [
+              "sesiones-10"
+            ],
+            "decisions": {
+              "sesiones-10": "unlock",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:sesiones-10",
+                "key": "sesiones-10",
+                "state": "live"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "peso": 80,
+                "fecha": 1777622400000
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "streak: a missing week breaks the run, restoring it re-earns",
+      "zone": "Europe/Madrid",
+      "weeklyTarget": 1,
+      "initialStored": [],
+      "steps": [
+        {
+          "label": "12 weeks in a row earn every streak and 10 sessions",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "w000",
+              "fecha": 1774252800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w001",
+              "fecha": 1774857600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w002",
+              "fecha": 1775462400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w003",
+              "fecha": 1776067200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w004",
+              "fecha": 1776672000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w005",
+              "fecha": 1777276800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w006",
+              "fecha": 1777881600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w007",
+              "fecha": 1778486400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w008",
+              "fecha": 1779091200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w009",
+              "fecha": 1779696000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w010",
+              "fecha": 1780300800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w011",
+              "fecha": 1780905600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "lw000",
+              "sessionId": "w000",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw001",
+              "sessionId": "w001",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw002",
+              "sessionId": "w002",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw003",
+              "sessionId": "w003",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw004",
+              "sessionId": "w004",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw005",
+              "sessionId": "w005",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw006",
+              "sessionId": "w006",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw007",
+              "sessionId": "w007",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw008",
+              "sessionId": "w008",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw009",
+              "sessionId": "w009",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw010",
+              "sessionId": "w010",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw011",
+              "sessionId": "w011",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            }
+          ],
+          "sets": [
+            {
+              "id": "tw000-0",
+              "loggedExerciseId": "lw000",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw001-0",
+              "loggedExerciseId": "lw001",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw002-0",
+              "loggedExerciseId": "lw002",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw003-0",
+              "loggedExerciseId": "lw003",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw004-0",
+              "loggedExerciseId": "lw004",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw005-0",
+              "loggedExerciseId": "lw005",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw006-0",
+              "loggedExerciseId": "lw006",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw007-0",
+              "loggedExerciseId": "lw007",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw008-0",
+              "loggedExerciseId": "lw008",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw009-0",
+              "loggedExerciseId": "lw009",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw010-0",
+              "loggedExerciseId": "lw010",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw011-0",
+              "loggedExerciseId": "lw011",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 12,
+              "volumenTotal": 6000,
+              "prsTotales": 1,
+              "mejorRacha": 12,
+              "mesociclosCompletados": 0
+            },
+            "met": [
+              "sesiones-10",
+              "racha-4",
+              "racha-8",
+              "racha-12"
+            ],
+            "pwaNewlyUnlocked": [
+              "sesiones-10",
+              "racha-4",
+              "racha-8",
+              "racha-12"
+            ],
+            "decisions": {
+              "sesiones-10": "unlock",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "unlock",
+              "racha-8": "unlock",
+              "racha-12": "unlock",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:racha-12",
+                "key": "racha-12",
+                "state": "live"
+              },
+              {
+                "id": "ach:racha-4",
+                "key": "racha-4",
+                "state": "live"
+              },
+              {
+                "id": "ach:racha-8",
+                "key": "racha-8",
+                "state": "live"
+              },
+              {
+                "id": "ach:sesiones-10",
+                "key": "sesiones-10",
+                "state": "live"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "peso": 100,
+                "fecha": 1774252800000
+              }
+            ]
+          }
+        },
+        {
+          "label": "middle week emptied: best run is 6, racha-8 and racha-12 go",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "w000",
+              "fecha": 1774252800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w001",
+              "fecha": 1774857600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w002",
+              "fecha": 1775462400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w003",
+              "fecha": 1776067200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w004",
+              "fecha": 1776672000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w005",
+              "fecha": 1777276800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": 1
+            },
+            {
+              "id": "w006",
+              "fecha": 1777881600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w007",
+              "fecha": 1778486400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w008",
+              "fecha": 1779091200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w009",
+              "fecha": 1779696000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w010",
+              "fecha": 1780300800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w011",
+              "fecha": 1780905600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "lw000",
+              "sessionId": "w000",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw001",
+              "sessionId": "w001",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw002",
+              "sessionId": "w002",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw003",
+              "sessionId": "w003",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw004",
+              "sessionId": "w004",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw005",
+              "sessionId": "w005",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": 1
+            },
+            {
+              "id": "lw006",
+              "sessionId": "w006",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw007",
+              "sessionId": "w007",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw008",
+              "sessionId": "w008",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw009",
+              "sessionId": "w009",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw010",
+              "sessionId": "w010",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw011",
+              "sessionId": "w011",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            }
+          ],
+          "sets": [
+            {
+              "id": "tw000-0",
+              "loggedExerciseId": "lw000",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw001-0",
+              "loggedExerciseId": "lw001",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw002-0",
+              "loggedExerciseId": "lw002",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw003-0",
+              "loggedExerciseId": "lw003",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw004-0",
+              "loggedExerciseId": "lw004",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw005-0",
+              "loggedExerciseId": "lw005",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": 1
+            },
+            {
+              "id": "tw006-0",
+              "loggedExerciseId": "lw006",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw007-0",
+              "loggedExerciseId": "lw007",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw008-0",
+              "loggedExerciseId": "lw008",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw009-0",
+              "loggedExerciseId": "lw009",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw010-0",
+              "loggedExerciseId": "lw010",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw011-0",
+              "loggedExerciseId": "lw011",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 11,
+              "volumenTotal": 5500,
+              "prsTotales": 1,
+              "mejorRacha": 6,
+              "mesociclosCompletados": 0
+            },
+            "met": [
+              "sesiones-10",
+              "racha-4"
+            ],
+            "pwaNewlyUnlocked": [],
+            "decisions": {
+              "sesiones-10": "retain",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "retain",
+              "racha-8": "tombstone",
+              "racha-12": "tombstone",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:racha-12",
+                "key": "racha-12",
+                "state": "tombstoned"
+              },
+              {
+                "id": "ach:racha-4",
+                "key": "racha-4",
+                "state": "live"
+              },
+              {
+                "id": "ach:racha-8",
+                "key": "racha-8",
+                "state": "tombstoned"
+              },
+              {
+                "id": "ach:sesiones-10",
+                "key": "sesiones-10",
+                "state": "live"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "peso": 100,
+                "fecha": 1774252800000
+              }
+            ]
+          }
+        },
+        {
+          "label": "week back: all earned again",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "w000",
+              "fecha": 1774252800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w001",
+              "fecha": 1774857600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w002",
+              "fecha": 1775462400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w003",
+              "fecha": 1776067200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w004",
+              "fecha": 1776672000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w005",
+              "fecha": 1777276800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w006",
+              "fecha": 1777881600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w007",
+              "fecha": 1778486400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w008",
+              "fecha": 1779091200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w009",
+              "fecha": 1779696000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w010",
+              "fecha": 1780300800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "w011",
+              "fecha": 1780905600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "lw000",
+              "sessionId": "w000",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw001",
+              "sessionId": "w001",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw002",
+              "sessionId": "w002",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw003",
+              "sessionId": "w003",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw004",
+              "sessionId": "w004",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw005",
+              "sessionId": "w005",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw006",
+              "sessionId": "w006",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw007",
+              "sessionId": "w007",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw008",
+              "sessionId": "w008",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw009",
+              "sessionId": "w009",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw010",
+              "sessionId": "w010",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lw011",
+              "sessionId": "w011",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            }
+          ],
+          "sets": [
+            {
+              "id": "tw000-0",
+              "loggedExerciseId": "lw000",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw001-0",
+              "loggedExerciseId": "lw001",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw002-0",
+              "loggedExerciseId": "lw002",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw003-0",
+              "loggedExerciseId": "lw003",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw004-0",
+              "loggedExerciseId": "lw004",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw005-0",
+              "loggedExerciseId": "lw005",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw006-0",
+              "loggedExerciseId": "lw006",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw007-0",
+              "loggedExerciseId": "lw007",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw008-0",
+              "loggedExerciseId": "lw008",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw009-0",
+              "loggedExerciseId": "lw009",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw010-0",
+              "loggedExerciseId": "lw010",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tw011-0",
+              "loggedExerciseId": "lw011",
+              "orden": 0,
+              "peso": 100,
+              "reps": 5,
+              "esCalentamiento": false,
+              "deletedAt": null
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 12,
+              "volumenTotal": 6000,
+              "prsTotales": 1,
+              "mejorRacha": 12,
+              "mesociclosCompletados": 0
+            },
+            "met": [
+              "sesiones-10",
+              "racha-4",
+              "racha-8",
+              "racha-12"
+            ],
+            "pwaNewlyUnlocked": [
+              "racha-8",
+              "racha-12"
+            ],
+            "decisions": {
+              "sesiones-10": "retain",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "retain",
+              "racha-8": "unlock",
+              "racha-12": "unlock",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:racha-12",
+                "key": "racha-12",
+                "state": "live"
+              },
+              {
+                "id": "ach:racha-4",
+                "key": "racha-4",
+                "state": "live"
+              },
+              {
+                "id": "ach:racha-8",
+                "key": "racha-8",
+                "state": "live"
+              },
+              {
+                "id": "ach:sesiones-10",
+                "key": "sesiones-10",
+                "state": "live"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "peso": 100,
+                "fecha": 1774252800000
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "volume boundaries are inclusive",
+      "zone": "UTC",
+      "weeklyTarget": 3,
+      "initialStored": [],
+      "steps": [
+        {
+          "label": "500000 exactly earns 100k and 500k",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "h000",
+              "fecha": 1777622400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "h001",
+              "fecha": 1777795200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "h002",
+              "fecha": 1777968000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "h003",
+              "fecha": 1778140800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "h004",
+              "fecha": 1778313600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "lh000",
+              "sessionId": "h000",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lh001",
+              "sessionId": "h001",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lh002",
+              "sessionId": "h002",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lh003",
+              "sessionId": "h003",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lh004",
+              "sessionId": "h004",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            }
+          ],
+          "sets": [
+            {
+              "id": "th000-0",
+              "loggedExerciseId": "lh000",
+              "orden": 0,
+              "peso": 100000,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "th001-0",
+              "loggedExerciseId": "lh001",
+              "orden": 0,
+              "peso": 100000,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "th002-0",
+              "loggedExerciseId": "lh002",
+              "orden": 0,
+              "peso": 100000,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "th003-0",
+              "loggedExerciseId": "lh003",
+              "orden": 0,
+              "peso": 100000,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "th004-0",
+              "loggedExerciseId": "lh004",
+              "orden": 0,
+              "peso": 100000,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 5,
+              "volumenTotal": 500000,
+              "prsTotales": 1,
+              "mejorRacha": 1,
+              "mesociclosCompletados": 0
+            },
+            "met": [
+              "volumen-100k",
+              "volumen-500k"
+            ],
+            "pwaNewlyUnlocked": [
+              "volumen-100k",
+              "volumen-500k"
+            ],
+            "decisions": {
+              "sesiones-10": "none",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "unlock",
+              "volumen-500k": "unlock",
+              "volumen-1m": "none",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:volumen-100k",
+                "key": "volumen-100k",
+                "state": "live"
+              },
+              {
+                "id": "ach:volumen-500k",
+                "key": "volumen-500k",
+                "state": "live"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-squat",
+                "nombre": "Sentadilla",
+                "peso": 100000,
+                "fecha": 1777622400000
+              }
+            ]
+          }
+        },
+        {
+          "label": "one kg less than 100k tombstones 100k and 500k",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "h000",
+              "fecha": 1777622400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "lh000",
+              "sessionId": "h000",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            }
+          ],
+          "sets": [
+            {
+              "id": "th000-0",
+              "loggedExerciseId": "lh000",
+              "orden": 0,
+              "peso": 99999,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 1,
+              "volumenTotal": 99999,
+              "prsTotales": 1,
+              "mejorRacha": 0,
+              "mesociclosCompletados": 0
+            },
+            "met": [],
+            "pwaNewlyUnlocked": [],
+            "decisions": {
+              "sesiones-10": "none",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "tombstone",
+              "volumen-500k": "tombstone",
+              "volumen-1m": "none",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:volumen-100k",
+                "key": "volumen-100k",
+                "state": "tombstoned"
+              },
+              {
+                "id": "ach:volumen-500k",
+                "key": "volumen-500k",
+                "state": "tombstoned"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-squat",
+                "nombre": "Sentadilla",
+                "peso": 99999,
+                "fecha": 1777622400000
+              }
+            ]
+          }
+        },
+        {
+          "label": "1,000,000 earns all three volume milestones",
+          "now": 1781035200000,
+          "sessions": [
+            {
+              "id": "h000",
+              "fecha": 1777622400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "h001",
+              "fecha": 1777795200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "h002",
+              "fecha": 1777968000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "h003",
+              "fecha": 1778140800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "h004",
+              "fecha": 1778313600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "lh000",
+              "sessionId": "h000",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lh001",
+              "sessionId": "h001",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lh002",
+              "sessionId": "h002",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lh003",
+              "sessionId": "h003",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lh004",
+              "sessionId": "h004",
+              "exerciseId": "ex-squat",
+              "orden": 0,
+              "deletedAt": null
+            }
+          ],
+          "sets": [
+            {
+              "id": "th000-0",
+              "loggedExerciseId": "lh000",
+              "orden": 0,
+              "peso": 200000,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "th001-0",
+              "loggedExerciseId": "lh001",
+              "orden": 0,
+              "peso": 200000,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "th002-0",
+              "loggedExerciseId": "lh002",
+              "orden": 0,
+              "peso": 200000,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "th003-0",
+              "loggedExerciseId": "lh003",
+              "orden": 0,
+              "peso": 200000,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "th004-0",
+              "loggedExerciseId": "lh004",
+              "orden": 0,
+              "peso": 200000,
+              "reps": 1,
+              "esCalentamiento": false,
+              "deletedAt": null
+            }
+          ],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 5,
+              "volumenTotal": 1000000,
+              "prsTotales": 1,
+              "mejorRacha": 1,
+              "mesociclosCompletados": 0
+            },
+            "met": [
+              "volumen-100k",
+              "volumen-500k",
+              "volumen-1m"
+            ],
+            "pwaNewlyUnlocked": [
+              "volumen-100k",
+              "volumen-500k",
+              "volumen-1m"
+            ],
+            "decisions": {
+              "sesiones-10": "none",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "unlock",
+              "volumen-500k": "unlock",
+              "volumen-1m": "unlock",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:volumen-100k",
+                "key": "volumen-100k",
+                "state": "live"
+              },
+              {
+                "id": "ach:volumen-1m",
+                "key": "volumen-1m",
+                "state": "live"
+              },
+              {
+                "id": "ach:volumen-500k",
+                "key": "volumen-500k",
+                "state": "live"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-squat",
+                "nombre": "Sentadilla",
+                "peso": 200000,
+                "fecha": 1777622400000
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "mesocycle: completion is strict and tombstones follow deletion",
+      "zone": "Europe/Madrid",
+      "weeklyTarget": 3,
+      "initialStored": [],
+      "steps": [
+        {
+          "label": "ends exactly now: not completed",
+          "now": 1781035200000,
+          "sessions": [],
+          "loggedExercises": [],
+          "sets": [],
+          "mesocycles": [
+            {
+              "id": "m1",
+              "semanas": 4,
+              "fechaInicio": 1778616000000
+            }
+          ],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 0,
+              "volumenTotal": 0,
+              "prsTotales": 0,
+              "mejorRacha": 0,
+              "mesociclosCompletados": 0
+            },
+            "met": [],
+            "pwaNewlyUnlocked": [],
+            "decisions": {
+              "sesiones-10": "none",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "none"
+            },
+            "storedAfter": [],
+            "personalRecords": []
+          }
+        },
+        {
+          "label": "one ms later: completed",
+          "now": 1781035200001,
+          "sessions": [],
+          "loggedExercises": [],
+          "sets": [],
+          "mesocycles": [
+            {
+              "id": "m1",
+              "semanas": 4,
+              "fechaInicio": 1778616000000
+            }
+          ],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 0,
+              "volumenTotal": 0,
+              "prsTotales": 0,
+              "mejorRacha": 0,
+              "mesociclosCompletados": 1
+            },
+            "met": [
+              "mesociclo-1"
+            ],
+            "pwaNewlyUnlocked": [
+              "mesociclo-1"
+            ],
+            "decisions": {
+              "sesiones-10": "none",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "unlock"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:mesociclo-1",
+                "key": "mesociclo-1",
+                "state": "live"
+              }
+            ],
+            "personalRecords": []
+          }
+        },
+        {
+          "label": "mesocycle deleted: planner achievement is tombstoned",
+          "now": 1781035200001,
+          "sessions": [],
+          "loggedExercises": [],
+          "sets": [],
+          "mesocycles": [
+            {
+              "id": "m1",
+              "semanas": 4,
+              "fechaInicio": 1778616000000,
+              "deleted": true
+            }
+          ],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 0,
+              "volumenTotal": 0,
+              "prsTotales": 0,
+              "mejorRacha": 0,
+              "mesociclosCompletados": 0
+            },
+            "met": [],
+            "pwaNewlyUnlocked": [],
+            "decisions": {
+              "sesiones-10": "none",
+              "sesiones-50": "none",
+              "sesiones-100": "none",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "none",
+              "racha-8": "none",
+              "racha-12": "none",
+              "mesociclo-1": "tombstone"
+            },
+            "storedAfter": [
+              {
+                "id": "ach:mesociclo-1",
+                "key": "mesociclo-1",
+                "state": "tombstoned"
+              }
+            ],
+            "personalRecords": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "identity: PWA rows, duplicates, tombstones and unknown keys",
+      "zone": "Europe/Madrid",
+      "weeklyTarget": 3,
+      "initialStored": [
+        {
+          "id": "pwa-uuid-1",
+          "key": "sesiones-10",
+          "state": "live"
+        },
+        {
+          "id": "pwa-uuid-2",
+          "key": "sesiones-10",
+          "state": "live"
+        },
+        {
+          "id": "pwa-uuid-3",
+          "key": "sesiones-50",
+          "state": "tombstoned"
+        },
+        {
+          "id": "zz-old",
+          "key": "mesociclo-1",
+          "state": "tombstoned"
+        },
+        {
+          "id": "aa-old",
+          "key": "mesociclo-1",
+          "state": "tombstoned"
+        },
+        {
+          "id": "future-row",
+          "key": "logro-del-futuro",
+          "state": "live"
+        },
+        {
+          "id": "ach:sesiones-100",
+          "key": "sesiones-100",
+          "state": "tombstoned"
+        },
+        {
+          "id": "pwa-uuid-9",
+          "key": "sesiones-100",
+          "state": "tombstoned"
+        }
+      ],
+      "steps": [
+        {
+          "label": "duplicate live rows are retained; tombstoned rows are revived (canonical id first, else lowest id)",
+          "now": 1781035200001,
+          "sessions": [
+            {
+              "id": "p000",
+              "fecha": 1767254400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p001",
+              "fecha": 1767340800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p002",
+              "fecha": 1767427200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p003",
+              "fecha": 1767513600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p004",
+              "fecha": 1767600000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p005",
+              "fecha": 1767686400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p006",
+              "fecha": 1767772800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p007",
+              "fecha": 1767859200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p008",
+              "fecha": 1767945600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p009",
+              "fecha": 1768032000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p010",
+              "fecha": 1768118400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p011",
+              "fecha": 1768204800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p012",
+              "fecha": 1768291200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p013",
+              "fecha": 1768377600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p014",
+              "fecha": 1768464000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p015",
+              "fecha": 1768550400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p016",
+              "fecha": 1768636800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p017",
+              "fecha": 1768723200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p018",
+              "fecha": 1768809600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p019",
+              "fecha": 1768896000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p020",
+              "fecha": 1768982400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p021",
+              "fecha": 1769068800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p022",
+              "fecha": 1769155200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p023",
+              "fecha": 1769241600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p024",
+              "fecha": 1769328000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p025",
+              "fecha": 1769414400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p026",
+              "fecha": 1769500800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p027",
+              "fecha": 1769587200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p028",
+              "fecha": 1769673600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p029",
+              "fecha": 1769760000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p030",
+              "fecha": 1769846400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p031",
+              "fecha": 1769932800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p032",
+              "fecha": 1770019200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p033",
+              "fecha": 1770105600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p034",
+              "fecha": 1770192000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p035",
+              "fecha": 1770278400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p036",
+              "fecha": 1770364800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p037",
+              "fecha": 1770451200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p038",
+              "fecha": 1770537600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p039",
+              "fecha": 1770624000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p040",
+              "fecha": 1770710400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p041",
+              "fecha": 1770796800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p042",
+              "fecha": 1770883200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p043",
+              "fecha": 1770969600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p044",
+              "fecha": 1771056000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p045",
+              "fecha": 1771142400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p046",
+              "fecha": 1771228800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p047",
+              "fecha": 1771315200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p048",
+              "fecha": 1771401600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p049",
+              "fecha": 1771488000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p050",
+              "fecha": 1771574400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p051",
+              "fecha": 1771660800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p052",
+              "fecha": 1771747200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p053",
+              "fecha": 1771833600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p054",
+              "fecha": 1771920000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p055",
+              "fecha": 1772006400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p056",
+              "fecha": 1772092800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p057",
+              "fecha": 1772179200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p058",
+              "fecha": 1772265600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p059",
+              "fecha": 1772352000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p060",
+              "fecha": 1772438400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p061",
+              "fecha": 1772524800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p062",
+              "fecha": 1772611200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p063",
+              "fecha": 1772697600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p064",
+              "fecha": 1772784000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p065",
+              "fecha": 1772870400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p066",
+              "fecha": 1772956800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p067",
+              "fecha": 1773043200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p068",
+              "fecha": 1773129600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p069",
+              "fecha": 1773216000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p070",
+              "fecha": 1773302400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p071",
+              "fecha": 1773388800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p072",
+              "fecha": 1773475200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p073",
+              "fecha": 1773561600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p074",
+              "fecha": 1773648000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p075",
+              "fecha": 1773734400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p076",
+              "fecha": 1773820800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p077",
+              "fecha": 1773907200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p078",
+              "fecha": 1773993600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p079",
+              "fecha": 1774080000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p080",
+              "fecha": 1774166400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p081",
+              "fecha": 1774252800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p082",
+              "fecha": 1774339200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p083",
+              "fecha": 1774425600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p084",
+              "fecha": 1774512000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p085",
+              "fecha": 1774598400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p086",
+              "fecha": 1774684800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p087",
+              "fecha": 1774771200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p088",
+              "fecha": 1774857600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p089",
+              "fecha": 1774944000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p090",
+              "fecha": 1775030400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p091",
+              "fecha": 1775116800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p092",
+              "fecha": 1775203200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p093",
+              "fecha": 1775289600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p094",
+              "fecha": 1775376000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p095",
+              "fecha": 1775462400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p096",
+              "fecha": 1775548800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p097",
+              "fecha": 1775635200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p098",
+              "fecha": 1775721600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p099",
+              "fecha": 1775808000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p100",
+              "fecha": 1775894400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p101",
+              "fecha": 1775980800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p102",
+              "fecha": 1776067200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p103",
+              "fecha": 1776153600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p104",
+              "fecha": 1776240000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p105",
+              "fecha": 1776326400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p106",
+              "fecha": 1776412800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p107",
+              "fecha": 1776499200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p108",
+              "fecha": 1776585600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p109",
+              "fecha": 1776672000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p110",
+              "fecha": 1776758400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p111",
+              "fecha": 1776844800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p112",
+              "fecha": 1776931200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p113",
+              "fecha": 1777017600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p114",
+              "fecha": 1777104000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p115",
+              "fecha": 1777190400000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p116",
+              "fecha": 1777276800000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p117",
+              "fecha": 1777363200000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p118",
+              "fecha": 1777449600000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            },
+            {
+              "id": "p119",
+              "fecha": 1777536000000,
+              "gymId": null,
+              "duracionSegundos": 3600,
+              "deletedAt": null
+            }
+          ],
+          "loggedExercises": [
+            {
+              "id": "lp000",
+              "sessionId": "p000",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp001",
+              "sessionId": "p001",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp002",
+              "sessionId": "p002",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp003",
+              "sessionId": "p003",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp004",
+              "sessionId": "p004",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp005",
+              "sessionId": "p005",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp006",
+              "sessionId": "p006",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp007",
+              "sessionId": "p007",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp008",
+              "sessionId": "p008",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp009",
+              "sessionId": "p009",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp010",
+              "sessionId": "p010",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp011",
+              "sessionId": "p011",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp012",
+              "sessionId": "p012",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp013",
+              "sessionId": "p013",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp014",
+              "sessionId": "p014",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp015",
+              "sessionId": "p015",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp016",
+              "sessionId": "p016",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp017",
+              "sessionId": "p017",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp018",
+              "sessionId": "p018",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp019",
+              "sessionId": "p019",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp020",
+              "sessionId": "p020",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp021",
+              "sessionId": "p021",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp022",
+              "sessionId": "p022",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp023",
+              "sessionId": "p023",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp024",
+              "sessionId": "p024",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp025",
+              "sessionId": "p025",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp026",
+              "sessionId": "p026",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp027",
+              "sessionId": "p027",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp028",
+              "sessionId": "p028",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp029",
+              "sessionId": "p029",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp030",
+              "sessionId": "p030",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp031",
+              "sessionId": "p031",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp032",
+              "sessionId": "p032",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp033",
+              "sessionId": "p033",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp034",
+              "sessionId": "p034",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp035",
+              "sessionId": "p035",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp036",
+              "sessionId": "p036",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp037",
+              "sessionId": "p037",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp038",
+              "sessionId": "p038",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp039",
+              "sessionId": "p039",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp040",
+              "sessionId": "p040",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp041",
+              "sessionId": "p041",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp042",
+              "sessionId": "p042",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp043",
+              "sessionId": "p043",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp044",
+              "sessionId": "p044",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp045",
+              "sessionId": "p045",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp046",
+              "sessionId": "p046",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp047",
+              "sessionId": "p047",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp048",
+              "sessionId": "p048",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp049",
+              "sessionId": "p049",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp050",
+              "sessionId": "p050",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp051",
+              "sessionId": "p051",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp052",
+              "sessionId": "p052",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp053",
+              "sessionId": "p053",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp054",
+              "sessionId": "p054",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp055",
+              "sessionId": "p055",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp056",
+              "sessionId": "p056",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp057",
+              "sessionId": "p057",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp058",
+              "sessionId": "p058",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp059",
+              "sessionId": "p059",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp060",
+              "sessionId": "p060",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp061",
+              "sessionId": "p061",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp062",
+              "sessionId": "p062",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp063",
+              "sessionId": "p063",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp064",
+              "sessionId": "p064",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp065",
+              "sessionId": "p065",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp066",
+              "sessionId": "p066",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp067",
+              "sessionId": "p067",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp068",
+              "sessionId": "p068",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp069",
+              "sessionId": "p069",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp070",
+              "sessionId": "p070",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp071",
+              "sessionId": "p071",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp072",
+              "sessionId": "p072",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp073",
+              "sessionId": "p073",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp074",
+              "sessionId": "p074",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp075",
+              "sessionId": "p075",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp076",
+              "sessionId": "p076",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp077",
+              "sessionId": "p077",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp078",
+              "sessionId": "p078",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp079",
+              "sessionId": "p079",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp080",
+              "sessionId": "p080",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp081",
+              "sessionId": "p081",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp082",
+              "sessionId": "p082",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp083",
+              "sessionId": "p083",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp084",
+              "sessionId": "p084",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp085",
+              "sessionId": "p085",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp086",
+              "sessionId": "p086",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp087",
+              "sessionId": "p087",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp088",
+              "sessionId": "p088",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp089",
+              "sessionId": "p089",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp090",
+              "sessionId": "p090",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp091",
+              "sessionId": "p091",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp092",
+              "sessionId": "p092",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp093",
+              "sessionId": "p093",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp094",
+              "sessionId": "p094",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp095",
+              "sessionId": "p095",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp096",
+              "sessionId": "p096",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp097",
+              "sessionId": "p097",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp098",
+              "sessionId": "p098",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp099",
+              "sessionId": "p099",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp100",
+              "sessionId": "p100",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp101",
+              "sessionId": "p101",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp102",
+              "sessionId": "p102",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp103",
+              "sessionId": "p103",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp104",
+              "sessionId": "p104",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp105",
+              "sessionId": "p105",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp106",
+              "sessionId": "p106",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp107",
+              "sessionId": "p107",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp108",
+              "sessionId": "p108",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp109",
+              "sessionId": "p109",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp110",
+              "sessionId": "p110",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp111",
+              "sessionId": "p111",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp112",
+              "sessionId": "p112",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp113",
+              "sessionId": "p113",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp114",
+              "sessionId": "p114",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp115",
+              "sessionId": "p115",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp116",
+              "sessionId": "p116",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp117",
+              "sessionId": "p117",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp118",
+              "sessionId": "p118",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            },
+            {
+              "id": "lp119",
+              "sessionId": "p119",
+              "exerciseId": "ex-press",
+              "orden": 0,
+              "deletedAt": null
+            }
+          ],
+          "sets": [
+            {
+              "id": "tp000-0",
+              "loggedExerciseId": "lp000",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp001-0",
+              "loggedExerciseId": "lp001",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp002-0",
+              "loggedExerciseId": "lp002",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp003-0",
+              "loggedExerciseId": "lp003",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp004-0",
+              "loggedExerciseId": "lp004",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp005-0",
+              "loggedExerciseId": "lp005",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp006-0",
+              "loggedExerciseId": "lp006",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp007-0",
+              "loggedExerciseId": "lp007",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp008-0",
+              "loggedExerciseId": "lp008",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp009-0",
+              "loggedExerciseId": "lp009",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp010-0",
+              "loggedExerciseId": "lp010",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp011-0",
+              "loggedExerciseId": "lp011",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp012-0",
+              "loggedExerciseId": "lp012",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp013-0",
+              "loggedExerciseId": "lp013",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp014-0",
+              "loggedExerciseId": "lp014",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp015-0",
+              "loggedExerciseId": "lp015",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp016-0",
+              "loggedExerciseId": "lp016",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp017-0",
+              "loggedExerciseId": "lp017",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp018-0",
+              "loggedExerciseId": "lp018",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp019-0",
+              "loggedExerciseId": "lp019",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp020-0",
+              "loggedExerciseId": "lp020",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp021-0",
+              "loggedExerciseId": "lp021",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp022-0",
+              "loggedExerciseId": "lp022",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp023-0",
+              "loggedExerciseId": "lp023",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp024-0",
+              "loggedExerciseId": "lp024",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp025-0",
+              "loggedExerciseId": "lp025",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp026-0",
+              "loggedExerciseId": "lp026",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp027-0",
+              "loggedExerciseId": "lp027",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp028-0",
+              "loggedExerciseId": "lp028",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp029-0",
+              "loggedExerciseId": "lp029",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp030-0",
+              "loggedExerciseId": "lp030",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp031-0",
+              "loggedExerciseId": "lp031",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp032-0",
+              "loggedExerciseId": "lp032",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp033-0",
+              "loggedExerciseId": "lp033",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp034-0",
+              "loggedExerciseId": "lp034",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp035-0",
+              "loggedExerciseId": "lp035",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp036-0",
+              "loggedExerciseId": "lp036",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp037-0",
+              "loggedExerciseId": "lp037",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp038-0",
+              "loggedExerciseId": "lp038",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp039-0",
+              "loggedExerciseId": "lp039",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp040-0",
+              "loggedExerciseId": "lp040",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp041-0",
+              "loggedExerciseId": "lp041",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp042-0",
+              "loggedExerciseId": "lp042",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp043-0",
+              "loggedExerciseId": "lp043",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp044-0",
+              "loggedExerciseId": "lp044",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp045-0",
+              "loggedExerciseId": "lp045",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp046-0",
+              "loggedExerciseId": "lp046",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp047-0",
+              "loggedExerciseId": "lp047",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp048-0",
+              "loggedExerciseId": "lp048",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp049-0",
+              "loggedExerciseId": "lp049",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp050-0",
+              "loggedExerciseId": "lp050",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp051-0",
+              "loggedExerciseId": "lp051",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp052-0",
+              "loggedExerciseId": "lp052",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp053-0",
+              "loggedExerciseId": "lp053",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp054-0",
+              "loggedExerciseId": "lp054",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp055-0",
+              "loggedExerciseId": "lp055",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp056-0",
+              "loggedExerciseId": "lp056",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp057-0",
+              "loggedExerciseId": "lp057",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp058-0",
+              "loggedExerciseId": "lp058",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp059-0",
+              "loggedExerciseId": "lp059",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp060-0",
+              "loggedExerciseId": "lp060",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp061-0",
+              "loggedExerciseId": "lp061",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp062-0",
+              "loggedExerciseId": "lp062",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp063-0",
+              "loggedExerciseId": "lp063",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp064-0",
+              "loggedExerciseId": "lp064",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp065-0",
+              "loggedExerciseId": "lp065",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp066-0",
+              "loggedExerciseId": "lp066",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp067-0",
+              "loggedExerciseId": "lp067",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp068-0",
+              "loggedExerciseId": "lp068",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp069-0",
+              "loggedExerciseId": "lp069",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp070-0",
+              "loggedExerciseId": "lp070",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp071-0",
+              "loggedExerciseId": "lp071",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp072-0",
+              "loggedExerciseId": "lp072",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp073-0",
+              "loggedExerciseId": "lp073",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp074-0",
+              "loggedExerciseId": "lp074",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp075-0",
+              "loggedExerciseId": "lp075",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp076-0",
+              "loggedExerciseId": "lp076",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp077-0",
+              "loggedExerciseId": "lp077",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp078-0",
+              "loggedExerciseId": "lp078",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp079-0",
+              "loggedExerciseId": "lp079",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp080-0",
+              "loggedExerciseId": "lp080",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp081-0",
+              "loggedExerciseId": "lp081",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp082-0",
+              "loggedExerciseId": "lp082",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp083-0",
+              "loggedExerciseId": "lp083",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp084-0",
+              "loggedExerciseId": "lp084",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp085-0",
+              "loggedExerciseId": "lp085",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp086-0",
+              "loggedExerciseId": "lp086",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp087-0",
+              "loggedExerciseId": "lp087",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp088-0",
+              "loggedExerciseId": "lp088",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp089-0",
+              "loggedExerciseId": "lp089",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp090-0",
+              "loggedExerciseId": "lp090",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp091-0",
+              "loggedExerciseId": "lp091",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp092-0",
+              "loggedExerciseId": "lp092",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp093-0",
+              "loggedExerciseId": "lp093",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp094-0",
+              "loggedExerciseId": "lp094",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp095-0",
+              "loggedExerciseId": "lp095",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp096-0",
+              "loggedExerciseId": "lp096",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp097-0",
+              "loggedExerciseId": "lp097",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp098-0",
+              "loggedExerciseId": "lp098",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp099-0",
+              "loggedExerciseId": "lp099",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp100-0",
+              "loggedExerciseId": "lp100",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp101-0",
+              "loggedExerciseId": "lp101",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp102-0",
+              "loggedExerciseId": "lp102",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp103-0",
+              "loggedExerciseId": "lp103",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp104-0",
+              "loggedExerciseId": "lp104",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp105-0",
+              "loggedExerciseId": "lp105",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp106-0",
+              "loggedExerciseId": "lp106",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp107-0",
+              "loggedExerciseId": "lp107",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp108-0",
+              "loggedExerciseId": "lp108",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp109-0",
+              "loggedExerciseId": "lp109",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp110-0",
+              "loggedExerciseId": "lp110",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp111-0",
+              "loggedExerciseId": "lp111",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp112-0",
+              "loggedExerciseId": "lp112",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp113-0",
+              "loggedExerciseId": "lp113",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp114-0",
+              "loggedExerciseId": "lp114",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp115-0",
+              "loggedExerciseId": "lp115",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp116-0",
+              "loggedExerciseId": "lp116",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp117-0",
+              "loggedExerciseId": "lp117",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp118-0",
+              "loggedExerciseId": "lp118",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            },
+            {
+              "id": "tp119-0",
+              "loggedExerciseId": "lp119",
+              "orden": 0,
+              "peso": 60,
+              "reps": 8,
+              "esCalentamiento": false,
+              "deletedAt": null
+            }
+          ],
+          "mesocycles": [
+            {
+              "id": "m1",
+              "semanas": 1,
+              "fechaInicio": 1779825600000
+            }
+          ],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 120,
+              "volumenTotal": 57600,
+              "prsTotales": 1,
+              "mejorRacha": 18,
+              "mesociclosCompletados": 1
+            },
+            "met": [
+              "sesiones-10",
+              "sesiones-50",
+              "sesiones-100",
+              "racha-4",
+              "racha-8",
+              "racha-12",
+              "mesociclo-1"
+            ],
+            "pwaNewlyUnlocked": [
+              "sesiones-50",
+              "sesiones-100",
+              "racha-4",
+              "racha-8",
+              "racha-12",
+              "mesociclo-1"
+            ],
+            "decisions": {
+              "sesiones-10": "retain",
+              "sesiones-50": "unlock",
+              "sesiones-100": "unlock",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "unlock",
+              "racha-8": "unlock",
+              "racha-12": "unlock",
+              "mesociclo-1": "unlock"
+            },
+            "storedAfter": [
+              {
+                "id": "aa-old",
+                "key": "mesociclo-1",
+                "state": "live"
+              },
+              {
+                "id": "ach:racha-12",
+                "key": "racha-12",
+                "state": "live"
+              },
+              {
+                "id": "ach:racha-4",
+                "key": "racha-4",
+                "state": "live"
+              },
+              {
+                "id": "ach:racha-8",
+                "key": "racha-8",
+                "state": "live"
+              },
+              {
+                "id": "ach:sesiones-100",
+                "key": "sesiones-100",
+                "state": "live"
+              },
+              {
+                "id": "future-row",
+                "key": "logro-del-futuro",
+                "state": "live"
+              },
+              {
+                "id": "pwa-uuid-1",
+                "key": "sesiones-10",
+                "state": "live"
+              },
+              {
+                "id": "pwa-uuid-2",
+                "key": "sesiones-10",
+                "state": "live"
+              },
+              {
+                "id": "pwa-uuid-3",
+                "key": "sesiones-50",
+                "state": "live"
+              },
+              {
+                "id": "pwa-uuid-9",
+                "key": "sesiones-100",
+                "state": "tombstoned"
+              },
+              {
+                "id": "zz-old",
+                "key": "mesociclo-1",
+                "state": "tombstoned"
+              }
+            ],
+            "personalRecords": [
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "peso": 60,
+                "fecha": 1767254400000
+              }
+            ]
+          }
+        },
+        {
+          "label": "evidence gone: every live duplicate is tombstoned, unknown keys stay",
+          "now": 1781035200001,
+          "sessions": [],
+          "loggedExercises": [],
+          "sets": [],
+          "mesocycles": [],
+          "expected": {
+            "metrics": {
+              "sesionesTotales": 0,
+              "volumenTotal": 0,
+              "prsTotales": 0,
+              "mejorRacha": 0,
+              "mesociclosCompletados": 0
+            },
+            "met": [],
+            "pwaNewlyUnlocked": [],
+            "decisions": {
+              "sesiones-10": "tombstone",
+              "sesiones-50": "tombstone",
+              "sesiones-100": "tombstone",
+              "sesiones-250": "none",
+              "volumen-100k": "none",
+              "volumen-500k": "none",
+              "volumen-1m": "none",
+              "racha-4": "tombstone",
+              "racha-8": "tombstone",
+              "racha-12": "tombstone",
+              "mesociclo-1": "tombstone"
+            },
+            "storedAfter": [
+              {
+                "id": "aa-old",
+                "key": "mesociclo-1",
+                "state": "tombstoned"
+              },
+              {
+                "id": "ach:racha-12",
+                "key": "racha-12",
+                "state": "tombstoned"
+              },
+              {
+                "id": "ach:racha-4",
+                "key": "racha-4",
+                "state": "tombstoned"
+              },
+              {
+                "id": "ach:racha-8",
+                "key": "racha-8",
+                "state": "tombstoned"
+              },
+              {
+                "id": "ach:sesiones-100",
+                "key": "sesiones-100",
+                "state": "tombstoned"
+              },
+              {
+                "id": "future-row",
+                "key": "logro-del-futuro",
+                "state": "live"
+              },
+              {
+                "id": "pwa-uuid-1",
+                "key": "sesiones-10",
+                "state": "tombstoned"
+              },
+              {
+                "id": "pwa-uuid-2",
+                "key": "sesiones-10",
+                "state": "tombstoned"
+              },
+              {
+                "id": "pwa-uuid-3",
+                "key": "sesiones-50",
+                "state": "tombstoned"
+              },
+              {
+                "id": "pwa-uuid-9",
+                "key": "sesiones-100",
+                "state": "tombstoned"
+              },
+              {
+                "id": "zz-old",
+                "key": "mesociclo-1",
+                "state": "tombstoned"
+              }
+            ],
+            "personalRecords": []
+          }
+        }
+      ]
+    }
+  ]
+}

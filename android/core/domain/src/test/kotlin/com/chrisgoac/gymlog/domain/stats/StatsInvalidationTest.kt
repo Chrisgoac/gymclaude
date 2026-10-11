@@ -7,7 +7,13 @@ import com.chrisgoac.gymlog.domain.history.SaveWorkoutDraftUseCase
 import com.chrisgoac.gymlog.domain.history.WorkoutDraft
 import com.chrisgoac.gymlog.domain.workout.WorkoutAggregate
 import com.chrisgoac.gymlog.domain.workout.WorkoutSession
+import com.chrisgoac.gymlog.domain.OutboxDiagnostic
+import com.chrisgoac.gymlog.domain.SyncRepository
+import com.chrisgoac.gymlog.domain.SyncResult
+import com.chrisgoac.gymlog.domain.SyncStatus
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -46,5 +52,30 @@ class StatsInvalidationTest {
         next = SaveResult.Invalid(DraftValidationSummary(emptyList()))
         save(original, draft)
         assertEquals(listOf(setOf(InvalidationScope.VOLUME)), published)
+    }
+
+    private class FakeSync(var result: SyncResult) : SyncRepository {
+        override fun observeStatus(): Flow<SyncStatus> = emptyFlow()
+        override suspend fun syncOnce(userId: String) = result
+        override fun observeDiagnostics(): Flow<List<OutboxDiagnostic>> = emptyFlow()
+    }
+
+    @Test fun `a sync that pulled rows publishes every scope, others publish nothing`() = runTest(UnconfinedTestDispatcher()) {
+        val invalidation = StatsInvalidation()
+        val published = mutableListOf<Set<InvalidationScope>>()
+        backgroundScope.launch { invalidation.scopes.collect { published += it } }
+        val inner = FakeSync(SyncResult.Success(pushed = 2, pulled = 0, quarantined = 0))
+        val sync = InvalidatingSyncRepository(inner, invalidation)
+
+        sync.syncOnce("u")
+        inner.result = SyncResult.Retryable(retryAfterMillis = null, quarantined = 0)
+        sync.syncOnce("u")
+        inner.result = SyncResult.SessionRequired(quarantined = 0)
+        sync.syncOnce("u")
+        assertEquals(emptyList<Set<InvalidationScope>>(), published)
+
+        inner.result = SyncResult.Success(pushed = 0, pulled = 3, quarantined = 0)
+        assertEquals(inner.result, sync.syncOnce("u"))
+        assertEquals(listOf(InvalidationScope.entries.toSet()), published)
     }
 }

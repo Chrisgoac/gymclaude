@@ -97,7 +97,7 @@ class ProgressScreensTest {
         stats.balance.value = listOf(BalanceRow(MuscleGroup.PECHO, 6_000.0, 2, false, 80), BalanceRow(MuscleGroup.ESPALDA, 100.0, 40, true, null))
     }
 
-    private fun showProgress(fontScale: Float = 2f, onReport: (() -> Unit)? = null, opened: MutableList<String> = mutableListOf()) {
+    private fun showProgress(fontScale: Float = 2f, onReport: (() -> Unit)? = null, opened: MutableList<String> = mutableListOf(), onAchievements: (() -> Unit)? = null) {
         val viewModel = ProgressViewModel(
             stats, ProgGyms(), ProgFakeExercises(listOf(progExercise("e1", "Press banca"))), pro,
             SavedStateHandle(), flowOf(Unit), { ProgressClock(NOW, MADRID) },
@@ -105,7 +105,7 @@ class ProgressScreensTest {
         rule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                GymLogTheme { ProgressScreen(viewModel, onOpenExercise = { id, _ -> opened += id }, onOpenReport = onReport) }
+                GymLogTheme { ProgressScreen(viewModel, onOpenExercise = { id, _ -> opened += id }, onOpenReport = onReport, onOpenAchievements = onAchievements) }
             }
         }
         idle()
@@ -113,6 +113,14 @@ class ProgressScreensTest {
 
     private fun scrollTo(matcher: androidx.compose.ui.test.SemanticsMatcher) {
         rule.onNode(VERTICAL_LIST).performScrollToNode(matcher)
+    }
+
+    @Test fun achievementsEntryIsOnlyShownWhenThereIsADestination() {
+        var opened = 0
+        showProgress(onAchievements = { opened++ })
+        scrollTo(androidx.compose.ui.test.hasText("Logros y récords"))
+        rule.onNodeWithText("Logros y récords").performClick()
+        org.junit.Assert.assertEquals(1, opened)
     }
 
     @Test fun weeklySummaryCardsReadAsOneStopEachAtDoubleFont() {
