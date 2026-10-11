@@ -12,6 +12,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import androidx.lifecycle.Lifecycle
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -101,14 +102,38 @@ class RestTimerNotifierTest {
         assertEquals(1, alarms.scheduledAlarms.size)
     }
 
-    @Test fun `the receiver stays silent while the app is in the foreground and posts otherwise`() {
+    @Test fun `the receiver stays silent only while the workout screen is visible`() {
         val manager = context.getSystemService(NotificationManager::class.java)
         shadowOf(manager).setNotificationsEnabled(true)
         val intent = android.content.Intent(RestTimerNotifier.ACTION_REST_DONE).putExtra(RestTimerNotifier.EXTRA_SESSION_ID, "s1")
-        RestTimerReceiver().handle(context, intent, appInForeground = true)
+        RestTimerReceiver().handle(context, intent, workoutScreenVisible = true)
         assertTrue(shadowOf(manager).allNotifications.isEmpty())
-        RestTimerReceiver().handle(context, intent, appInForeground = false)
+        // App in the foreground on another screen (or in the background): the notification is the alert.
+        RestTimerReceiver().handle(context, intent, workoutScreenVisible = false)
         assertEquals(1, shadowOf(manager).allNotifications.size)
+    }
+
+    @Test fun `onReceive reads the workout screen visibility, not the process state`() {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        shadowOf(manager).setNotificationsEnabled(true)
+        val owner = TestLifecycleOwner()
+        val intent = android.content.Intent(RestTimerNotifier.ACTION_REST_DONE).putExtra(RestTimerNotifier.EXTRA_SESSION_ID, "s1")
+
+        owner.registry.currentState = Lifecycle.State.STARTED
+        WorkoutScreenVisibility.track(owner)
+        RestTimerReceiver().onReceive(context, intent)
+        assertTrue(shadowOf(manager).allNotifications.isEmpty())
+
+        owner.registry.currentState = Lifecycle.State.CREATED // user went to another tab / screen
+        RestTimerReceiver().onReceive(context, intent)
+        assertEquals(1, shadowOf(manager).allNotifications.size)
+        owner.registry.currentState = Lifecycle.State.DESTROYED
+        assertFalse(WorkoutScreenVisibility.isVisible)
+    }
+
+    private class TestLifecycleOwner : androidx.lifecycle.LifecycleOwner {
+        val registry = androidx.lifecycle.LifecycleRegistry.createUnsafe(this)
+        override val lifecycle: Lifecycle get() = registry
     }
 
     private class MemoryStore : com.chrisgoac.gymlog.domain.timer.RestTimerStore {

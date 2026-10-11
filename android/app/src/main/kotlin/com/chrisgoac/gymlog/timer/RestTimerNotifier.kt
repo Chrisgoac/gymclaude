@@ -9,8 +9,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ProcessLifecycleOwner
 import com.chrisgoac.gymlog.MainActivity
 import com.chrisgoac.gymlog.R
 import com.chrisgoac.gymlog.domain.timer.RestTimerAlarm
@@ -101,17 +99,20 @@ class RestTimerNotifier(context: Context) : RestTimerAlarm {
     }
 }
 
-/** Receives the alarm of [RestTimerNotifier] (not exported). */
+/**
+ * Receives the alarm of [RestTimerNotifier] (not exported). Gated on the WORKOUT SCREEN being
+ * visible, not on the process being in the foreground: only that screen's timer bar alerts in-app,
+ * so on any other screen (Historial, Ajustes…) or in the background the notification is the alert.
+ */
 class RestTimerReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != RestTimerNotifier.ACTION_REST_DONE) return
-        val foreground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-        handle(context, intent, appInForeground = foreground)
+        handle(context, intent, workoutScreenVisible = WorkoutScreenVisibility.isVisible)
     }
 
-    /** With the app on screen the in-app bar (haptic + announcement) already tells the user: no notification. */
-    internal fun handle(context: Context, intent: Intent, appInForeground: Boolean) {
-        if (appInForeground) return
+    /** With the workout on screen its timer bar (haptic + announcement) already tells the user: no notification. */
+    internal fun handle(context: Context, intent: Intent, workoutScreenVisible: Boolean) {
+        if (workoutScreenVisible) return
         RestTimerNotifier(context).postFinished(intent.getStringExtra(RestTimerNotifier.EXTRA_SESSION_ID))
     }
 }
