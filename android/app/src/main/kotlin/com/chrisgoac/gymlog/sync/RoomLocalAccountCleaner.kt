@@ -33,7 +33,9 @@ class RoomLocalAccountCleaner(
         val open = databases.current.value?.takeIf { it.userId == userId }
             ?: error("The database of the signing-out account is not the open one")
         val dao = open.database.syncDao()
-        return dao.outboxCount(OutboxStatus.PENDING) + dao.outboxCount(OutboxStatus.QUARANTINED)
+        // Queued (or rejected) photo uploads/deletes never reached the server either.
+        return dao.outboxCount(OutboxStatus.PENDING) + dao.outboxCount(OutboxStatus.QUARANTINED) +
+            open.database.pendingMediaDao().count()
     }
 
     override suspend fun markPendingDeletion(userId: String) = marks.markIntent(UserDatabaseManagerImpl.userHash(userId))

@@ -17,5 +17,17 @@ val MIGRATION_1_2: Migration = object : Migration(1, 2) {
     }
 }
 
+/** Schema 2 -> 3: adds the local-only photo upload/delete queue. Synchronized tables are untouched. */
+val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `pending_media` (`id` TEXT NOT NULL, `kind` TEXT NOT NULL, " +
+                "`operation` TEXT NOT NULL, `state` TEXT NOT NULL, `exerciseId` TEXT, `fecha` INTEGER, " +
+                "`angulo` TEXT, `nota` TEXT, `fileName` TEXT, `attempts` INTEGER NOT NULL, " +
+                "`lastError` TEXT, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        )
+    }
+}
+
 /** Every migration of [GymLogDatabase], in order. */
-val GYMLOG_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
+val GYMLOG_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)

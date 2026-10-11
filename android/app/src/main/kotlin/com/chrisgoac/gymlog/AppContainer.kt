@@ -84,6 +84,17 @@ import com.chrisgoac.gymlog.network.AuthState
 import com.chrisgoac.gymlog.network.ServerClock
 import com.chrisgoac.gymlog.network.SyncApi
 import com.chrisgoac.gymlog.network.createSyncApi
+import com.chrisgoac.gymlog.network.createMediaApi
+import com.chrisgoac.gymlog.data.media.OfflineMediaRepository
+import com.chrisgoac.gymlog.domain.media.MediaRepository
+import com.chrisgoac.gymlog.media.CameraCaptureTargets
+import com.chrisgoac.gymlog.media.MediaUploadWorkerFactory
+import com.chrisgoac.gymlog.media.MediaWorkEnvironment
+import com.chrisgoac.gymlog.media.WorkManagerMediaScheduler
+import com.chrisgoac.gymlog.model.media.MediaWorkOutcome
+import com.chrisgoac.gymlog.sync.SyncReadiness
+import androidx.work.DelegatingWorkerFactory
+import kotlinx.coroutines.flow.filterNotNull
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -143,6 +154,7 @@ class AppContainer(private val application: Application) {
         onLocalDataDeleted = { hash ->
             restTimerDeletionHook.onDeleted(hash)
             accountPrefs.forget(hash)
+            mediaScheduler.cancelAll(hash)
         },
     )
 
@@ -322,6 +334,28 @@ class AppContainer(private val application: Application) {
     private val retryGate = RetryAfterGate()
     private val syncScheduler = WorkManagerSyncScheduler({ WorkManager.getInstance(application) }, retryGate)
 
+    // Before startupSweep: the cleaner's deletion hook (which the sweep may run) cancels queued photos through it.
+    private val mediaScheduler by lazy {
+        WorkManagerMediaScheduler({ WorkManager.getInstance(application) }, syncScheduler::isSuspended)
+    }
+
+    /** Camera capture URIs (FileProvider, no CAMERA permission) under the account's private directory. */
+    val cameraCaptureTargets by lazy { CameraCaptureTargets(application) }
+
+    private val offlineMedia = OfflineMediaRepository(
+        databases = databases,
+        api = createMediaApi(BuildConfig.API_BASE_URL, authSession, serverClock),
+        filesRoot = application.filesDir,
+        cacheRoot = application.cacheDir,
+        openSource = { uri -> application.contentResolver.openInputStream(android.net.Uri.parse(uri)) },
+        schedule = { hash, id -> mediaScheduler.schedule(hash, id) },
+        locks = syncLocks,
+        now = syncClock::nowMillis,
+    )
+
+    /** Private photos of the open account: offline queue + v1 media endpoints (never the outbox). */
+    val mediaRepository: MediaRepository = offlineMedia
+
     // Manual syncs go through the scheduler too, so the Retry-After window and the one-run rule hold.
     val syncUseCases: SyncUseCases = DefaultSyncUseCases(
         syncRepository,
@@ -353,10 +387,20 @@ class AppContainer(private val application: Application) {
     val rootStateMachine: RootStateMachine = RootStateMachine(authSession, databases, bootstrapRunner, appScope, clerkConfigured, startupGate = { startupSweep.await() })
         .also { it.start() }
 
-    /** Worker factory for WorkManager's on-demand initialization (see [GymLogApplication]). */
-    val syncWorkerFactory = SyncWorkerFactory(
-        AppSyncEnvironment(rootStateMachine.state, syncRepository, syncScheduler, retryGate),
-    )
+    private val syncEnvironment = AppSyncEnvironment(rootStateMachine.state, syncRepository, syncScheduler, retryGate)
+
+    /** Worker factory for WorkManager's on-demand initialization (see [GymLogApplication]): sync and photo uploads. */
+    val workerFactory: DelegatingWorkerFactory = DelegatingWorkerFactory().apply {
+        addFactory(SyncWorkerFactory(syncEnvironment))
+        addFactory(
+            MediaUploadWorkerFactory(
+                object : MediaWorkEnvironment {
+                    override suspend fun readiness(userHash: String): SyncReadiness = syncEnvironment.readiness(userHash)
+                    override suspend fun process(userId: String, mediaId: String): MediaWorkOutcome = offlineMedia.process(userId, mediaId)
+                },
+            ),
+        )
+    }
 
     private val syncTriggers = SyncTriggers(appScope, rootStateMachine.state, syncScheduler)
 
@@ -398,11 +442,27 @@ class AppContainer(private val application: Application) {
         appScope.launch { scheduler.run() }
     }
 
+    /** Re-schedules each account's queued photos when it becomes ready (process death, new sign-in). */
+    private suspend fun resumeQueuedMedia() {
+        rootStateMachine.state.map { (it as? RootState.Ready)?.userId }.distinctUntilChanged().filterNotNull().collect { userId ->
+            try {
+                val hash = UserDatabaseManagerImpl.userHash(userId)
+                cameraCaptureTargets.sweep(hash)
+                offlineMedia.pendingWork(userId).forEach { mediaScheduler.schedule(hash, it, resume = true) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (e: Exception) {
+                Log.w("GymLogMedia", "Could not resume queued photos", e)
+            }
+        }
+    }
+
     /** Starts the sync triggers: ready account, foreground, local mutations, connectivity (bootstrap retry). */
     fun startSync() {
         syncTriggers.start()
         startAchievementReconciliation()
         appScope.launch { RestTimerAccountWatcher(rootStateMachine.state, restTimer::detach).run() }
+        appScope.launch { resumeQueuedMedia() }
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) syncTriggers.onForeground() },
         )

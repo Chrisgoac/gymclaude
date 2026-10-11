@@ -13,6 +13,7 @@ import com.chrisgoac.gymlog.database.dao.GymDao
 import com.chrisgoac.gymlog.database.dao.LoggedExerciseDao
 import com.chrisgoac.gymlog.database.dao.LoggedSetDao
 import com.chrisgoac.gymlog.database.dao.MesocycleDao
+import com.chrisgoac.gymlog.database.dao.PendingMediaDao
 import com.chrisgoac.gymlog.database.dao.ProgressPhotoDao
 import com.chrisgoac.gymlog.database.dao.RoutineDao
 import com.chrisgoac.gymlog.database.dao.RoutineExerciseDao
@@ -33,6 +34,7 @@ import com.chrisgoac.gymlog.database.entity.LoggedExerciseEntity
 import com.chrisgoac.gymlog.database.entity.LoggedSetEntity
 import com.chrisgoac.gymlog.database.entity.MesocycleEntity
 import com.chrisgoac.gymlog.database.entity.OutboxMutationEntity
+import com.chrisgoac.gymlog.database.entity.PendingMediaEntity
 import com.chrisgoac.gymlog.database.entity.ProgressPhotoEntity
 import com.chrisgoac.gymlog.database.entity.RoutineEntity
 import com.chrisgoac.gymlog.database.entity.RoutineExerciseEntity
@@ -58,6 +60,8 @@ import com.chrisgoac.gymlog.database.entity.WorkoutSessionEntity
  * Plus the local-only global exercise catalog (`catalog_exercises`, `catalog_meta`; schema 2): never
  * synced and never in the outbox.
  *
+ * Plus the local-only photo upload/delete queue (`pending_media`; schema 3), also never synced.
+ *
  * Version 1 was the first published schema; exported schemas live in `core/database/schemas/` and
  * every change needs a tested migration (see [GYMLOG_MIGRATIONS]).
  */
@@ -82,8 +86,9 @@ import com.chrisgoac.gymlog.database.entity.WorkoutSessionEntity
         BootstrapCheckpointEntity::class,
         CatalogExerciseEntity::class,
         CatalogMetaEntity::class,
+        PendingMediaEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class GymLogDatabase : RoomDatabase() {
@@ -105,4 +110,5 @@ abstract class GymLogDatabase : RoomDatabase() {
     abstract fun achievementDao(): AchievementDao
     abstract fun syncDao(): SyncDao
     abstract fun catalogDao(): CatalogDao
+    abstract fun pendingMediaDao(): PendingMediaDao
 }
