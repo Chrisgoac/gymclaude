@@ -215,9 +215,28 @@ export const subscriptionEntitlements = pgTable('subscription_entitlements', {
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [
   primaryKey({ columns: [t.userId, t.purchaseTokenHash] }),
+  // RTDN finds the owner of a purchase by its token hash alone (the PK leads with user_id).
+  index('subscription_entitlements_purchase_token_hash_idx').on(t.purchaseTokenHash),
   check('subscription_entitlements_state_check',
     sql`${t.state} IN ('ACTIVE','GRACE','ON_HOLD','PAUSED','CANCELED','EXPIRED','REVOKED')`),
   check('subscription_entitlements_source_check', sql`${t.source} IN ('play','test')`),
+]);
+
+// Google Play Real-Time Developer Notifications recibidas (Pub/Sub push). `message_id` (el messageId
+// de Pub/Sub) hace idempotente la reentrega: un mensaje ya procesado se confirma sin reprocesar.
+// Solo el hash del token, nunca el token. `processed_at` NULL = recibido pero pendiente (fallo
+// transitorio de Google: Pub/Sub reintenta).
+export const billingEvents = pgTable('billing_events', {
+  messageId: text('message_id').primaryKey(),
+  eventTime: bigint('event_time', { mode: 'number' }).notNull(), // epoch ms (eventTimeMillis de Google)
+  notificationKind: text('notification_kind').notNull(),
+  notificationType: integer('notification_type'),
+  purchaseTokenHash: text('purchase_token_hash'),
+  outcome: text('outcome'),
+  receivedAt: bigint('received_at', { mode: 'number' }).notNull(),
+  processedAt: bigint('processed_at', { mode: 'number' }),
+}, (t) => [
+  check('billing_events_kind_check', sql`${t.notificationKind} IN ('subscription','voided','test','unknown','malformed')`),
 ]);
 
 // Informes inteligentes cacheados por huella de los datos de origen.

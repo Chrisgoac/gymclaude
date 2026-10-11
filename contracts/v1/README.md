@@ -400,3 +400,20 @@ Compare `validUntil` with `serverTime`, not the device clock.
 
 Server env: `GOOGLE_PLAY_PACKAGE_NAME` (`com.chrisgoac.gymlog`) and `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
 (service-account key JSON with Play Console "View financial data / Manage orders" access; never logged).
+
+### Real-Time Developer Notifications (`POST /api/webhooks/google-play`)
+
+Server-to-server only (Pub/Sub push, outside `/api/v1`, no Clerk session). Auth: the push
+subscription's Google-signed OIDC token (`Authorization: Bearer`), checked for signature (Google
+certs), issuer `accounts.google.com`, audience `GOOGLE_PLAY_RTDN_AUDIENCE` and email
+`GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT` (verified). Missing config → 503, invalid token → 401.
+
+Each notification is only a hint: the server refetches the subscription from Google and projects it
+like `verify`, so duplicates and out-of-order delivery converge on Google's current state.
+`billing_events.message_id` (Pub/Sub `messageId`) makes redelivery idempotent; the event row and the
+entitlement change commit in one transaction. Voided (refunded) subscriptions become `REVOKED` unless
+Google still entitles them. `linkedPurchaseToken` (upgrade/downgrade) moves the owner of the old token
+to the new one and expires the old row. A token no account has verified yet is recorded and
+acknowledged without a grant (the client's `verify` binds it). 200 = acknowledged (`{ outcome }`),
+503 = Pub/Sub retries (Google or database unavailable). Migration: `drizzle/0004_billing_events.sql`
+via `npm run db:migrate:billing` (after 0003).

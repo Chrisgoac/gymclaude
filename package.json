@@ -16,6 +16,7 @@
     "db:migrate:sync": "node scripts/migrate-sync-foundation.mjs",
     "db:migrate:media": "node scripts/migrate-private-media.mjs",
     "db:migrate:ai": "node scripts/migrate-ai-entitlements.mjs",
+    "db:migrate:billing": "node scripts/migrate-billing-events.mjs",
     "ai:seed-test-entitlement": "node scripts/seed-test-entitlement.mjs"
   },
   "dependencies": {

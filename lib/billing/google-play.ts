@@ -32,6 +32,8 @@ export function obfuscatedAccountIdFor(userId: string): string {
 /** The subset of `SubscriptionPurchaseV2` the server reads. Unknown fields are dropped. */
 const SubscriptionSchema = z.object({
   subscriptionState: z.string(),
+  /** Set on an upgrade/downgrade/resubscribe: the token this purchase replaces. */
+  linkedPurchaseToken: z.string().optional(),
   acknowledgementState: z.string().optional(),
   lineItems: z.array(z.object({
     productId: z.string(),

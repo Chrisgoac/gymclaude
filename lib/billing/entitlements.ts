@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { getPoolDb, type PoolDb } from '@/db/pool';
+import { getPoolDb, type PoolDb, type PoolTx } from '@/db/pool';
 import { ApiError } from '@/lib/api/v1/errors';
 import { entitlementUnavailable } from '@/lib/api/v1/ai/guard';
 import {
@@ -91,6 +91,41 @@ export function hashPurchaseToken(purchaseToken: string): string {
   return createHash('sha256').update(purchaseToken).digest('hex');
 }
 
+/**
+ * Upserts a Play row inside the caller's transaction (shared by verify and the RTDN webhook).
+ * Serializes every write of this token hash with an advisory lock (the PK is per user, so two users
+ * could otherwise both bind the same token concurrently); refuses a hash bound to another user; an
+ * older verification (`verifiedAt`) never overwrites a newer one.
+ */
+export async function upsertPlayInTx(tx: Pick<PoolTx, 'execute'>, w: PlayEntitlementWrite): Promise<'bound' | 'already_bound'> {
+  await lockTokenHash(tx, w.purchaseTokenHash);
+  const other = await tx.execute(sql`
+    SELECT 1 FROM subscription_entitlements
+    WHERE purchase_token_hash = ${w.purchaseTokenHash} AND user_id <> ${w.userId}
+    LIMIT 1`);
+  if (other.rows.length > 0) return 'already_bound';
+  await tx.execute(sql`
+    INSERT INTO subscription_entitlements
+      (user_id, product_id, purchase_token_hash, state, expires_at, auto_renewing, last_verified_at, source, created_at, updated_at)
+    VALUES (${w.userId}, ${w.productId}, ${w.purchaseTokenHash}, ${w.state}, ${w.expiresAt}, ${w.autoRenewing},
+            ${w.verifiedAt}, 'play', ${w.verifiedAt}, ${w.verifiedAt})
+    ON CONFLICT (user_id, purchase_token_hash) DO UPDATE SET
+      product_id = EXCLUDED.product_id,
+      state = EXCLUDED.state,
+      expires_at = EXCLUDED.expires_at,
+      auto_renewing = EXCLUDED.auto_renewing,
+      last_verified_at = EXCLUDED.last_verified_at,
+      source = 'play',
+      updated_at = EXCLUDED.updated_at
+    WHERE subscription_entitlements.last_verified_at <= EXCLUDED.last_verified_at`);
+  return 'bound';
+}
+
+/** Transaction-scoped advisory lock on one token hash (same key for every writer of that token). */
+export async function lockTokenHash(tx: Pick<PoolTx, 'execute'>, purchaseTokenHash: string): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`billing-token:${purchaseTokenHash}`}, 0))`);
+}
+
 export function createDbEntitlementStore(
   getDb: () => PoolDb = getPoolDb,
   allowTestEntitlements: () => boolean = testEntitlementsAllowed,
@@ -98,32 +133,7 @@ export function createDbEntitlementStore(
   const granting = sql.join([...PRO_GRANTING_STATES].map((s) => sql`${s}`), sql`, `);
   return {
     async upsertPlay(w) {
-      return getDb().transaction(async (tx) => {
-        // Serializes every write of this token hash (the PK is per user, so two users could
-        // otherwise both bind the same token concurrently).
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`billing-token:${w.purchaseTokenHash}`}, 0))`);
-        const other = await tx.execute(sql`
-          SELECT 1 FROM subscription_entitlements
-          WHERE purchase_token_hash = ${w.purchaseTokenHash} AND user_id <> ${w.userId}
-          LIMIT 1`);
-        if (other.rows.length > 0) return 'already_bound' as const;
-        // Google's state at verification time wins; an older verification never overwrites a newer one.
-        await tx.execute(sql`
-          INSERT INTO subscription_entitlements
-            (user_id, product_id, purchase_token_hash, state, expires_at, auto_renewing, last_verified_at, source, created_at, updated_at)
-          VALUES (${w.userId}, ${w.productId}, ${w.purchaseTokenHash}, ${w.state}, ${w.expiresAt}, ${w.autoRenewing},
-                  ${w.verifiedAt}, 'play', ${w.verifiedAt}, ${w.verifiedAt})
-          ON CONFLICT (user_id, purchase_token_hash) DO UPDATE SET
-            product_id = EXCLUDED.product_id,
-            state = EXCLUDED.state,
-            expires_at = EXCLUDED.expires_at,
-            auto_renewing = EXCLUDED.auto_renewing,
-            last_verified_at = EXCLUDED.last_verified_at,
-            source = 'play',
-            updated_at = EXCLUDED.updated_at
-          WHERE subscription_entitlements.last_verified_at <= EXCLUDED.last_verified_at`);
-        return 'bound' as const;
-      });
+      return getDb().transaction((tx) => upsertPlayInTx(tx, w));
     },
     async findBest(userId, now) {
       const allowTest = allowTestEntitlements();
@@ -152,7 +162,7 @@ export function createDbEntitlementStore(
 // ── Projection ──
 
 /** Google `subscriptionState` → stored state. CANCELED keeps access until expiry (ACTIVE, no auto-renew). */
-function projectGoogleState(googleState: string, autoRenew: boolean): { state: EntitlementState; autoRenewing: boolean } | null {
+export function projectGoogleState(googleState: string, autoRenew: boolean): { state: EntitlementState; autoRenewing: boolean } | null {
   switch (googleState) {
     case 'SUBSCRIPTION_STATE_ACTIVE': return { state: 'ACTIVE', autoRenewing: autoRenew };
     case 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD': return { state: 'GRACE', autoRenewing: autoRenew };
