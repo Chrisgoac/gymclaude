@@ -24,6 +24,8 @@ import com.chrisgoac.gymlog.designsystem.component.HierroScreenHeader
 import com.chrisgoac.gymlog.designsystem.component.HierroText
 import com.chrisgoac.gymlog.designsystem.component.PhotoTile
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
+import com.chrisgoac.gymlog.domain.media.PhotoMessage
+import com.chrisgoac.gymlog.domain.media.isProblem
 import com.chrisgoac.gymlog.feature.progress.R
 
 /**
@@ -60,8 +62,8 @@ private fun ComparisonContent(comparison: ComparisonUi, actions: PhotoActions) {
         }
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Side(stringResource(R.string.progress_photos_compare_side_a), comparison.a, Modifier.weight(1f))
-        Side(stringResource(R.string.progress_photos_compare_side_b), comparison.b, Modifier.weight(1f))
+        Side(stringResource(R.string.progress_photos_compare_side_a), comparison.a, actions, Modifier.weight(1f))
+        Side(stringResource(R.string.progress_photos_compare_side_b), comparison.b, actions, Modifier.weight(1f))
     }
     HierroButton(stringResource(R.string.progress_photos_compare_swap), actions.onSwap, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
     Chooser(stringResource(R.string.progress_photos_compare_choose_a), comparison, comparison.a.id, actions.onCompareA)
@@ -69,17 +71,23 @@ private fun ComparisonContent(comparison: ComparisonUi, actions: PhotoActions) {
 }
 
 @Composable
-private fun Side(sideLabel: String, photo: ProgressPhotoUi, modifier: Modifier) {
+private fun Side(sideLabel: String, photo: ProgressPhotoUi, actions: PhotoActions, modifier: Modifier) {
     val angle = angleLabel(photo.angle)
     val date = PhotoFormat.longDate(photo.date)
     val status = stateText(photo.state)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         PhotoTile(
             imagePath = photo.state.localThumbnail,
-            description = stringResource(R.string.progress_photos_compare_image, sideLabel, angle, date, status).trim(),
+            description = (
+                if (photo.concealed) stringResource(R.string.progress_photos_compare_image_concealed, sideLabel, angle, date)
+                else stringResource(R.string.progress_photos_compare_image, sideLabel, angle, date, status)
+                ).trim(),
             statusText = status,
             placeholderText = stringResource(R.string.progress_photos_placeholder),
             statusIsProblem = photo.state.isProblem(),
+            concealed = photo.concealed,
+            concealedText = stringResource(R.string.progress_photos_concealed_cover),
+            onClick = if (photo.concealed) ({ actions.onReveal(photo.id) }) else null,
         )
         HierroText(sideLabel.uppercase(), style = HierroTheme.typography.label, color = HierroTheme.colors.textMuted)
         HierroText(date)

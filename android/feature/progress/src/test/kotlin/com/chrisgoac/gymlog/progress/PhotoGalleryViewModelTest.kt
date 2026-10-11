@@ -1,6 +1,8 @@
 package com.chrisgoac.gymlog.progress
 
+import androidx.lifecycle.SavedStateHandle
 import com.chrisgoac.gymlog.domain.media.MediaRejection
+import com.chrisgoac.gymlog.domain.media.PhotoMessage
 import com.chrisgoac.gymlog.domain.media.MediaUiState
 import com.chrisgoac.gymlog.model.media.EnqueueResult
 import com.chrisgoac.gymlog.model.media.InvalidImage
@@ -30,15 +32,23 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
 class PhotoGalleryViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val media = FakeMedia()
     private val capture = FakeCaptureTargets()
     private val now = dayMillis(2026, 8, 12) + 10 * 3_600_000L
-    private val viewModel by lazy { PhotoGalleryViewModel(media, capture) { PhotoClock(now, MADRID) } }
+    private var saved = SavedStateHandle()
+    private val viewModel by lazy { PhotoGalleryViewModel(media, capture, { PhotoClock(now, MADRID) }, saved) }
 
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
 
@@ -50,6 +60,7 @@ class PhotoGalleryViewModelTest {
         return viewModel
     }
 
+    private val AUG12 = LocalDate.of(2026, 8, 12)
     private val first = progressItem("p1", dayMillis(2026, 6, 1), "frente")
     private val second = progressItem("p2", dayMillis(2026, 7, 1), "frente", "tras el verano")
     private val third = progressItem("p3", dayMillis(2026, 7, 1), "lado")
@@ -150,7 +161,7 @@ class PhotoGalleryViewModelTest {
         media.items.value = listOf(progressItem("b", dayMillis(2026, 8, 2), status = MediaStatus.Rejected("X")))
         val vm = observed()
         vm.onRetryUpload("b")
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(listOf("b"), media.retried)
         assertEquals(MediaUiState.Uploading(null), vm.state.value.photos.single().state)
         media.items.value = listOf(progressItem("b", dayMillis(2026, 8, 2), status = MediaStatus.PendingUpload(1, "offline")))
@@ -333,6 +344,87 @@ class PhotoGalleryViewModelTest {
         assertNull(vm.prepareCamera())
         advanceUntilIdle()
         assertEquals(PhotoMessage.CameraUnavailable, vm.state.value.message)
+    }
+
+    @Test fun `uploading after a retry does not stick when the device stays offline`() = runTest(dispatcher) {
+        media.items.value = listOf(progressItem("b", dayMillis(2026, 8, 2), status = MediaStatus.Rejected("X")))
+        val vm = observed()
+        vm.onRetryUpload("b")
+        runCurrent()
+        assertEquals(MediaUiState.Uploading(null), vm.state.value.photos.single().state)
+        advanceTimeBy(10_001)
+        advanceUntilIdle()
+        assertEquals(MediaUiState.LocalPending(null), vm.state.value.photos.single().state)
+    }
+
+    @Test fun `uploading is dropped when the queue entry fails again or the photo goes away`() = runTest(dispatcher) {
+        media.items.value = listOf(progressItem("b", dayMillis(2026, 8, 2), status = MediaStatus.Rejected("X")))
+        val vm = observed()
+        vm.onRetryUpload("b")
+        runCurrent()
+        media.items.value = listOf(progressItem("b", dayMillis(2026, 8, 2), status = MediaStatus.PendingUpload(1, "offline")))
+        advanceUntilIdle()
+        media.items.value = listOf(progressItem("b", dayMillis(2026, 8, 2), status = MediaStatus.PendingUpload(0, null)))
+        advanceUntilIdle()
+        assertEquals(MediaUiState.LocalPending(null), vm.state.value.photos.single().state)
+    }
+
+    @Test fun `photos are hidden until revealed, opening one reveals it, and the cover is not persisted`() = runTest(dispatcher) {
+        media.items.value = listOf(first, second)
+        val vm = observed()
+        assertTrue(vm.state.value.photos.all { it.concealed })
+        vm.onReveal("p1")
+        advanceUntilIdle()
+        assertEquals(mapOf("p1" to false, "p2" to true), vm.state.value.photos.associate { it.id to it.concealed })
+        vm.onOpen("p2")
+        advanceUntilIdle()
+        assertTrue(vm.state.value.photos.none { it.concealed })
+        media.items.value = listOf(first)
+        advanceUntilIdle()
+        media.items.value = listOf(first, second) // p2 came back as a new photo with the same id: concealed again
+        advanceUntilIdle()
+        assertTrue(vm.state.value.photos.first { it.id == "p2" }.concealed)
+    }
+
+    @Test fun `the open form and the camera slot survive process death`() = runTest(dispatcher) {
+        val vm = observed()
+        vm.onAddPhoto()
+        vm.onDraftAngle("lado")
+        vm.onDraftNote("antes")
+        vm.prepareCamera()
+        advanceUntilIdle()
+        // A new process: same saved state, fresh view model.
+        val revived = PhotoGalleryViewModel(media, capture, { PhotoClock(now, MADRID) }, saved)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { revived.state.collect {} }
+        advanceUntilIdle()
+        assertEquals(CaptureDraft("lado", AUG12, "antes"), revived.state.value.draft)
+        revived.onCameraResult(true)
+        advanceUntilIdle()
+        assertEquals("content://gymlog.media/capture/1.jpg", media.enqueued.single().first)
+        assertEquals(MediaOwner.Progress(dayMillis(2026, 8, 12), "lado", "antes"), media.enqueued.single().second)
+    }
+
+    @Test fun `a failing upload can be requeued from the viewer`() = runTest(dispatcher) {
+        media.items.value = listOf(progressItem("a", dayMillis(2026, 8, 1), status = MediaStatus.PendingUpload(3, "timeout")))
+        val vm = observed()
+        vm.onRetryUpload("a")
+        advanceUntilIdle()
+        assertEquals(listOf("a"), media.retried)
+    }
+
+    @Test fun `images of removed photos are forgotten and fetched again if they return`() = runTest(dispatcher) {
+        media.items.value = listOf(first)
+        media.images["p1"] = MediaImage.Available("/private/p1.jpg")
+        val vm = observed()
+        vm.requestImage("p1")
+        advanceUntilIdle()
+        media.items.value = emptyList()
+        advanceUntilIdle()
+        media.items.value = listOf(first)
+        advanceUntilIdle()
+        vm.requestImage("p1")
+        advanceUntilIdle()
+        assertEquals(listOf("p1", "p1"), media.imageCalls)
     }
 
     // ---- Comparison ----

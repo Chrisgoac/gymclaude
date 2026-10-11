@@ -56,6 +56,9 @@ import com.chrisgoac.gymlog.designsystem.component.PhotoTile
 import com.chrisgoac.gymlog.designsystem.component.PrivatePhoto
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.domain.media.MediaUiState
+import com.chrisgoac.gymlog.domain.media.PhotoMessage
+import com.chrisgoac.gymlog.domain.media.actions
+import com.chrisgoac.gymlog.domain.media.isProblem
 import com.chrisgoac.gymlog.feature.progress.R
 import java.time.Instant
 import java.time.LocalDate
@@ -70,6 +73,7 @@ internal class PhotoActions(
     val onRequestImage: (String) -> Unit,
     val onRetryImage: (String) -> Unit,
     val onOpen: (String) -> Unit,
+    val onReveal: (String) -> Unit,
     val onCloseViewer: () -> Unit,
     val onAskDelete: (String) -> Unit,
     val onCancelDelete: () -> Unit,
@@ -108,6 +112,7 @@ fun ProgressGalleryScreen(viewModel: PhotoGalleryViewModel, onBack: () -> Unit, 
         onRequestImage = viewModel::requestImage,
         onRetryImage = viewModel::retryImage,
         onOpen = viewModel::onOpen,
+        onReveal = viewModel::onReveal,
         onCloseViewer = viewModel::onCloseViewer,
         onAskDelete = viewModel::onAskDelete,
         onCancelDelete = viewModel::onCancelDelete,
@@ -201,16 +206,21 @@ private fun GalleryTile(photo: ProgressPhotoUi, actions: PhotoActions) {
     val status = stateText(photo.state)
     val angle = angleLabel(photo.angle)
     val date = PhotoFormat.longDate(photo.date)
-    val description = photo.note
-        ?.let { stringResource(R.string.progress_photos_tile_description_note, angle, date, it, status) }
-        ?: stringResource(R.string.progress_photos_tile_description, angle, date, status)
+    val description = when {
+        photo.concealed -> stringResource(R.string.progress_photos_tile_description_concealed, angle, date)
+        photo.note != null -> stringResource(R.string.progress_photos_tile_description_note, angle, date, photo.note, status)
+        else -> stringResource(R.string.progress_photos_tile_description, angle, date, status)
+    }
     PhotoTile(
         imagePath = photo.state.localThumbnail,
         description = description.trim(),
         statusText = listOf(angle, status).filter { it.isNotEmpty() }.joinToString(" · "),
         placeholderText = stringResource(R.string.progress_photos_placeholder),
         statusIsProblem = photo.state.isProblem(),
-        onClick = { actions.onOpen(photo.id) },
+        concealed = photo.concealed,
+        concealedText = stringResource(R.string.progress_photos_concealed_cover),
+        // First tap lifts the cover, the next one opens the viewer.
+        onClick = { if (photo.concealed) actions.onReveal(photo.id) else actions.onOpen(photo.id) },
     )
 }
 
@@ -302,13 +312,21 @@ private fun PhotoViewer(photo: ProgressPhotoUi, message: PhotoMessage?, actions:
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             message?.let { PhotoMessageCard(it, actions.onDismissMessage) }
             val path = photo.state.localThumbnail
-            if (path != null) {
+            var undecodable by remember(path) { mutableStateOf(false) }
+            if (path != null && !undecodable) {
                 PrivatePhoto(
                     path, stringResource(R.string.progress_photos_viewer_image, angle, date),
                     Modifier.fillMaxWidth(), maxSidePx = 2048, contentScale = ContentScale.FillWidth,
+                    onUndecodable = { undecodable = true },
                 )
             } else {
-                HierroCard { HierroText(status.ifEmpty { stringResource(R.string.progress_photos_placeholder) }, color = HierroTheme.colors.textMuted) }
+                HierroCard {
+                    HierroText(
+                        if (undecodable) stringResource(R.string.progress_photos_viewer_undecodable) else status.ifEmpty { stringResource(R.string.progress_photos_placeholder) },
+                        color = HierroTheme.colors.textMuted,
+                    )
+                    if (undecodable) HierroButton(stringResource(R.string.progress_photos_viewer_retry_image), { actions.onRetryImage(photo.id) }, variant = HierroButtonVariant.Secondary)
+                }
             }
             HierroText("$angle · $date", Modifier.semantics { heading() }, HierroTheme.typography.title)
             photo.note?.let { HierroText(stringResource(R.string.progress_photos_viewer_note, it)) }
@@ -320,14 +338,17 @@ private fun PhotoViewer(photo: ProgressPhotoUi, message: PhotoMessage?, actions:
 
 @Composable
 private fun ViewerActions(photo: ProgressPhotoUi, actions: PhotoActions) {
-    val state = photo.state
-    if (state is MediaUiState.RemoteUnavailableOffline || (state is MediaUiState.RetryableFailure && state.detail == null)) {
+    val available = photo.state.actions()
+    if (available.retryImage) {
         HierroButton(stringResource(R.string.progress_photos_viewer_retry_image), { actions.onRetryImage(photo.id) }, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
     }
-    if (state is MediaUiState.Rejected) {
+    if (available.retryUpload) {
         HierroButton(stringResource(R.string.progress_photos_viewer_retry_upload), { actions.onRetryUpload(photo.id) }, Modifier.fillMaxWidth())
+    }
+    if (available.discard) {
         HierroButton(stringResource(R.string.progress_photos_viewer_discard), { actions.onAskDelete(photo.id) }, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
-    } else {
+    }
+    if (available.delete) {
         HierroButton(stringResource(R.string.progress_photos_viewer_delete), { actions.onAskDelete(photo.id) }, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary)
     }
 }

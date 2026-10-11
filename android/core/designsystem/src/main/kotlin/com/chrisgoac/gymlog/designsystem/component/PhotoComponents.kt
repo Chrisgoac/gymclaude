@@ -1,6 +1,7 @@
 package com.chrisgoac.gymlog.designsystem.component
 
 import android.graphics.Bitmap
+import android.os.Build
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -12,10 +13,15 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
@@ -41,11 +47,14 @@ fun PrivatePhoto(
     modifier: Modifier = Modifier,
     maxSidePx: Int = 1024,
     contentScale: ContentScale = ContentScale.Crop,
+    /** Called when the file exists but cannot be decoded, so the caller can show a placeholder and offer a retry. */
+    onUndecodable: (() -> Unit)? = null,
 ) {
-    val bitmap by produceState<Bitmap?>(null, path, maxSidePx) {
-        value = if (path == null) null else withContext(Dispatchers.IO) { decodeSampled(path, maxSidePx) }
+    val result by produceState<Result<Bitmap?>?>(null, path, maxSidePx) {
+        value = if (path == null) null else withContext(Dispatchers.IO) { Result.success(decodeSampled(path, maxSidePx)) }
     }
-    val image = bitmap
+    val image = result?.getOrNull()
+    LaunchedEffect(result, path) { if (path != null && result != null && image == null) onUndecodable?.invoke() }
     if (image != null) {
         Image(image.asImageBitmap(), contentDescription, modifier, contentScale = contentScale)
     } else {
@@ -76,9 +85,14 @@ fun PhotoTile(
     placeholderText: String,
     modifier: Modifier = Modifier,
     statusIsProblem: Boolean = false,
+    /** Private-photo cover: blurred where the platform can (API 31+), a neutral cover with [concealedText] elsewhere. */
+    concealed: Boolean = false,
+    concealedText: String = "",
     onClick: (() -> Unit)? = null,
 ) {
     val colors = HierroTheme.colors
+    var broken by remember(imagePath) { mutableStateOf(false) }
+    val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val clickable = if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier
     Column(
         modifier
@@ -93,8 +107,14 @@ fun PhotoTile(
                 .background(colors.surfaceMuted),
             contentAlignment = Alignment.Center,
         ) {
-            if (imagePath != null) {
-                PrivatePhoto(imagePath, null, Modifier.fillMaxSize(), maxSidePx = 512)
+            if (concealed && !canBlur) {
+                HierroText(concealedText, Modifier.clearAndSetSemantics {}, HierroTheme.typography.label, colors.ink)
+            } else if (imagePath != null && !broken) {
+                PrivatePhoto(
+                    imagePath, null,
+                    Modifier.fillMaxSize().then(if (concealed) Modifier.blur(BLUR_RADIUS) else Modifier),
+                    maxSidePx = 512, onUndecodable = { broken = true },
+                )
             } else {
                 HierroText(placeholderText, Modifier.clearAndSetSemantics {}, HierroTheme.typography.label, colors.textMuted)
             }
@@ -108,3 +128,5 @@ fun PhotoTile(
     }
 }
 
+
+private val BLUR_RADIUS = 24.dp

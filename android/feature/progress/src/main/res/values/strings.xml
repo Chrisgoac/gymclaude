@@ -125,6 +125,10 @@
 
     <string name="progress_photos_tile_description">%1$s, %2$s. %3$s</string>
     <string name="progress_photos_tile_description_note">%1$s, %2$s. Nota: %3$s. %4$s</string>
+    <string name="progress_photos_tile_description_concealed">%1$s, %2$s. Foto oculta, toca para mostrar</string>
+    <string name="progress_photos_concealed_cover">Toca para ver</string>
+    <string name="progress_photos_compare_image_concealed">%1$s: foto de %2$s del %3$s. Foto oculta, toca para mostrar</string>
+    <string name="progress_photos_viewer_undecodable">No se puede mostrar esta foto en este dispositivo.</string>
     <string name="progress_photos_placeholder">Sin vista previa</string>
 
     <string name="progress_photos_state_pending">Guardada en este dispositivo, pendiente de subir</string>

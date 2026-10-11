@@ -27,7 +27,9 @@ import com.chrisgoac.gymlog.designsystem.component.HierroCard
 import com.chrisgoac.gymlog.designsystem.component.HierroText
 import com.chrisgoac.gymlog.designsystem.theme.HierroShape
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
-import com.chrisgoac.gymlog.domain.media.MediaRejection
+import com.chrisgoac.gymlog.domain.media.MediaStatusKind
+import com.chrisgoac.gymlog.domain.media.PhotoMessage
+import com.chrisgoac.gymlog.domain.media.statusLine
 import com.chrisgoac.gymlog.domain.media.MediaUiState
 import com.chrisgoac.gymlog.feature.progress.R
 import java.time.LocalDate
@@ -58,25 +60,22 @@ internal fun angleLabel(angle: String): String = stringResource(
 
 /** What the status line of a photo says, for every [MediaUiState]. Empty when a loaded synced photo needs no remark. */
 @Composable
-internal fun stateText(state: MediaUiState): String = when (state) {
-    is MediaUiState.LocalPending -> stringResource(R.string.progress_photos_state_pending)
-    is MediaUiState.Uploading -> state.progress?.let { stringResource(R.string.progress_photos_state_uploading_percent, (it * 100).toInt()) }
-        ?: stringResource(R.string.progress_photos_state_uploading)
-    is MediaUiState.Available -> if (state.localThumbnail == null) stringResource(R.string.progress_photos_state_loading) else ""
-    MediaUiState.RemoteUnavailableOffline -> stringResource(R.string.progress_photos_state_offline)
-    is MediaUiState.RetryableFailure ->
-        stringResource(if (state.detail != null) R.string.progress_photos_state_failure_upload else R.string.progress_photos_state_failure_load)
-    is MediaUiState.Rejected -> stringResource(
-        when (state.reason) {
-            MediaRejection.TOO_LARGE -> R.string.progress_photos_state_rejected_large
-            MediaRejection.UNSUPPORTED -> R.string.progress_photos_state_rejected_type
-            MediaRejection.OTHER -> R.string.progress_photos_state_rejected_other
-        },
-    )
+internal fun stateText(state: MediaUiState): String {
+    val line = state.statusLine()
+    return when (line.kind) {
+        MediaStatusKind.NONE -> ""
+        MediaStatusKind.PENDING -> stringResource(R.string.progress_photos_state_pending)
+        MediaStatusKind.UPLOADING -> stringResource(R.string.progress_photos_state_uploading)
+        MediaStatusKind.UPLOADING_PERCENT -> stringResource(R.string.progress_photos_state_uploading_percent, line.percent ?: 0)
+        MediaStatusKind.LOADING -> stringResource(R.string.progress_photos_state_loading)
+        MediaStatusKind.OFFLINE -> stringResource(R.string.progress_photos_state_offline)
+        MediaStatusKind.FAILURE_UPLOAD -> stringResource(R.string.progress_photos_state_failure_upload)
+        MediaStatusKind.FAILURE_LOAD -> stringResource(R.string.progress_photos_state_failure_load)
+        MediaStatusKind.REJECTED_LARGE -> stringResource(R.string.progress_photos_state_rejected_large)
+        MediaStatusKind.REJECTED_TYPE -> stringResource(R.string.progress_photos_state_rejected_type)
+        MediaStatusKind.REJECTED_OTHER -> stringResource(R.string.progress_photos_state_rejected_other)
+    }
 }
-
-internal fun MediaUiState.isProblem(): Boolean =
-    this is MediaUiState.Rejected || this is MediaUiState.RetryableFailure || this == MediaUiState.RemoteUnavailableOffline
 
 /** A single-choice row (angle, comparison photo): one 48 dp target that speaks as a radio button. */
 @Composable

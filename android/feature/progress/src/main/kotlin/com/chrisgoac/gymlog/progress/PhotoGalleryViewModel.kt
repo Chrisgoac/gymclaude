@@ -1,14 +1,18 @@
 package com.chrisgoac.gymlog.progress
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.chrisgoac.gymlog.domain.media.CaptureSlot
+import com.chrisgoac.gymlog.domain.media.CaptureSession
+import com.chrisgoac.gymlog.domain.media.MediaImageLoader
 import com.chrisgoac.gymlog.domain.media.MediaRepository
+import com.chrisgoac.gymlog.domain.media.PhotoMessage
+import com.chrisgoac.gymlog.domain.media.RetryTracker
 import com.chrisgoac.gymlog.domain.media.MediaUiMapper
 import com.chrisgoac.gymlog.domain.media.MediaUiState
 import com.chrisgoac.gymlog.domain.media.PhotoCaptureTargets
 import com.chrisgoac.gymlog.model.media.EnqueueResult
-import com.chrisgoac.gymlog.model.media.InvalidImage
 import com.chrisgoac.gymlog.model.media.MediaImage
 import com.chrisgoac.gymlog.model.media.MediaItem
 import com.chrisgoac.gymlog.model.media.MediaKind
@@ -27,14 +31,17 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
 private const val STOP_TIMEOUT_MILLIS = 5_000L
-private const val IMAGE_CONCURRENCY = 3
+private const val KEY_CAM_URI = "camera_uri"
+private const val KEY_CAM_TOKEN = "camera_token"
+private const val KEY_DRAFT_OPEN = "draft_open"
+private const val KEY_DRAFT_ANGLE = "draft_angle"
+private const val KEY_DRAFT_DAY = "draft_day"
+private const val KEY_DRAFT_NOTE = "draft_note"
 private const val MAX_NOTE = 2000
 
 /** Progress photo angles in the PWA's order (`frente`, `lado`, `espalda`). */
@@ -55,6 +62,8 @@ data class ProgressPhotoUi(
     val angle: String,
     val note: String?,
     val state: MediaUiState,
+    /** Hidden behind the privacy cover until the user taps it (per screen session, never persisted). */
+    val concealed: Boolean = true,
 )
 
 data class PhotoDay(val date: LocalDate, val photos: List<ProgressPhotoUi>)
@@ -70,9 +79,6 @@ data class ComparisonUi(
     val a: ProgressPhotoUi,
     val b: ProgressPhotoUi,
 )
-
-/** One-shot feedback shown in a live region until dismissed. */
-enum class PhotoMessage { Corrupt, Unsupported, TooLarge, Unreadable, ActionFailed, CameraUnavailable }
 
 data class PhotoGalleryUiState(
     val status: PhotoGalleryStatus = PhotoGalleryStatus.Loading,
@@ -93,19 +99,22 @@ data class PhotoGalleryUiState(
 }
 
 /**
- * Progress photo gallery: chronological list grouped by day, capture (Photo Picker or camera, with
- * angle / day / note), full-screen viewer, two-photo comparison, delete with confirmation and
- * retry / discard of refused uploads. Data stays on screen while a reload fails; images are fetched
- * on demand per tile (never all at once) and shown from the account's private storage.
+ * Progress photo gallery: chronological list (newest day first) grouped by day, capture (Photo Picker or
+ * camera, with angle / day / note), full-screen viewer, two-photo comparison, delete with confirmation and
+ * retry / discard of refused uploads. Photos stay hidden behind a privacy cover until tapped (like the
+ * PWA). Data stays on screen while a reload fails; images are fetched on demand per tile.
+ *
+ * The open form and the outstanding camera slot live in [savedState]: the camera app can outlive this
+ * process, and its result is still ingested (or, if the slot is lost, Task 3's capture sweep removes the
+ * orphan file and the user just takes the photo again).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PhotoGalleryViewModel(
     private val media: MediaRepository,
-    private val captureTargets: PhotoCaptureTargets,
+    captureTargets: PhotoCaptureTargets,
     private val clock: () -> PhotoClock,
+    private val savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
-    private data class Loaded(val tag: String, val image: MediaImage)
-
     /** UI-only state that is not derived from the repository. */
     private data class Local(
         val draft: CaptureDraft? = null,
@@ -121,31 +130,65 @@ class PhotoGalleryViewModel(
     private val items = MutableStateFlow<List<MediaItem>?>(null)
     private val loadFailed = MutableStateFlow(false)
     private val attempt = MutableStateFlow(0)
-    private val images = MutableStateFlow<Map<String, Loaded>>(emptyMap())
-    private val retrying = MutableStateFlow<Set<String>>(emptySet())
-    private val local = MutableStateFlow(Local())
-    private val gate = Semaphore(IMAGE_CONCURRENCY)
-    private val inFlight = HashSet<String>()
-    private var cameraSlot: CaptureSlot? = null
+    private val loader = MediaImageLoader(media, viewModelScope)
+    private val retries = RetryTracker(viewModelScope)
+    private val revealed = MutableStateFlow<Set<String>>(emptySet())
+    private val local = MutableStateFlow(Local(draft = restoreDraft()))
+    private val camera = CaptureSession(
+        captureTargets,
+        restored = savedState.get<String>(KEY_CAM_URI)?.let { uri -> savedState.get<String>(KEY_CAM_TOKEN)?.let { CaptureSlot(uri, it) } },
+        onChange = { slot ->
+            savedState[KEY_CAM_URI] = slot?.uri
+            savedState[KEY_CAM_TOKEN] = slot?.token
+        },
+    )
 
     init {
         viewModelScope.launch {
             attempt.flatMapLatest {
                 media.observe(MediaKind.PROGRESS)
-                    .onEach { items.value = it; loadFailed.value = false }
+                    .onEach { all ->
+                        items.value = all
+                        loadFailed.value = false
+                        val ids = all.mapTo(HashSet()) { it.id }
+                        loader.prune(ids)
+                        retries.prune(all)
+                        revealed.update { shown -> shown.filterTo(HashSet()) { it in ids } }
+                    }
                     .catch { loadFailed.value = true }
             }.collect {}
         }
     }
 
-    val state: StateFlow<PhotoGalleryUiState> = combine(items, loadFailed, images, retrying, local) { list, failed, loaded, retry, ui ->
-        build(list, failed, loaded, retry, ui)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), PhotoGalleryUiState())
+    val state: StateFlow<PhotoGalleryUiState> =
+        combine(items, loadFailed, loader.loaded, retries.ids, local, revealed) { values ->
+            @Suppress("UNCHECKED_CAST")
+            build(
+                values[0] as List<MediaItem>?, values[1] as Boolean, values[2] as Map<String, MediaImageLoader.Loaded>,
+                values[3] as Set<String>, values[4] as Local, values[5] as Set<String>,
+            )
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), PhotoGalleryUiState())
 
-    private fun build(list: List<MediaItem>?, failed: Boolean, loaded: Map<String, Loaded>, retry: Set<String>, ui: Local): PhotoGalleryUiState {
+    private fun restoreDraft(): CaptureDraft? {
+        if (savedState.get<Boolean>(KEY_DRAFT_OPEN) != true) return null
+        val day = savedState.get<Long>(KEY_DRAFT_DAY)?.let(LocalDate::ofEpochDay) ?: return null
+        val angle = savedState.get<String>(KEY_DRAFT_ANGLE)?.takeIf { it in PHOTO_ANGLES } ?: PHOTO_ANGLES.first()
+        return CaptureDraft(angle, day, savedState.get<String>(KEY_DRAFT_NOTE).orEmpty())
+    }
+
+    private fun build(
+        list: List<MediaItem>?,
+        failed: Boolean,
+        loaded: Map<String, MediaImageLoader.Loaded>,
+        retry: Set<String>,
+        ui: Local,
+        shown: Set<String>,
+    ): PhotoGalleryUiState {
         val now = clock()
-        if (list == null) return PhotoGalleryUiState(status = if (failed) PhotoGalleryStatus.Failed else PhotoGalleryStatus.Loading, clock = now, draft = ui.draft, message = ui.message)
-        val photos = list.mapNotNull { item -> toUi(item, loaded[item.id], item.id in retry, now.zone) }
+        if (list == null) {
+            return PhotoGalleryUiState(status = if (failed) PhotoGalleryStatus.Failed else PhotoGalleryStatus.Loading, clock = now, draft = ui.draft, message = ui.message)
+        }
+        val photos = list.mapNotNull { item -> toUi(item, MediaImageLoader.imageFor(loaded, item), item.id in retry, item.id !in shown, now.zone) }
             .sortedWith(compareByDescending<ProgressPhotoUi> { it.fecha }.thenBy { it.id })
         val days = photos.groupBy { it.date }.map { (date, group) -> PhotoDay(date, group) }.sortedByDescending { it.date }
         val comparison = comparison(photos, ui)
@@ -163,9 +206,8 @@ class PhotoGalleryViewModel(
         )
     }
 
-    private fun toUi(item: MediaItem, loaded: Loaded?, isRetrying: Boolean, zone: ZoneId): ProgressPhotoUi? {
+    private fun toUi(item: MediaItem, image: MediaImage?, isRetrying: Boolean, concealed: Boolean, zone: ZoneId): ProgressPhotoUi? {
         val owner = item.owner as? MediaOwner.Progress ?: return null
-        val image = loaded?.takeIf { it.tag == tag(item) }?.image
         return ProgressPhotoUi(
             id = item.id,
             fecha = owner.fecha,
@@ -173,6 +215,7 @@ class PhotoGalleryViewModel(
             angle = owner.angulo,
             note = owner.nota?.takeIf { it.isNotBlank() },
             state = MediaUiMapper.map(item, image, isRetrying),
+            concealed = concealed,
         )
     }
 
@@ -186,58 +229,26 @@ class PhotoGalleryViewModel(
         return ComparisonUi(angles, angle, series, a, b)
     }
 
-    // ---- Images ----
+    // ---- Images and privacy cover ----
 
     /** Loads the local copy of [id] (cache, pending original or a download through a fresh read grant) once. */
     fun requestImage(id: String) {
-        val item = items.value?.firstOrNull { it.id == id } ?: return
-        val tag = tag(item)
-        val have = images.value[id]
-        if (have != null && have.tag == tag) return
-        loadImage(item, tag)
+        items.value?.firstOrNull { it.id == id }?.let(loader::request)
     }
 
-    /** Tries again to get the image of [id] after a failed or offline attempt. */
+    /** Tries again to get the image of [id] after a failed, offline or undecodable attempt. */
     fun retryImage(id: String) {
-        val item = items.value?.firstOrNull { it.id == id } ?: return
-        images.update { it - id }
-        loadImage(item, tag(item))
+        items.value?.firstOrNull { it.id == id }?.let(loader::retry)
     }
 
-    private fun loadImage(item: MediaItem, tag: String) {
-        if (!inFlight.add(item.id)) return
-        viewModelScope.launch {
-            try {
-                val result = gate.withPermit {
-                    try {
-                        media.image(item.id)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        MediaImage.Unavailable(MediaImage.Unavailable.Reason.NOT_FOUND)
-                    }
-                }
-                images.update { it + (item.id to Loaded(tag, result)) }
-            } finally {
-                inFlight.remove(item.id)
-            }
-        }
-    }
-
-    private fun tag(item: MediaItem): String = when (item.status) {
-        MediaStatus.Synced -> "synced"
-        is MediaStatus.PendingUpload -> "pending"
-        is MediaStatus.Rejected -> "rejected"
-    }
+    /** Lifts the privacy cover of one photo for this screen session. */
+    fun onReveal(id: String) = revealed.update { it + id }
 
     fun retryLoad() = attempt.update { it + 1 }
 
     // ---- Capture ----
 
-    fun onAddPhoto() {
-        val today = clock().today
-        local.update { it.copy(draft = CaptureDraft(PHOTO_ANGLES.first(), today), message = null) }
-    }
+    fun onAddPhoto() = setDraft(CaptureDraft(PHOTO_ANGLES.first(), clock().today), message = null)
 
     fun onDraftAngle(angle: String) = updateDraft { if (angle in MediaLimits.PROGRESS_ANGLES) it.copy(angle = angle) else it }
 
@@ -245,38 +256,45 @@ class PhotoGalleryViewModel(
 
     fun onDraftNote(note: String) = updateDraft { it.copy(note = note.take(MAX_NOTE)) }
 
-    fun onCancelDraft() = local.update { it.copy(draft = null) }
+    fun onCancelDraft() = setDraft(null)
 
-    private fun updateDraft(change: (CaptureDraft) -> CaptureDraft) =
-        local.update { ui -> ui.draft?.takeIf { !it.busy }?.let { ui.copy(draft = change(it)) } ?: ui }
+    private fun updateDraft(change: (CaptureDraft) -> CaptureDraft) {
+        val draft = local.value.draft?.takeIf { !it.busy } ?: return
+        setDraft(change(draft))
+    }
+
+    private fun setDraft(draft: CaptureDraft?, message: PhotoMessage? = local.value.message) {
+        savedState[KEY_DRAFT_OPEN] = draft != null
+        savedState[KEY_DRAFT_ANGLE] = draft?.angle
+        savedState[KEY_DRAFT_DAY] = draft?.date?.toEpochDay()
+        savedState[KEY_DRAFT_NOTE] = draft?.note
+        local.update { it.copy(draft = draft, message = message) }
+    }
 
     /** Photo Picker result: the picked content URI, or null when the user closed the picker. */
     fun onPhotoPicked(uri: String?) {
-        if (uri != null) ingest(uri, cameraSlot = null)
+        if (uri != null) ingest(uri, slot = null)
     }
 
     /** URI the camera app should write into, or null when there is no open account (message shown). */
     fun prepareCamera(): String? {
-        cameraSlot?.let(captureTargets::release)
-        val slot = captureTargets.create()
-        cameraSlot = slot
-        if (slot == null) local.update { it.copy(message = PhotoMessage.CameraUnavailable) }
-        return slot?.uri
+        val uri = camera.prepare()
+        if (uri == null) local.update { it.copy(message = PhotoMessage.CameraUnavailable) }
+        return uri
     }
 
     fun onCameraResult(saved: Boolean) {
-        val slot = cameraSlot ?: return
-        cameraSlot = null
-        if (saved) ingest(slot.uri, slot) else captureTargets.release(slot)
+        val slot = camera.take() ?: return
+        if (saved) ingest(slot.uri, slot) else camera.release(slot)
     }
 
-    private fun ingest(uri: String, cameraSlot: CaptureSlot?) {
+    private fun ingest(uri: String, slot: CaptureSlot?) {
         val draft = local.value.draft?.takeIf { !it.busy }
         if (draft == null) {
-            cameraSlot?.let(captureTargets::release)
+            slot?.let(camera::release)
             return
         }
-        local.update { it.copy(draft = draft.copy(busy = true), message = null) }
+        setDraft(draft.copy(busy = true), message = null)
         viewModelScope.launch {
             val owner = MediaOwner.Progress(
                 fecha = draft.date.atStartOfDay(clock().zone).toInstant().toEpochMilli(),
@@ -290,28 +308,25 @@ class PhotoGalleryViewModel(
             } catch (_: Exception) {
                 null
             } finally {
-                cameraSlot?.let(captureTargets::release)
+                slot?.let(camera::release)
             }
             when (outcome) {
-                is EnqueueResult.Queued -> local.update { it.copy(draft = null, message = null) }
-                is EnqueueResult.Invalid -> local.update { it.copy(draft = draft, message = invalidMessage(outcome.reason)) }
-                null -> local.update { it.copy(draft = draft, message = PhotoMessage.ActionFailed) }
+                is EnqueueResult.Queued -> setDraft(null, message = null)
+                is EnqueueResult.Invalid -> setDraft(draft, message = PhotoMessage.of(outcome.reason))
+                null -> setDraft(draft, message = PhotoMessage.ActionFailed)
             }
         }
-    }
-
-    private fun invalidMessage(reason: InvalidImage): PhotoMessage = when (reason) {
-        InvalidImage.CORRUPT -> PhotoMessage.Corrupt
-        InvalidImage.UNSUPPORTED -> PhotoMessage.Unsupported
-        InvalidImage.TOO_LARGE -> PhotoMessage.TooLarge
-        InvalidImage.UNREADABLE -> PhotoMessage.Unreadable
     }
 
     fun dismissMessage() = local.update { it.copy(message = null) }
 
     // ---- Viewer, delete, retry ----
 
-    fun onOpen(id: String) = local.update { it.copy(viewingId = id) }
+    /** Opening a photo reveals it. */
+    fun onOpen(id: String) {
+        revealed.update { it + id }
+        local.update { it.copy(viewingId = id) }
+    }
 
     fun onCloseViewer() = local.update { it.copy(viewingId = null) }
 
@@ -329,10 +344,10 @@ class PhotoGalleryViewModel(
         }
     }
 
+    /** Requeues a refused or repeatedly failing upload; it shows as uploading briefly, never indefinitely. */
     fun onRetryUpload(id: String) {
-        retrying.update { it + id }
         viewModelScope.launch {
-            if (!runAction { media.retry(id) }) retrying.update { it - id }
+            if (runAction { media.retry(id) }) retries.mark(id)
         }
     }
 
@@ -365,7 +380,6 @@ class PhotoGalleryViewModel(
     }
 
     override fun onCleared() {
-        cameraSlot?.let(captureTargets::release)
-        cameraSlot = null
+        camera.close()
     }
 }

@@ -4,6 +4,7 @@ import com.chrisgoac.gymlog.domain.media.CaptureSlot
 import com.chrisgoac.gymlog.domain.media.MediaRepository
 import com.chrisgoac.gymlog.domain.media.MediaUiState
 import com.chrisgoac.gymlog.domain.media.PhotoCaptureTargets
+import com.chrisgoac.gymlog.domain.media.PhotoMessage
 import com.chrisgoac.gymlog.model.media.EnqueueResult
 import com.chrisgoac.gymlog.model.media.InvalidImage
 import com.chrisgoac.gymlog.model.media.MediaImage
@@ -31,6 +32,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 private class FakeMedia : MediaRepository {
     val items = MutableStateFlow<List<MediaItem>>(emptyList())
@@ -70,6 +74,8 @@ private fun exerciseItem(id: String, exerciseId: String = "e1", status: MediaSta
     MediaItem(id, MediaOwner.Exercise(exerciseId), status, if (status == MediaStatus.Synced) "users/h/exercise/$id" else null)
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
 class ExercisePhotosViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val media = FakeMedia()
@@ -110,11 +116,11 @@ class ExercisePhotosViewModelTest {
         media.enqueueResult = EnqueueResult.Invalid(InvalidImage.TOO_LARGE)
         vm.onPhotoPicked("content://picker/1")
         advanceUntilIdle()
-        assertEquals(ExercisePhotoMessage.TooLarge, vm.state.value.message)
+        assertEquals(PhotoMessage.TooLarge, vm.state.value.message)
         media.failNext = IllegalStateException("disk")
         vm.onPhotoPicked("content://picker/2")
         advanceUntilIdle()
-        assertEquals(ExercisePhotoMessage.ActionFailed, vm.state.value.message)
+        assertEquals(PhotoMessage.ActionFailed, vm.state.value.message)
         vm.dismissMessage()
         advanceUntilIdle()
         assertNull(vm.state.value.message)
@@ -133,7 +139,7 @@ class ExercisePhotosViewModelTest {
         capture.available = false
         assertNull(vm.prepareCamera())
         advanceUntilIdle()
-        assertEquals(ExercisePhotoMessage.CameraUnavailable, vm.state.value.message)
+        assertEquals(PhotoMessage.CameraUnavailable, vm.state.value.message)
     }
 
     @Test fun `no more than the limit can be added`() = runTest(dispatcher) {

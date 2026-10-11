@@ -1,14 +1,18 @@
 package com.chrisgoac.gymlog.exercises
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.chrisgoac.gymlog.domain.media.CaptureSlot
+import com.chrisgoac.gymlog.domain.media.CaptureSession
+import com.chrisgoac.gymlog.domain.media.MediaImageLoader
 import com.chrisgoac.gymlog.domain.media.MediaRepository
+import com.chrisgoac.gymlog.domain.media.PhotoMessage
+import com.chrisgoac.gymlog.domain.media.RetryTracker
 import com.chrisgoac.gymlog.domain.media.MediaUiMapper
 import com.chrisgoac.gymlog.domain.media.MediaUiState
 import com.chrisgoac.gymlog.domain.media.PhotoCaptureTargets
 import com.chrisgoac.gymlog.model.media.EnqueueResult
-import com.chrisgoac.gymlog.model.media.InvalidImage
 import com.chrisgoac.gymlog.model.media.MediaImage
 import com.chrisgoac.gymlog.model.media.MediaItem
 import com.chrisgoac.gymlog.model.media.MediaKind
@@ -26,18 +30,15 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 
 private const val STOP_TIMEOUT_MILLIS = 5_000L
-private const val IMAGE_CONCURRENCY = 3
+private const val KEY_CAM_URI = "camera_uri"
+private const val KEY_CAM_TOKEN = "camera_token"
 
 /** Photos one exercise may have; the picker offers no more once reached. */
 const val MAX_EXERCISE_PHOTOS = 6
 
 data class ExercisePhotoUi(val id: String, val state: MediaUiState)
-
-enum class ExercisePhotoMessage { Corrupt, Unsupported, TooLarge, Unreadable, ActionFailed, CameraUnavailable }
 
 data class ExercisePhotosUiState(
     val loaded: Boolean = false,
@@ -47,7 +48,7 @@ data class ExercisePhotosUiState(
     val saving: Boolean = false,
     val viewing: ExercisePhotoUi? = null,
     val pendingDelete: ExercisePhotoUi? = null,
-    val message: ExercisePhotoMessage? = null,
+    val message: PhotoMessage? = null,
 ) {
     val canAdd: Boolean get() = photos.size < MAX_EXERCISE_PHOTOS && !saving
 }
@@ -55,44 +56,57 @@ data class ExercisePhotosUiState(
 /**
  * Photos attached to one custom exercise: add from the Photo Picker or the camera (no permission),
  * see each one with its upload state, open it, retry / discard a refused upload and delete with
- * confirmation. Photos stay on screen while a reload fails; images are fetched on demand.
+ * confirmation. Photos stay on screen while a reload fails; images are fetched on demand. Exercise
+ * photos are not behind the privacy cover (unlike body progress photos). The camera slot lives in
+ * [savedState] so a result arriving after process death is still ingested.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExercisePhotosViewModel(
     private val media: MediaRepository,
-    private val captureTargets: PhotoCaptureTargets,
+    captureTargets: PhotoCaptureTargets,
     private val exerciseId: String,
+    savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
-    private data class Loaded(val tag: String, val image: MediaImage)
     private data class Local(
         val saving: Boolean = false,
         val viewingId: String? = null,
         val pendingDeleteId: String? = null,
-        val message: ExercisePhotoMessage? = null,
+        val message: PhotoMessage? = null,
     )
 
     private val items = MutableStateFlow<List<MediaItem>?>(null)
     private val failed = MutableStateFlow(false)
     private val attempt = MutableStateFlow(0)
-    private val images = MutableStateFlow<Map<String, Loaded>>(emptyMap())
-    private val retrying = MutableStateFlow<Set<String>>(emptySet())
+    private val loader = MediaImageLoader(media, viewModelScope)
+    private val retries = RetryTracker(viewModelScope)
     private val local = MutableStateFlow(Local())
-    private val gate = Semaphore(IMAGE_CONCURRENCY)
-    private val inFlight = HashSet<String>()
-    private var cameraSlot: CaptureSlot? = null
+    private val camera = CaptureSession(
+        captureTargets,
+        restored = savedState.get<String>(KEY_CAM_URI)?.let { uri -> savedState.get<String>(KEY_CAM_TOKEN)?.let { CaptureSlot(uri, it) } },
+        onChange = { slot ->
+            savedState[KEY_CAM_URI] = slot?.uri
+            savedState[KEY_CAM_TOKEN] = slot?.token
+        },
+    )
 
     init {
         viewModelScope.launch {
             attempt.flatMapLatest {
                 media.observe(MediaKind.EXERCISE)
-                    .onEach { all -> items.value = all.filter { (it.owner as? MediaOwner.Exercise)?.exerciseId == exerciseId }; failed.value = false }
+                    .onEach { all ->
+                        val mine = all.filter { (it.owner as? MediaOwner.Exercise)?.exerciseId == exerciseId }
+                        items.value = mine
+                        failed.value = false
+                        loader.prune(mine.mapTo(HashSet()) { it.id })
+                        retries.prune(mine)
+                    }
                     .catch { failed.value = true }
             }.collect {}
         }
     }
 
-    val state: StateFlow<ExercisePhotosUiState> = combine(items, failed, images, retrying, local) { list, hasFailed, loaded, retry, ui ->
-        val photos = list.orEmpty().map { ExercisePhotoUi(it.id, MediaUiMapper.map(it, loaded[it.id]?.takeIf { l -> l.tag == tag(it) }?.image, it.id in retry)) }
+    val state: StateFlow<ExercisePhotosUiState> = combine(items, failed, loader.loaded, retries.ids, local) { list, hasFailed, loaded, retry, ui ->
+        val photos = list.orEmpty().map { ExercisePhotoUi(it.id, MediaUiMapper.map(it, MediaImageLoader.imageFor(loaded, it), it.id in retry)) }
         ExercisePhotosUiState(
             loaded = list != null,
             failed = list == null && hasFailed,
@@ -104,47 +118,16 @@ class ExercisePhotosViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), ExercisePhotosUiState())
 
-    private fun tag(item: MediaItem): String = when (item.status) {
-        MediaStatus.Synced -> "synced"
-        is MediaStatus.PendingUpload -> "pending"
-        is MediaStatus.Rejected -> "rejected"
-    }
-
     fun retryLoad() = attempt.update { it + 1 }
 
     // ---- Images ----
 
     fun requestImage(id: String) {
-        val item = items.value?.firstOrNull { it.id == id } ?: return
-        if (images.value[id]?.tag == tag(item)) return
-        loadImage(item)
+        items.value?.firstOrNull { it.id == id }?.let(loader::request)
     }
 
     fun retryImage(id: String) {
-        val item = items.value?.firstOrNull { it.id == id } ?: return
-        images.update { it - id }
-        loadImage(item)
-    }
-
-    private fun loadImage(item: MediaItem) {
-        if (!inFlight.add(item.id)) return
-        val tag = tag(item)
-        viewModelScope.launch {
-            try {
-                val result = gate.withPermit {
-                    try {
-                        media.image(item.id)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        MediaImage.Unavailable(MediaImage.Unavailable.Reason.NOT_FOUND)
-                    }
-                }
-                images.update { it + (item.id to Loaded(tag, result)) }
-            } finally {
-                inFlight.remove(item.id)
-            }
-        }
+        items.value?.firstOrNull { it.id == id }?.let(loader::retry)
     }
 
     // ---- Add ----
@@ -156,22 +139,19 @@ class ExercisePhotosViewModel(
 
     /** URI the camera app should write into, or null when there is no open account (message shown). */
     fun prepareCamera(): String? {
-        cameraSlot?.let(captureTargets::release)
-        val slot = captureTargets.create()
-        cameraSlot = slot
-        if (slot == null) local.update { it.copy(message = ExercisePhotoMessage.CameraUnavailable) }
-        return slot?.uri
+        val uri = camera.prepare()
+        if (uri == null) local.update { it.copy(message = PhotoMessage.CameraUnavailable) }
+        return uri
     }
 
     fun onCameraResult(saved: Boolean) {
-        val slot = cameraSlot ?: return
-        cameraSlot = null
-        if (saved) ingest(slot.uri, slot) else captureTargets.release(slot)
+        val slot = camera.take() ?: return
+        if (saved) ingest(slot.uri, slot) else camera.release(slot)
     }
 
     private fun ingest(uri: String, slot: CaptureSlot?) {
         if (local.value.saving || (items.value?.size ?: 0) >= MAX_EXERCISE_PHOTOS) {
-            slot?.let(captureTargets::release)
+            slot?.let(camera::release)
             return
         }
         local.update { it.copy(saving = true, message = null) }
@@ -183,17 +163,12 @@ class ExercisePhotosViewModel(
             } catch (_: Exception) {
                 null
             } finally {
-                slot?.let(captureTargets::release)
+                slot?.let(camera::release)
             }
             val message = when (outcome) {
                 is EnqueueResult.Queued -> null
-                is EnqueueResult.Invalid -> when (outcome.reason) {
-                    InvalidImage.CORRUPT -> ExercisePhotoMessage.Corrupt
-                    InvalidImage.UNSUPPORTED -> ExercisePhotoMessage.Unsupported
-                    InvalidImage.TOO_LARGE -> ExercisePhotoMessage.TooLarge
-                    InvalidImage.UNREADABLE -> ExercisePhotoMessage.Unreadable
-                }
-                null -> ExercisePhotoMessage.ActionFailed
+                is EnqueueResult.Invalid -> PhotoMessage.of(outcome.reason)
+                null -> PhotoMessage.ActionFailed
             }
             local.update { it.copy(saving = false, message = message) }
         }
@@ -219,9 +194,9 @@ class ExercisePhotosViewModel(
         viewModelScope.launch { runAction { if (rejected) media.discard(id) else media.delete(id) } }
     }
 
+    /** Requeues a refused or repeatedly failing upload; it shows as uploading briefly, never indefinitely. */
     fun onRetryUpload(id: String) {
-        retrying.update { it + id }
-        viewModelScope.launch { if (!runAction { media.retry(id) }) retrying.update { it - id } }
+        viewModelScope.launch { if (runAction { media.retry(id) }) retries.mark(id) }
     }
 
     private suspend fun runAction(block: suspend () -> Unit): Boolean = try {
@@ -230,12 +205,11 @@ class ExercisePhotosViewModel(
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {
-        local.update { it.copy(message = ExercisePhotoMessage.ActionFailed) }
+        local.update { it.copy(message = PhotoMessage.ActionFailed) }
         false
     }
 
     override fun onCleared() {
-        cameraSlot?.let(captureTargets::release)
-        cameraSlot = null
+        camera.close()
     }
 }

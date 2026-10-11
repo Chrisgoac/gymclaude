@@ -26,7 +26,7 @@ interface MediaRepository {
     /** Deletes a photo: optimistic locally, confirmed by the server in the background. */
     suspend fun delete(mediaId: String)
 
-    /** Puts a rejected upload back in the queue. */
+    /** Puts a refused upload, or one that keeps failing, back in the queue with a fresh attempt count. */
     suspend fun retry(mediaId: String)
 
     /** Drops a rejected upload and its local file (it never reached the server). */

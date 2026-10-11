@@ -306,7 +306,7 @@ class OfflineMediaRepository(
     override suspend fun retry(mediaId: String) {
         val open = databases.current.value ?: error("No open account")
         val dao = open.database.pendingMediaDao()
-        val row = dao.findById(mediaId)?.takeIf { it.state == PendingMediaState.REJECTED } ?: return
+        val row = dao.findById(mediaId)?.takeIf { it.state == PendingMediaState.REJECTED || it.state == PendingMediaState.PENDING } ?: return
         dao.upsert(row.copy(state = PendingMediaState.PENDING, attempts = 0, lastError = null))
         schedule(UserDatabaseManagerImpl.userHash(open.userId), mediaId)
     }

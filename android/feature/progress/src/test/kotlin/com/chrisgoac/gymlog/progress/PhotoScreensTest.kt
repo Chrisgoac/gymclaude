@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.chrisgoac.gymlog.designsystem.theme.GymLogTheme
 import com.chrisgoac.gymlog.domain.media.MediaRejection
 import com.chrisgoac.gymlog.domain.media.MediaUiState
+import com.chrisgoac.gymlog.domain.media.PhotoMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -34,8 +35,8 @@ import java.time.LocalDate
 private val AUG_12 = LocalDate.of(2026, 8, 12)
 private val CLOCK = PhotoClock(dayMillis(2026, 8, 12) + 10 * 3_600_000L, MADRID)
 
-private fun photo(id: String, date: LocalDate, angle: String = "frente", state: MediaUiState = MediaUiState.Available("/none/$id.jpg"), note: String? = null) =
-    ProgressPhotoUi(id, date.atStartOfDay(MADRID).toInstant().toEpochMilli(), date, angle, note, state)
+private fun photo(id: String, date: LocalDate, angle: String = "frente", state: MediaUiState = MediaUiState.Available("/none/$id.jpg"), note: String? = null, concealed: Boolean = false) =
+    ProgressPhotoUi(id, date.atStartOfDay(MADRID).toInstant().toEpochMilli(), date, angle, note, state, concealed)
 
 private class Calls {
     val log = mutableListOf<String>()
@@ -49,6 +50,7 @@ private fun actions(calls: Calls = Calls()) = PhotoActions(
     onRequestImage = { calls.log += "request:$it" },
     onRetryImage = { calls.log += "retryImage:$it" },
     onOpen = { calls.log += "open:$it" },
+    onReveal = { calls.log += "reveal:$it" },
     onCloseViewer = { calls.log += "closeViewer" },
     onAskDelete = { calls.log += "askDelete:$it" },
     onCancelDelete = { calls.log += "cancelDelete" },
@@ -148,6 +150,31 @@ class PhotoScreensTest {
         rule.onNodeWithText("Tus fotos siguen guardadas", substring = true).assertIsDisplayed()
         rule.onNodeWithContentDescription("Reintentar").performClick()
         assertTrue("retryLoad" in calls.log)
+    }
+
+    @Test fun concealedTilesSayTheyAreHiddenAndATapRevealsBeforeAnotherOpens() {
+        val calls = Calls()
+        show { PhotoGalleryContent(ready(photo("a", AUG_12, concealed = true)), actions(calls)) }
+        rule.onNodeWithContentDescription("Frente, 12 de agosto de 2026. Foto oculta, toca para mostrar").performClick()
+        assertEquals(listOf("reveal:a"), calls.log.filter { it.startsWith("reveal") || it.startsWith("open") })
+    }
+
+    @Test fun concealedComparisonSidesAreRevealedOneByOne() {
+        val calls = Calls()
+        val hiddenOld = older.copy(concealed = true)
+        val cmp = comparison.copy(series = listOf(hiddenOld, newer), a = hiddenOld, b = newer)
+        show { PhotoGalleryContent(ready(hiddenOld, newer, extra = { it.copy(comparing = true, comparison = cmp) }), actions(calls)) }
+        rule.onNodeWithContentDescription("Foto A: foto de Frente del 1 de junio de 2026. Foto oculta, toca para mostrar").performClick()
+        rule.onNodeWithContentDescription("Foto B: foto de Frente del 12 de agosto de 2026.", substring = true).assertExists()
+        assertEquals(listOf("reveal:old"), calls.log.filter { it.startsWith("reveal") })
+    }
+
+    @Test fun aFailingUploadOffersRetryInTheViewer() {
+        val calls = Calls()
+        val viewing = photo("f", AUG_12, state = MediaUiState.RetryableFailure("/none/f.jpg", "timeout"))
+        show { PhotoGalleryContent(ready(viewing, extra = { it.copy(viewing = viewing) }), actions(calls)) }
+        rule.onNodeWithContentDescription("Reintentar subida").performClick()
+        assertTrue("retryUpload:f" in calls.log)
     }
 
     // ---- Capture ----

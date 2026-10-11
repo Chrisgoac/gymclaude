@@ -80,6 +80,7 @@
     <string name="exercises_photos_message_dismiss">Entendido</string>
     <string name="exercises_photos_viewer_title">Foto del ejercicio</string>
     <string name="exercises_photos_viewer_image">Foto de %1$s</string>
+    <string name="exercises_photos_viewer_undecodable">No se puede mostrar esta foto en este dispositivo.</string>
     <string name="exercises_photos_viewer_close">Cerrar</string>
     <string name="exercises_photos_viewer_retry_image">Reintentar cargar la foto</string>
     <string name="exercises_photos_viewer_retry_upload">Reintentar subida</string>
