@@ -17,6 +17,8 @@ export interface RateLimitDecision {
 export const RATE_LIMIT_POLICIES = {
   sync: { limit: 120, windowMs: 60_000 },
   ai: { limit: 20, windowMs: 60_000 },
+  /** Presupuesto diario de IA por usuario (todas las rutas /api/v1/ai/*), ventana fija de 24 h. */
+  aiDaily: { limit: 200, windowMs: 24 * 60 * 60_000 },
   media: { limit: 30, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitPolicy>;
 

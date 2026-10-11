@@ -10,8 +10,16 @@ describe('rate-limit (unit)', () => {
     expect(hashSubject('1.2.3.4')).toBe(createHash('sha256').update('1.2.3.4').digest('hex'));
   });
 
-  it('exposes sync/ai/media policies', () => {
-    expect(Object.keys(RATE_LIMIT_POLICIES).sort()).toEqual(['ai', 'media', 'sync']);
+  it('exposes sync/ai/aiDaily/media policies', () => {
+    expect(Object.keys(RATE_LIMIT_POLICIES).sort()).toEqual(['ai', 'aiDaily', 'media', 'sync']);
+    expect(RATE_LIMIT_POLICIES.aiDaily).toEqual({ limit: 200, windowMs: 86_400_000 });
+  });
+
+  it('a spent daily AI budget reports the time left in the 24 h window', async () => {
+    const policy = RATE_LIMIT_POLICIES.aiDaily;
+    const now = 5 * policy.windowMs + 3_600_000; // 01:00 del día
+    const over = await consumeRateLimit('aiDaily', 'u', policy, { db: fakeDb(201), now });
+    expect(over).toEqual({ allowed: false, remaining: 0, retryAfterSeconds: 23 * 3600 });
   });
 
   it('allows up to the limit and reports retry metadata', async () => {

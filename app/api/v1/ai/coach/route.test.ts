@@ -166,6 +166,19 @@ describe('POST /api/v1/ai/coach — authorization and limits (before any model c
     untouched(calls);
   });
 
+  it('429 when the daily AI budget is spent (after the per-minute limit passed)', async () => {
+    const { provider, calls } = scriptedProvider(['x']);
+    setDeps(provider);
+    h.rate.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new RateLimitedError(7200));
+    const res = await post(body());
+    expect(res.status).toBe(429);
+    expect(await errorOf(res)).toMatchObject({ code: 'RATE_LIMITED', retryable: true });
+    expect(res.headers.get('retry-after')).toBe('7200');
+    expect(h.rate.mock.calls).toEqual([['ai', USER], ['aiDaily', USER]]);
+    expect(h.isPro).not.toHaveBeenCalled();
+    untouched(calls);
+  });
+
   it('403 PRO_REQUIRED for a non-Pro user, asking about the principal only', async () => {
     const { provider, calls } = scriptedProvider(['x']);
     setDeps(provider);

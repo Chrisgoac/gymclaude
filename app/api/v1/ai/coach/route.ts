@@ -1,8 +1,8 @@
+import { enforceAiBudget } from '@/lib/api/v1/ai/budget';
 import { CoachRequestSchema } from '@/lib/api/v1/ai/contracts';
 import { requirePro } from '@/lib/api/v1/ai/guard';
 import { aiUnavailable, readJsonBody } from '@/lib/api/v1/ai/http';
 import { getCoachDeps } from '@/lib/api/v1/ai/runtime';
-import { enforceRateLimit } from '@/lib/api/v1/rate-limit';
 import { withApiRoute } from '@/lib/api/v1/route';
 import { deepseekConfigured } from '@/lib/coach-model';
 import { NDJSON_CONTENT_TYPE, startCoachTurn } from '@/lib/coach-stream';
@@ -13,7 +13,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export const POST = withApiRoute(async (request, principal) => {
-  await enforceRateLimit('ai', principal.userId);
+  await enforceAiBudget(principal.userId);
   // Fail closed, before reading the body, touching ai_responses or calling the model.
   await requirePro(principal);
   if (!deepseekConfigured()) throw aiUnavailable();

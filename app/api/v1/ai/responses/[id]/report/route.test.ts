@@ -57,6 +57,7 @@ describe('POST /api/v1/ai/responses/:id/report', () => {
     expect(await res.json()).toEqual({ responseId: RID, created: true });
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(h.rate).toHaveBeenCalledWith('ai', USER);
+    expect(h.rate).toHaveBeenCalledWith('aiDaily', USER);
     expect(h.isPro).not.toHaveBeenCalled();
   });
 
