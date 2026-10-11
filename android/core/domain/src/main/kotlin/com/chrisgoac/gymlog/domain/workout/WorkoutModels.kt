@@ -1,9 +1,8 @@
 package com.chrisgoac.gymlog.domain.workout
 
-import java.time.DayOfWeek
+import com.chrisgoac.gymlog.domain.time.Periods
 import java.time.Instant
 import java.time.ZoneId
-import java.time.temporal.TemporalAdjusters
 
 /**
  * Which unfinished session is THE active workout (controller ruling): the newest unfinished, live
@@ -98,8 +97,7 @@ data class TrainingSummary(
         fun compute(sessionStarts: List<Long>, goal: Int, now: Long, zone: ZoneId): TrainingSummary {
             val effectiveGoal = goal.coerceAtLeast(1)
             fun weekIndex(millis: Long): Long {
-                val monday = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
-                    .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                val monday = Periods.mondayOf(Instant.ofEpochMilli(millis), zone)
                 return Math.floorDiv(monday.toEpochDay(), 7L)
             }
             val perWeek = sessionStarts.groupingBy(::weekIndex).eachCount()

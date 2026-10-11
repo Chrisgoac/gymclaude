@@ -1,0 +1,197 @@
+{
+  "description": "Cases for lib/period.ts (periodoASinceTs, inicioSemana) and its Android port (core:domain time/Periods.kt). Times are epoch ms; 'expected' 0 = no lower bound. weekStart: Monday 00:00 in 'zone' of the week containing 'at'.",
+  "since": [
+    {
+      "periodo": "4s",
+      "ahora": 86400000000000,
+      "expected": 86397580800000
+    },
+    {
+      "periodo": "4s",
+      "ahora": 1781092800000,
+      "expected": 1778673600000
+    },
+    {
+      "periodo": "4s",
+      "ahora": 1774744200000,
+      "expected": 1772325000000
+    },
+    {
+      "periodo": "3m",
+      "ahora": 86400000000000,
+      "expected": 86392224000000
+    },
+    {
+      "periodo": "3m",
+      "ahora": 1781092800000,
+      "expected": 1773316800000
+    },
+    {
+      "periodo": "3m",
+      "ahora": 1774744200000,
+      "expected": 1766968200000
+    },
+    {
+      "periodo": "ano",
+      "ahora": 86400000000000,
+      "expected": 86368464000000
+    },
+    {
+      "periodo": "ano",
+      "ahora": 1781092800000,
+      "expected": 1749556800000
+    },
+    {
+      "periodo": "ano",
+      "ahora": 1774744200000,
+      "expected": 1743208200000
+    },
+    {
+      "periodo": "todo",
+      "ahora": 86400000000000,
+      "expected": 0
+    },
+    {
+      "periodo": "todo",
+      "ahora": 1781092800000,
+      "expected": 0
+    },
+    {
+      "periodo": "todo",
+      "ahora": 1774744200000,
+      "expected": 0
+    }
+  ],
+  "weekStart": [
+    {
+      "zone": "UTC",
+      "at": 1781092800000,
+      "expected": 1780876800000
+    },
+    {
+      "zone": "UTC",
+      "at": 1781481599999,
+      "expected": 1780876800000
+    },
+    {
+      "zone": "UTC",
+      "at": 1781481600000,
+      "expected": 1781481600000
+    },
+    {
+      "zone": "UTC",
+      "at": 1780876800000,
+      "expected": 1780876800000
+    },
+    {
+      "zone": "UTC",
+      "at": 1767225600000,
+      "expected": 1766966400000
+    },
+    {
+      "zone": "Europe/Madrid",
+      "at": 1781092800000,
+      "expected": 1780869600000
+    },
+    {
+      "zone": "Europe/Madrid",
+      "at": 1781474399999,
+      "expected": 1780869600000
+    },
+    {
+      "zone": "Europe/Madrid",
+      "at": 1781474400000,
+      "expected": 1781474400000
+    },
+    {
+      "zone": "Europe/Madrid",
+      "at": 1774778400000,
+      "expected": 1774220400000
+    },
+    {
+      "zone": "Europe/Madrid",
+      "at": 1774830600000,
+      "expected": 1774821600000
+    },
+    {
+      "zone": "Europe/Madrid",
+      "at": 1792922400000,
+      "expected": 1792360800000
+    },
+    {
+      "zone": "Europe/Madrid",
+      "at": 1792974600000,
+      "expected": 1792969200000
+    },
+    {
+      "zone": "Europe/Madrid",
+      "at": 1767223800000,
+      "expected": 1766962800000
+    },
+    {
+      "zone": "America/New_York",
+      "at": 1772971200000,
+      "expected": 1772427600000
+    },
+    {
+      "zone": "America/New_York",
+      "at": 1773028799000,
+      "expected": 1772427600000
+    },
+    {
+      "zone": "America/New_York",
+      "at": 1793534400000,
+      "expected": 1792987200000
+    },
+    {
+      "zone": "America/New_York",
+      "at": 1793595599000,
+      "expected": 1792987200000
+    },
+    {
+      "zone": "America/New_York",
+      "at": 1781060400000,
+      "expected": 1780891200000
+    },
+    {
+      "zone": "Asia/Kolkata",
+      "at": 1781461799000,
+      "expected": 1780857000000
+    },
+    {
+      "zone": "Asia/Kolkata",
+      "at": 1781461800000,
+      "expected": 1781461800000
+    },
+    {
+      "zone": "Asia/Kolkata",
+      "at": 1781092800000,
+      "expected": 1780857000000
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "at": 1775296800000,
+      "expected": 1774782000000
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "at": 1775390400000,
+      "expected": 1775390400000
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "at": 1790416800000,
+      "expected": 1789905600000
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "at": 1790510400000,
+      "expected": 1790506800000
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "at": 1781092800000,
+      "expected": 1780833600000
+    }
+  ]
+}

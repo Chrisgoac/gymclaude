@@ -1,0 +1,256 @@
+{
+  "description": "Cases for lib/body-stats.ts resumenSerie and its Android port (core:domain math/BodySeries in Numbers.kt). Metrics are in chronological order as the PWA passes them (the 'unsorted' case documents that resumenSerie does NOT sort). Point labels are dd/MM in 'zone'. Weight in kg.",
+  "cases": [
+    {
+      "name": "empty @ Europe/Madrid",
+      "zone": "Europe/Madrid",
+      "metrics": [],
+      "expected": {
+        "actual": null,
+        "primero": null,
+        "delta": null,
+        "puntos": []
+      }
+    },
+    {
+      "name": "single @ Europe/Madrid",
+      "zone": "Europe/Madrid",
+      "metrics": [
+        {
+          "valor": 80,
+          "fecha": 1780308000000
+        }
+      ],
+      "expected": {
+        "actual": 80,
+        "primero": 80,
+        "delta": null,
+        "puntos": [
+          {
+            "fecha": "1/6",
+            "valor": 80
+          }
+        ]
+      }
+    },
+    {
+      "name": "loss @ Europe/Madrid",
+      "zone": "Europe/Madrid",
+      "metrics": [
+        {
+          "valor": 80,
+          "fecha": 1780308000000
+        },
+        {
+          "valor": 78.5,
+          "fecha": 1780912800000
+        },
+        {
+          "valor": 77,
+          "fecha": 1781517600000
+        }
+      ],
+      "expected": {
+        "actual": 77,
+        "primero": 80,
+        "delta": -3,
+        "puntos": [
+          {
+            "fecha": "1/6",
+            "valor": 80
+          },
+          {
+            "fecha": "8/6",
+            "valor": 78.5
+          },
+          {
+            "fecha": "15/6",
+            "valor": 77
+          }
+        ]
+      }
+    },
+    {
+      "name": "gain @ UTC",
+      "zone": "UTC",
+      "metrics": [
+        {
+          "valor": 60.2,
+          "fecha": 1769902200000
+        },
+        {
+          "valor": 61.7,
+          "fecha": 1769905800000
+        }
+      ],
+      "expected": {
+        "actual": 61.7,
+        "primero": 60.2,
+        "delta": 1.5,
+        "puntos": [
+          {
+            "fecha": "31/1",
+            "valor": 60.2
+          },
+          {
+            "fecha": "1/2",
+            "valor": 61.7
+          }
+        ]
+      }
+    },
+    {
+      "name": "gain @ Europe/Madrid",
+      "zone": "Europe/Madrid",
+      "metrics": [
+        {
+          "valor": 60.2,
+          "fecha": 1769902200000
+        },
+        {
+          "valor": 61.7,
+          "fecha": 1769905800000
+        }
+      ],
+      "expected": {
+        "actual": 61.7,
+        "primero": 60.2,
+        "delta": 1.5,
+        "puntos": [
+          {
+            "fecha": "1/2",
+            "valor": 60.2
+          },
+          {
+            "fecha": "1/2",
+            "valor": 61.7
+          }
+        ]
+      }
+    },
+    {
+      "name": "gain @ America/New_York",
+      "zone": "America/New_York",
+      "metrics": [
+        {
+          "valor": 60.2,
+          "fecha": 1769902200000
+        },
+        {
+          "valor": 61.7,
+          "fecha": 1769905800000
+        }
+      ],
+      "expected": {
+        "actual": 61.7,
+        "primero": 60.2,
+        "delta": 1.5,
+        "puntos": [
+          {
+            "fecha": "31/1",
+            "valor": 60.2
+          },
+          {
+            "fecha": "31/1",
+            "valor": 61.7
+          }
+        ]
+      }
+    },
+    {
+      "name": "flat @ Europe/Madrid",
+      "zone": "Europe/Madrid",
+      "metrics": [
+        {
+          "valor": 70,
+          "fecha": 1780308000000
+        },
+        {
+          "valor": 70,
+          "fecha": 1780394400000
+        }
+      ],
+      "expected": {
+        "actual": 70,
+        "primero": 70,
+        "delta": 0,
+        "puntos": [
+          {
+            "fecha": "1/6",
+            "valor": 70
+          },
+          {
+            "fecha": "2/6",
+            "valor": 70
+          }
+        ]
+      }
+    },
+    {
+      "name": "unsorted @ Europe/Madrid",
+      "zone": "Europe/Madrid",
+      "metrics": [
+        {
+          "valor": 75.5,
+          "fecha": 1781085600000
+        },
+        {
+          "valor": 74,
+          "fecha": 1780480800000
+        },
+        {
+          "valor": 76,
+          "fecha": 1781949600000
+        }
+      ],
+      "expected": {
+        "actual": 76,
+        "primero": 75.5,
+        "delta": 0.5,
+        "puntos": [
+          {
+            "fecha": "10/6",
+            "valor": 75.5
+          },
+          {
+            "fecha": "3/6",
+            "valor": 74
+          },
+          {
+            "fecha": "20/6",
+            "valor": 76
+          }
+        ]
+      }
+    },
+    {
+      "name": "floating @ Europe/Madrid",
+      "zone": "Europe/Madrid",
+      "metrics": [
+        {
+          "valor": 0.1,
+          "fecha": 1780308000000
+        },
+        {
+          "valor": 0.3,
+          "fecha": 1780394400000
+        }
+      ],
+      "expected": {
+        "actual": 0.3,
+        "primero": 0.1,
+        "delta": 0.19999999999999998,
+        "puntos": [
+          {
+            "fecha": "1/6",
+            "valor": 0.1
+          },
+          {
+            "fecha": "2/6",
+            "valor": 0.3
+          }
+        ]
+      }
+    }
+  ]
+}

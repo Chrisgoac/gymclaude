@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { db } from '@/lib/db/database';
 import type { GymLogDB } from '@/lib/db/database';
 import { startSession, addLoggedExercise, addSet } from '@/lib/repositories/workouts';
@@ -39,6 +41,13 @@ describe('estimar1RM (Epley)', () => {
     expect(estimar1RM(100, 1)).toBe(100);
     expect(estimar1RM(100, 10)).toBeCloseTo(133.3, 1);
   });
+});
+
+// Shared with the Android implementation (android/core/domain DomainParityTest).
+describe('estimar1RM (shared fixture contracts/domain/num-cases.json)', () => {
+  const cases = JSON.parse(readFileSync(join(process.cwd(), 'contracts/domain/num-cases.json'), 'utf8')).estimar1RM as
+    { peso: number; reps: number; expected: number }[];
+  it.each(cases)('estimar1RM($peso, $reps)', ({ peso, reps, expected }) => expect(estimar1RM(peso, reps)).toBe(expected));
 });
 
 describe('getExerciseProgress', () => {

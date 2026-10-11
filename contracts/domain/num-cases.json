@@ -1,0 +1,453 @@
+{
+  "description": "Cases for lib/num.ts (parseEnteroOpt, parseEntero, parseDecimal) and estimar1RM (Epley, lib/repositories/stats.ts), ported to core:domain math/Numbers.kt. null = undefined (parseEnteroOpt); a string expected value is a non-finite number (Infinity).",
+  "parseEnteroOpt": [
+    {
+      "text": "",
+      "expected": null
+    },
+    {
+      "text": "   ",
+      "expected": null
+    },
+    {
+      "text": "0",
+      "expected": 0
+    },
+    {
+      "text": "5",
+      "expected": 5
+    },
+    {
+      "text": " 12 ",
+      "expected": 12
+    },
+    {
+      "text": "12.4",
+      "expected": 12
+    },
+    {
+      "text": "12.5",
+      "expected": 13
+    },
+    {
+      "text": "12.6",
+      "expected": 13
+    },
+    {
+      "text": "0.5",
+      "expected": 1
+    },
+    {
+      "text": "1.5",
+      "expected": 2
+    },
+    {
+      "text": "2.5",
+      "expected": 3
+    },
+    {
+      "text": "-0.4",
+      "expected": 0
+    },
+    {
+      "text": "-1",
+      "expected": 0
+    },
+    {
+      "text": "-3.7",
+      "expected": 0
+    },
+    {
+      "text": "abc",
+      "expected": null
+    },
+    {
+      "text": "1,5",
+      "expected": null
+    },
+    {
+      "text": "1e3",
+      "expected": 1000
+    },
+    {
+      "text": "1e-3",
+      "expected": 0
+    },
+    {
+      "text": "0x10",
+      "expected": 16
+    },
+    {
+      "text": "0b11",
+      "expected": 3
+    },
+    {
+      "text": "0o17",
+      "expected": 15
+    },
+    {
+      "text": ".5",
+      "expected": 1
+    },
+    {
+      "text": "5.",
+      "expected": 5
+    },
+    {
+      "text": "+7",
+      "expected": 7
+    },
+    {
+      "text": "1 2",
+      "expected": null
+    },
+    {
+      "text": "Infinity",
+      "expected": "Infinity"
+    },
+    {
+      "text": "-Infinity",
+      "expected": 0
+    },
+    {
+      "text": "1e999",
+      "expected": "Infinity"
+    },
+    {
+      "text": "100.25",
+      "expected": 100
+    },
+    {
+      "text": "62.5",
+      "expected": 63
+    },
+    {
+      "text": "1_000",
+      "expected": null
+    }
+  ],
+  "parseEntero": [
+    {
+      "text": "",
+      "expected": 0
+    },
+    {
+      "text": "   ",
+      "expected": 0
+    },
+    {
+      "text": "0",
+      "expected": 0
+    },
+    {
+      "text": "5",
+      "expected": 5
+    },
+    {
+      "text": " 12 ",
+      "expected": 12
+    },
+    {
+      "text": "12.4",
+      "expected": 12
+    },
+    {
+      "text": "12.5",
+      "expected": 13
+    },
+    {
+      "text": "12.6",
+      "expected": 13
+    },
+    {
+      "text": "0.5",
+      "expected": 1
+    },
+    {
+      "text": "1.5",
+      "expected": 2
+    },
+    {
+      "text": "2.5",
+      "expected": 3
+    },
+    {
+      "text": "-0.4",
+      "expected": 0
+    },
+    {
+      "text": "-1",
+      "expected": 0
+    },
+    {
+      "text": "-3.7",
+      "expected": 0
+    },
+    {
+      "text": "abc",
+      "expected": 0
+    },
+    {
+      "text": "1,5",
+      "expected": 0
+    },
+    {
+      "text": "1e3",
+      "expected": 1000
+    },
+    {
+      "text": "1e-3",
+      "expected": 0
+    },
+    {
+      "text": "0x10",
+      "expected": 16
+    },
+    {
+      "text": "0b11",
+      "expected": 3
+    },
+    {
+      "text": "0o17",
+      "expected": 15
+    },
+    {
+      "text": ".5",
+      "expected": 1
+    },
+    {
+      "text": "5.",
+      "expected": 5
+    },
+    {
+      "text": "+7",
+      "expected": 7
+    },
+    {
+      "text": "1 2",
+      "expected": 0
+    },
+    {
+      "text": "Infinity",
+      "expected": "Infinity"
+    },
+    {
+      "text": "-Infinity",
+      "expected": 0
+    },
+    {
+      "text": "1e999",
+      "expected": "Infinity"
+    },
+    {
+      "text": "100.25",
+      "expected": 100
+    },
+    {
+      "text": "62.5",
+      "expected": 63
+    },
+    {
+      "text": "1_000",
+      "expected": 0
+    }
+  ],
+  "parseDecimal": [
+    {
+      "text": "",
+      "expected": 0
+    },
+    {
+      "text": "   ",
+      "expected": 0
+    },
+    {
+      "text": "0",
+      "expected": 0
+    },
+    {
+      "text": "5",
+      "expected": 5
+    },
+    {
+      "text": " 12 ",
+      "expected": 12
+    },
+    {
+      "text": "12.4",
+      "expected": 12.4
+    },
+    {
+      "text": "12.5",
+      "expected": 12.5
+    },
+    {
+      "text": "12.6",
+      "expected": 12.6
+    },
+    {
+      "text": "0.5",
+      "expected": 0.5
+    },
+    {
+      "text": "1.5",
+      "expected": 1.5
+    },
+    {
+      "text": "2.5",
+      "expected": 2.5
+    },
+    {
+      "text": "-0.4",
+      "expected": 0
+    },
+    {
+      "text": "-1",
+      "expected": 0
+    },
+    {
+      "text": "-3.7",
+      "expected": 0
+    },
+    {
+      "text": "abc",
+      "expected": 0
+    },
+    {
+      "text": "1,5",
+      "expected": 0
+    },
+    {
+      "text": "1e3",
+      "expected": 1000
+    },
+    {
+      "text": "1e-3",
+      "expected": 0.001
+    },
+    {
+      "text": "0x10",
+      "expected": 16
+    },
+    {
+      "text": "0b11",
+      "expected": 3
+    },
+    {
+      "text": "0o17",
+      "expected": 15
+    },
+    {
+      "text": ".5",
+      "expected": 0.5
+    },
+    {
+      "text": "5.",
+      "expected": 5
+    },
+    {
+      "text": "+7",
+      "expected": 7
+    },
+    {
+      "text": "1 2",
+      "expected": 0
+    },
+    {
+      "text": "Infinity",
+      "expected": "Infinity"
+    },
+    {
+      "text": "-Infinity",
+      "expected": 0
+    },
+    {
+      "text": "1e999",
+      "expected": "Infinity"
+    },
+    {
+      "text": "100.25",
+      "expected": 100.25
+    },
+    {
+      "text": "62.5",
+      "expected": 62.5
+    },
+    {
+      "text": "1_000",
+      "expected": 0
+    }
+  ],
+  "estimar1RM": [
+    {
+      "peso": 100,
+      "reps": 1,
+      "expected": 100
+    },
+    {
+      "peso": 100,
+      "reps": 0,
+      "expected": 100
+    },
+    {
+      "peso": 100,
+      "reps": -2,
+      "expected": 100
+    },
+    {
+      "peso": 100,
+      "reps": 2,
+      "expected": 106.7
+    },
+    {
+      "peso": 100,
+      "reps": 5,
+      "expected": 116.7
+    },
+    {
+      "peso": 100,
+      "reps": 10,
+      "expected": 133.3
+    },
+    {
+      "peso": 60,
+      "reps": 8,
+      "expected": 76
+    },
+    {
+      "peso": 62.5,
+      "reps": 6,
+      "expected": 75
+    },
+    {
+      "peso": 0,
+      "reps": 5,
+      "expected": 0
+    },
+    {
+      "peso": 82.5,
+      "reps": 3,
+      "expected": 90.8
+    },
+    {
+      "peso": 20,
+      "reps": 12,
+      "expected": 28
+    },
+    {
+      "peso": 142.5,
+      "reps": 1,
+      "expected": 142.5
+    },
+    {
+      "peso": 100,
+      "reps": 30,
+      "expected": 200
+    },
+    {
+      "peso": 57.3,
+      "reps": 7,
+      "expected": 70.7
+    }
+  ]
+}

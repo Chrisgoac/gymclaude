@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "export:android-catalog": "tsx scripts/export-android-catalog.mjs",
+    "export:domain-fixtures": "tsx scripts/export-domain-fixtures.mjs",
     "db:migrate:sync": "node scripts/migrate-sync-foundation.mjs"
   },
   "dependencies": {
