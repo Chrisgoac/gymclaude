@@ -36,12 +36,14 @@ const report = (id: string, payload: unknown, headers: Record<string, string> = 
 const errorOf = async (res: Response) => ApiErrorBodySchema.parse(await res.json()).error;
 
 /** Records each SQL call; answers as reportAiResponse's two queries expect. */
-function fakeDb(inserted: boolean, owned = true) {
+/** Calls in order: conditional insert, ownership check, account-deletion check. */
+function fakeDb(inserted: boolean, owned = true, deleting = false) {
   const execute = vi.fn(async (q: unknown) => {
     void q;
-    return execute.mock.calls.length === 1
-      ? { rows: inserted ? [{ id: 'rep' }] : [] }
-      : { rows: owned ? [{ '?column?': 1 }] : [] };
+    const n = execute.mock.calls.length;
+    if (n === 1) return { rows: inserted ? [{ id: 'rep' }] : [] };
+    if (n === 2) return { rows: owned ? [{ '?column?': 1 }] : [] };
+    return { rows: deleting ? [{ '?column?': 1 }] : [] };
   });
   return { execute };
 }
@@ -64,6 +66,13 @@ describe('POST /api/v1/ai/responses/:id/report', () => {
     expect(h.rate).toHaveBeenCalledWith('ai', USER);
     expect(h.rate).toHaveBeenCalledWith('aiDaily', USER);
     expect(h.isPro).not.toHaveBeenCalled();
+  });
+
+  it('403 ACCOUNT_DELETING when the insert was refused because the account is being deleted', async () => {
+    h.db = fakeDb(false, true, true);
+    const res = await report(RID, { category: 'other' });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe('ACCOUNT_DELETING');
   });
 
   it('200 created:false on a duplicate report of an owned response', async () => {

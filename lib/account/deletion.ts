@@ -23,12 +23,18 @@ import { accountHash } from './access';
 //   3. storage_sweep — segunda pasada de R2 por prefijo: recoge una subida legacy que estuviera en
 //                  vuelo cuando se bloqueó la cuenta.
 //   4. identity  — borra el usuario de Clerk (404 = ya borrado = éxito).
-//   5. done      — `user_id` pasa a NULL: solo queda el hash, el estado y las marcas de tiempo.
+//   5. database_sweep — repite el borrado de filas (y la pasada de R2) cuando han pasado al menos
+//                  FINAL_SWEEP_DELAY_MS desde la petición: recoge lo que escribiera una petición que
+//                  pasó el guard antes del bloqueo y escribe sin el lock de sync (informe de IA,
+//                  verify de Play, RTDN, rate limit…; ya rechazan escribir si ven el bloqueo, esto
+//                  cubre la carrera residual). Antes de ese plazo el trabajo sigue pendiente sin
+//                  error y lo termina el cron o un DELETE repetido.
+//   6. done      — `user_id` pasa a NULL: solo queda el hash, el estado y las marcas de tiempo.
 // Un fallo deja `step` en el paso que falló y `last_error_code`; lo reanuda el siguiente DELETE o
 // /api/internal/account/process-deletions. Los logs llevan solo hash corto, paso y código.
 
 export const DELETION_CONFIRMATION = 'ELIMINAR';
-/** Autenticación reciente exigida para PEDIR el borrado: primer factor verificado hace ≤ 10 min. */
+/** Autenticación reciente exigida para PEDIR el borrado: primer factor verificado hace < 10 min. */
 export const RECENT_AUTH_MAX_MINUTES = 10;
 /** Lease de un ejecutor: más que la duración máxima de la función que lo ejecuta. */
 export const DELETION_LEASE_MS = 5 * 60_000;
@@ -36,7 +42,12 @@ const DELETE_CONCURRENCY = 8;
 
 export const DeleteAccountRequestSchema = z.object({ confirm: z.literal(DELETION_CONFIRMATION) }).strict();
 
-export const DELETION_STEPS = ['storage', 'database', 'storage_sweep', 'identity'] as const;
+export const DELETION_STEPS = ['storage', 'database', 'storage_sweep', 'identity', 'database_sweep'] as const;
+/**
+ * Espera mínima entre la petición y el barrido final: más que la duración máxima de cualquier
+ * función que pudiera estar escribiendo para el usuario (maxDuration 60 s) con margen.
+ */
+export const FINAL_SWEEP_DELAY_MS = 120_000;
 export type DeletionStep = (typeof DELETION_STEPS)[number] | 'done';
 
 const STEP_ERROR_CODES: Record<(typeof DELETION_STEPS)[number], string> = {
@@ -44,7 +55,25 @@ const STEP_ERROR_CODES: Record<(typeof DELETION_STEPS)[number], string> = {
   database: 'DATABASE_FAILED',
   storage_sweep: 'STORAGE_FAILED',
   identity: 'IDENTITY_FAILED',
+  database_sweep: 'DATABASE_FAILED',
 };
+
+/** El barrido final aún no puede correr (no es un fallo: el trabajo sigue pendiente sin código). */
+class SweepNotDue extends Error {}
+
+/**
+ * Clase (y estado HTTP / SQLSTATE si los hay) de un error, saneada: nunca el mensaje (puede llevar
+ * ids o datos). Ej.: `ClerkAPIResponseError:429`, `DatabaseError:40P01`, `S3ServiceException:403`.
+ */
+export function errorClassOf(error: unknown): string {
+  const raw = error instanceof Error ? error.constructor?.name || error.name : typeof error;
+  const name = /^[A-Za-z0-9_]{1,64}$/.test(raw) ? raw : 'Error';
+  const e = error as { status?: unknown; statusCode?: unknown; code?: unknown; $metadata?: { httpStatusCode?: unknown }; cause?: { code?: unknown } };
+  const status = [e?.status, e?.statusCode, e?.$metadata?.httpStatusCode].find((v) => Number.isInteger(v) && (v as number) >= 100 && (v as number) < 600);
+  if (status !== undefined) return `${name}:${status}`;
+  const code = [e?.code, e?.cause?.code].find((v) => typeof v === 'string' && /^[0-9A-Z]{5}$/.test(v));
+  return code ? `${name}:${code}` : name;
+}
 
 export const reauthRequired = () =>
   new ApiError(403, 'REAUTH_REQUIRED', 'Sign in again (within the last 10 minutes) to delete the account', false);
@@ -56,7 +85,7 @@ export const reauthRequired = () =>
 export function isRecentAuth(fva: readonly [number, number] | null | undefined): boolean {
   if (!fva) return false;
   const [firstFactorAge] = fva;
-  return Number.isFinite(firstFactorAge) && firstFactorAge >= 0 && firstFactorAge <= RECENT_AUTH_MAX_MINUTES;
+  return Number.isFinite(firstFactorAge) && firstFactorAge >= 0 && firstFactorAge < RECENT_AUTH_MAX_MINUTES;
 }
 
 // ── Puertos ──
@@ -293,7 +322,7 @@ export function createAccountDeletionService(deps: AccountDeletionDeps) {
     });
   }
 
-  async function runStep(step: (typeof DELETION_STEPS)[number], userId: string): Promise<void> {
+  async function runStep(step: (typeof DELETION_STEPS)[number], userId: string, requestedAt: number): Promise<void> {
     switch (step) {
       case 'storage':
         return deleteStorage(userId, true);
@@ -303,6 +332,10 @@ export function createAccountDeletionService(deps: AccountDeletionDeps) {
         return deleteStorage(userId, false);
       case 'identity':
         return identity.deleteUser(userId);
+      case 'database_sweep':
+        if (now() < requestedAt + FINAL_SWEEP_DELAY_MS) throw new SweepNotDue();
+        await deleteRows(userId);
+        return deleteStorage(userId, false);
     }
   }
 
@@ -324,7 +357,7 @@ export function createAccountDeletionService(deps: AccountDeletionDeps) {
         eq(jobs.status, 'pending'),
         or(isNull(jobs.leaseExpiresAt), lte(jobs.leaseExpiresAt, at)),
       ))
-      .returning({ step: jobs.step, userId: jobs.userId });
+      .returning({ step: jobs.step, userId: jobs.userId, requestedAt: jobs.requestedAt });
     if (!claimed.length) {
       const job = await findJob(userId);
       if (!job) throw new Error('account deletion job not found');
@@ -337,14 +370,19 @@ export function createAccountDeletionService(deps: AccountDeletionDeps) {
     while (step !== 'done') {
       const current = step;
       try {
-        await runStep(current, userId);
+        await runStep(current, userId, claimed[0].requestedAt);
         await deps.afterStep?.(current);
-      } catch {
+      } catch (error) {
+        if (error instanceof SweepNotDue) {
+          await db.update(jobs).set({ leaseOwner: null, leaseExpiresAt: null, updatedAt: now() }).where(ours);
+          return { status: 'in_progress', step: current, errorCode: null };
+        }
         const code = STEP_ERROR_CODES[current];
-        log(`[account-deletion] job=${hash.slice(0, 12)} step=${current} error=${code}`);
+        const errorClass = errorClassOf(error);
+        log(`[account-deletion] job=${hash.slice(0, 12)} step=${current} error=${code} cause=${errorClass}`);
         await db
           .update(jobs)
-          .set({ lastErrorCode: code, leaseOwner: null, leaseExpiresAt: null, updatedAt: now() })
+          .set({ lastErrorCode: code, lastErrorClass: errorClass, leaseOwner: null, leaseExpiresAt: null, updatedAt: now() })
           .where(ours);
         return { status: 'in_progress', step: current, errorCode: code };
       }
@@ -355,8 +393,8 @@ export function createAccountDeletionService(deps: AccountDeletionDeps) {
       const advanced = await db
         .update(jobs)
         .set(done
-          ? { step, status: 'done', userId: null, lastErrorCode: null, leaseOwner: null, leaseExpiresAt: null, updatedAt: now(), completedAt: now() }
-          : { step, lastErrorCode: null, leaseExpiresAt: now() + DELETION_LEASE_MS, updatedAt: now() })
+          ? { step, status: 'done', userId: null, lastErrorCode: null, lastErrorClass: null, leaseOwner: null, leaseExpiresAt: null, updatedAt: now(), completedAt: now() }
+          : { step, lastErrorCode: null, lastErrorClass: null, leaseExpiresAt: now() + DELETION_LEASE_MS, updatedAt: now() })
         .where(ours)
         .returning({ step: jobs.step });
       if (!advanced.length) {
@@ -397,6 +435,11 @@ export type AccountDeletionService = ReturnType<typeof createAccountDeletionServ
 // ── Caso de uso compartido por DELETE /api/v1/account y la página /delete-account ──
 
 export interface DeleteAccountResult extends DeletionOutcome {
+  /**
+   * Cuenta borrada para el usuario (datos, objetos y Clerk) y solo falta el barrido final de
+   * seguridad, que corre solo pasados FINAL_SWEEP_DELAY_MS (cron). `status` es entonces `deleted`.
+   */
+  finalCleanupPending: boolean;
   /** Suscripción de Google Play viva al pedir el borrado (el servidor NO la cancela), o null. */
   activeSubscription: ActiveSubscription | null;
 }
@@ -408,15 +451,24 @@ export interface DeleteAccountResult extends DeletionOutcome {
  */
 export async function deleteAccount(
   service: AccountDeletionService,
-  input: { userId: string; factorVerificationAge: readonly [number, number] | null | undefined },
+  input: {
+    userId: string;
+    factorVerificationAge: readonly [number, number] | null | undefined;
+    /** Rate limit del llamante; no se gasta para contestar a un borrado ya terminado. */
+    beforeWork?: () => Promise<void>;
+  },
 ): Promise<DeleteAccountResult> {
   const existing = await service.findJob(input.userId);
   if (existing?.status === 'done') {
-    return { status: 'deleted', step: 'done', errorCode: null, activeSubscription: null };
+    return { status: 'deleted', step: 'done', errorCode: null, activeSubscription: null, finalCleanupPending: false };
   }
+  await input.beforeWork?.();
   if (!existing && !isRecentAuth(input.factorVerificationAge)) throw reauthRequired();
   const activeSubscription = await service.readActiveSubscription(input.userId);
   if (!existing) await service.requestDeletion(input.userId);
   const outcome = await service.runJob(input.userId);
-  return { ...outcome, activeSubscription };
+  if (outcome.status === 'in_progress' && outcome.step === 'database_sweep' && !outcome.errorCode) {
+    return { status: 'deleted', step: 'database_sweep', errorCode: null, activeSubscription, finalCleanupPending: true };
+  }
+  return { ...outcome, activeSubscription, finalCleanupPending: false };
 }

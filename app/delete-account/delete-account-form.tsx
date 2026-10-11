@@ -58,8 +58,8 @@ export function DeleteAccountForm() {
   if (state.kind === 'in_progress') {
     return (
       <p role="status" className="border-2 border-foreground bg-card p-4">
-        Tu cuenta ya está bloqueada y el borrado está en curso. Terminará automáticamente en las próximas
-        horas; no necesitas hacer nada más.
+        Tu cuenta ya está bloqueada y el borrado está en curso. Terminará automáticamente (normalmente en
+        minutos; como máximo en unos días); no necesitas hacer nada más.
       </p>
     );
   }

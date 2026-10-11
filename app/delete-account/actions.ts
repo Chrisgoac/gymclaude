@@ -24,10 +24,11 @@ export async function requestAccountDeletion(
     return { status: 'error', code: 'CONFIRMATION_REQUIRED' };
   }
   try {
-    await enforceRateLimit('account', session.userId);
+    const userId = session.userId;
     const result = await deleteAccount(getAccountDeletionService(), {
-      userId: session.userId,
+      userId,
       factorVerificationAge: session.factorVerificationAge,
+      beforeWork: () => enforceRateLimit('account', userId),
     });
     return { status: result.status };
   } catch (error) {

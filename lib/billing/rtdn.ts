@@ -224,8 +224,11 @@ export function createDbRtdnStore(getDb: () => PoolDb = getPoolDb): RtdnStore {
         const locked = await tx.execute(sql`SELECT processed_at FROM billing_events WHERE message_id = ${c.event.messageId} FOR UPDATE`);
         if (locked.rows[0]?.processed_at !== null && locked.rows[0]?.processed_at !== undefined) return 'duplicate' as const;
         for (const write of c.upserts) {
-          if (await upsertPlayInTx(tx, write) === 'already_bound') {
+          const written = await upsertPlayInTx(tx, write);
+          if (written === 'already_bound') {
             console.warn('[billing/rtdn] token bound to another account; not written', JSON.stringify({ messageId: c.event.messageId }));
+          } else if (written === 'account_deleting') {
+            console.warn('[billing/rtdn] owner account is being deleted; not written', JSON.stringify({ messageId: c.event.messageId }));
           }
         }
         if (c.supersede) {

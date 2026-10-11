@@ -1,11 +1,13 @@
 // @vitest-environment node
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core';
 import { eq, sql } from 'drizzle-orm';
 import * as schema from '@/db/schema';
 import type { PoolDb } from '@/db/pool';
 import { hashSubject } from '@/lib/api/v1/rate-limit';
-import { mediaObjectKey, userHash } from '@/lib/api/v1/media/deletions';
+import { enqueueMediaDeletion, mediaObjectKey, userHash } from '@/lib/api/v1/media/deletions';
+import { storeAiReport } from '@/lib/api/v1/ai/store';
+import { upsertPlayInTx } from '@/lib/billing/entitlements';
 import { lockUserSync } from '@/lib/api/v1/sync/lock';
 import type { EntitlementRow } from '@/lib/billing/entitlements';
 import { accountHash, isAccountDeleting } from './access';
@@ -14,6 +16,7 @@ import {
   createAccountDeletionService,
   deleteAccount,
   DeleteAccountRequestSchema,
+  FINAL_SWEEP_DELAY_MS,
   INDIRECT_USER_TABLES,
   isRecentAuth,
   playManageUrl,
@@ -31,7 +34,8 @@ const FAR_FUTURE = Date.UTC(2100, 0, 1);
 describe('recent authentication and confirmation', () => {
   it('accepts a first factor verified within the last 10 minutes only', () => {
     expect(isRecentAuth([0, -1])).toBe(true);
-    expect(isRecentAuth([10, -1])).toBe(true);
+    expect(isRecentAuth([9, -1])).toBe(true);
+    expect(isRecentAuth([10, -1])).toBe(false); // Clerk's rule: afterMinutes > age
     expect(isRecentAuth([11, 0])).toBe(false);
     expect(isRecentAuth([-1, 0])).toBe(false); // never verified
     expect(isRecentAuth(null)).toBe(false); // token without the fva claim: fail closed
@@ -117,7 +121,7 @@ describe('deleteAccount use case', () => {
   it('reads the subscription before locking, then runs the job', async () => {
     const { service, calls } = fakeService(null);
     const result = await deleteAccount(service, { userId: 'u', factorVerificationAge: [2, -1] });
-    expect(result).toEqual({ status: 'deleted', step: 'done', errorCode: null, activeSubscription: null });
+    expect(result).toEqual({ status: 'deleted', step: 'done', errorCode: null, activeSubscription: null, finalCleanupPending: false });
     expect(calls).toEqual(['find', 'subscription', 'request', 'run']);
   });
 
@@ -127,10 +131,12 @@ describe('deleteAccount use case', () => {
     expect(calls).toEqual(['find', 'subscription', 'run']);
   });
 
-  it('answers a completed deletion as deleted without running anything', async () => {
+  it('answers a completed deletion as deleted without running anything or spending the rate limit', async () => {
     const { service, calls } = fakeService({ userIdHash: 'h', status: 'done', step: 'done', attempts: 1, lastErrorCode: null });
-    expect(await deleteAccount(service, { userId: 'u', factorVerificationAge: null })).toMatchObject({ status: 'deleted' });
+    const beforeWork = vi.fn(async () => {});
+    expect(await deleteAccount(service, { userId: 'u', factorVerificationAge: null, beforeWork })).toMatchObject({ status: 'deleted' });
     expect(calls).toEqual(['find']);
+    expect(beforeWork).not.toHaveBeenCalled();
   });
 });
 
@@ -299,8 +305,17 @@ describe.skipIf(!url)('account deletion orchestrator (integration)', () => {
     ...[...storage.buckets.public].filter((k) => k.startsWith(`${userId}/`)),
   ];
 
+  /** Test clock: the final sweep only runs FINAL_SWEEP_DELAY_MS after the request. */
+  let clock = Date.now();
+  beforeEach(() => {
+    clock = Date.now();
+  });
+  const passSweepDelay = () => {
+    clock += FINAL_SWEEP_DELAY_MS;
+  };
+
   function service(storage: AccountStorage, identity: IdentityProvider, extra: Partial<Parameters<typeof createAccountDeletionService>[0]> = {}) {
-    return createAccountDeletionService({ db, storage, identity, log: () => {}, ...extra });
+    return createAccountDeletionService({ db, storage, identity, log: () => {}, now: () => clock, ...extra });
   }
 
   it('deletes every row and object of the user, the Clerk user, and nothing of another user', async () => {
@@ -312,9 +327,11 @@ describe.skipIf(!url)('account deletion orchestrator (integration)', () => {
     const before = await counts(b);
     expect(Object.values(await counts(a)).every((n) => n >= 1)).toBe(true);
 
-    const result = await deleteAccount(service(r2.storage, clerk), { userId: a, factorVerificationAge: [1, -1] });
+    const svc = service(r2.storage, clerk);
+    const result = await deleteAccount(svc, { userId: a, factorVerificationAge: [1, -1] });
 
-    expect(result).toMatchObject({ status: 'deleted', step: 'done', errorCode: null });
+    // Deleted for the user; only the delayed final sweep is left (cron).
+    expect(result).toMatchObject({ status: 'deleted', step: 'database_sweep', errorCode: null, finalCleanupPending: true });
     expect(result.activeSubscription).toMatchObject({ productId: 'gymlog_pro_annual', state: 'ACTIVE', willRenew: true });
     expect(total(await counts(a))).toBe(0);
     expect(objectsOf(r2, a)).toEqual([]);
@@ -326,10 +343,13 @@ describe.skipIf(!url)('account deletion orchestrator (integration)', () => {
     expect(objectsOf(r2, b)).toHaveLength(6);
     expect(clerk.live.has(b)).toBe(true);
     // Enumeration scope: only A's exact prefixes were listed.
-    expect(r2.calls.filter((c) => c.op === 'listLegacy').map((c) => c.arg)).toEqual([`${a}/`, `${a}/`]);
+    expect(r2.calls.filter((c) => c.op === 'listLegacy').map((c) => c.arg)).toEqual([`${a}/`, `${a}/`]); // storage + storage_sweep
     expect(r2.calls.filter((c) => c.op === 'listPrivate').map((c) => c.arg)).toEqual([privatePrefix(a), privatePrefix(a)]);
     expect(r2.calls.filter((c) => c.op.startsWith('remove')).every((c) => c.arg.startsWith(privatePrefix(a)) || c.arg.startsWith(`${a}/`))).toBe(true);
 
+    passSweepDelay();
+    expect(await svc.runJob(a)).toMatchObject({ status: 'deleted', step: 'done' });
+    expect(await counts(b)).toEqual(before);
     // The job keeps no user content and no raw id.
     const job = (await db.execute(sql`SELECT * FROM account_deletion_jobs WHERE user_id_hash = ${accountHash(a)}`)).rows[0];
     expect(job).toMatchObject({ status: 'done', step: 'done', user_id: null, last_error_code: null, lease_owner: null });
@@ -359,6 +379,8 @@ describe.skipIf(!url)('account deletion orchestrator (integration)', () => {
     const svc = service(r2.storage, clerk);
     expect(await svc.requestDeletion(a)).toBe(true);
     expect(await svc.requestDeletion(a)).toBe(false);
+    expect(await svc.runJob(a)).toMatchObject({ status: 'in_progress', step: 'database_sweep', errorCode: null });
+    passSweepDelay();
     expect((await svc.runJob(a)).status).toBe('deleted');
     const again = await deleteAccount(svc, { userId: a, factorVerificationAge: null });
     expect(again).toMatchObject({ status: 'deleted', step: 'done' });
@@ -399,7 +421,7 @@ describe.skipIf(!url)('account deletion orchestrator (integration)', () => {
 
     // Re-calling DELETE resumes from the failed step (no fresh re-authentication needed).
     const second = await deleteAccount(svc, { userId: a, factorVerificationAge: null });
-    expect(second).toMatchObject({ status: 'deleted', step: 'done', errorCode: null });
+    expect(second).toMatchObject({ status: 'deleted', errorCode: null, finalCleanupPending: true });
     expect(total(await counts(a))).toBe(0);
     expect(objectsOf(r2, a)).toEqual([]);
     expect(clerk.live.has(a)).toBe(false);
@@ -422,7 +444,7 @@ describe.skipIf(!url)('account deletion orchestrator (integration)', () => {
     const svc = service(r2.storage, clerk, { afterStep });
     expect(await deleteAccount(svc, { userId: a, factorVerificationAge: [0, -1] })).toMatchObject({ step: 'database', errorCode: 'DATABASE_FAILED' });
     expect(total(await counts(a))).toBe(0); // the transaction had committed
-    expect((await svc.runJob(a)).status).toBe('deleted');
+    expect(await svc.runJob(a)).toMatchObject({ step: 'database_sweep', errorCode: null });
   });
 
   it('a concurrent runner does not run steps twice while another holds the lease', async () => {
@@ -446,7 +468,7 @@ describe.skipIf(!url)('account deletion orchestrator (integration)', () => {
     const other = await service(r2.storage, clerk).runJob(a);
     expect(other).toMatchObject({ status: 'in_progress', step: 'storage' });
     release();
-    expect((await running).status).toBe('deleted');
+    expect(await running).toMatchObject({ step: 'database_sweep', errorCode: null });
     expect(clerk.calls).toEqual([a]);
   });
 
@@ -461,12 +483,71 @@ describe.skipIf(!url)('account deletion orchestrator (integration)', () => {
     expect(await deleteAccount(svc, { userId: a, factorVerificationAge: [0, -1] })).toMatchObject({ status: 'in_progress' });
     // B has a live lease (another runner): the cron must skip it.
     await svc.requestDeletion(b);
-    await db.execute(sql`UPDATE account_deletion_jobs SET lease_owner = 'other', lease_expires_at = ${Date.now() + 60_000} WHERE user_id_hash = ${accountHash(b)}`);
+    await db.execute(sql`UPDATE account_deletion_jobs SET lease_owner = 'other', lease_expires_at = ${clock + 60 * 60_000} WHERE user_id_hash = ${accountHash(b)}`);
 
+    passSweepDelay();
     const result = await svc.resumePending({ limit: 100 });
     expect(result.deleted).toBeGreaterThanOrEqual(1);
     expect(clerk.live.has(a)).toBe(false);
     expect(clerk.live.has(b)).toBe(true);
     expect(total(await counts(b))).toBeGreaterThan(0);
+  });
+
+  it('stores a sanitized error class (never the message) and logs it', async () => {
+    const { a } = newPair();
+    const r2 = fakeStorage();
+    await seed(a, r2);
+    class ClerkAPIResponseError extends Error {
+      status = 429;
+    }
+    const lines: string[] = [];
+    const svc = service(r2.storage, {
+      deleteUser: async (userId) => {
+        throw new ClerkAPIResponseError(`rate limited for ${userId}`);
+      },
+    }, { log: (l) => lines.push(l) });
+    expect(await deleteAccount(svc, { userId: a, factorVerificationAge: [0, -1] })).toMatchObject({ errorCode: 'IDENTITY_FAILED' });
+    const job = (await db.execute(sql`SELECT last_error_code, last_error_class FROM account_deletion_jobs WHERE user_id_hash = ${accountHash(a)}`)).rows[0];
+    expect(job).toEqual({ last_error_code: 'IDENTITY_FAILED', last_error_class: 'ClerkAPIResponseError:429' });
+    expect(lines.at(-1)).toMatch(/step=identity error=IDENTITY_FAILED cause=ClerkAPIResponseError:429$/);
+    expect(lines.join('\n')).not.toContain(a);
+  });
+
+  it('late writers that passed the guard before the lock refuse to write; anything that still lands is swept', async () => {
+    const { a, b } = newPair();
+    const r2 = fakeStorage();
+    await seed(a, r2);
+    await seed(b, r2);
+    const clerk = fakeIdentity([a, b]);
+    const svc = service(r2.storage, clerk);
+    expect(await deleteAccount(svc, { userId: a, factorVerificationAge: [0, -1] })).toMatchObject({ finalCleanupPending: true });
+    expect(total(await counts(a))).toBe(0);
+
+    // (a) Writers re-check the lock inside their write.
+    const report = { id: `late-report-${a}`, payload: { s: 1 }, model: 'm', createdAt: NOW };
+    await expect(storeAiReport(db, a, 'weekly', 'late', report)).rejects.toMatchObject({ code: 'ACCOUNT_DELETING' });
+    const play = { userId: a, productId: 'gymlog_pro_monthly', purchaseTokenHash: `late-${a}`, state: 'ACTIVE' as const,
+      expiresAt: NOW + DAY, autoRenewing: true, verifiedAt: NOW };
+    expect(await db.transaction((tx) => upsertPlayInTx(tx, play))).toBe('account_deleting');
+    await enqueueMediaDeletion(db, { userId: a, objectKey: mediaObjectKey(a, 'exercise', 'late'), at: NOW });
+    expect(total(await counts(a))).toBe(0);
+    // Another user is not affected by A's lock.
+    await storeAiReport(db, b, 'weekly', 'late', { ...report, id: `late-report-${b}` });
+    expect(await db.transaction((tx) => upsertPlayInTx(tx, { ...play, userId: b, purchaseTokenHash: `late-${b}` }))).toBe('bound');
+
+    // (b) A write that raced past the check (simulated: inserted directly) is removed by the final
+    // sweep, which waits FINAL_SWEEP_DELAY_MS after the request.
+    await db.insert(schema.aiReports).values({ id: `raced-${a}`, userId: a, kind: 'weekly', sourceFingerprint: 'x', payload: {}, model: 'm', createdAt: NOW });
+    await db.insert(schema.subscriptionEntitlements).values({ userId: a, productId: 'gymlog_pro_monthly', purchaseTokenHash: `raced-${a}`,
+      state: 'ACTIVE', expiresAt: NOW + DAY, autoRenewing: true, lastVerifiedAt: NOW, source: 'play', createdAt: NOW, updatedAt: NOW });
+    await db.insert(schema.apiRateBuckets).values({ scope: 'ai', subjectHash: hashSubject(a), windowStart: NOW + 1, count: 1 });
+    clock += FINAL_SWEEP_DELAY_MS - 1;
+    expect(await svc.runJob(a)).toMatchObject({ status: 'in_progress', step: 'database_sweep', errorCode: null });
+    expect(total(await counts(a))).toBe(3);
+    clock += 1;
+    expect(await svc.runJob(a)).toMatchObject({ status: 'deleted', step: 'done' });
+    expect(total(await counts(a))).toBe(0);
+    expect(total(await counts(b))).toBeGreaterThan(0);
+    await db.execute(sql`DELETE FROM subscription_entitlements WHERE purchase_token_hash = ${`late-${b}`}`);
   });
 });

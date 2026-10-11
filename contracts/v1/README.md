@@ -424,12 +424,12 @@ via `npm run db:migrate:billing` (after 0003).
 ### `DELETE /api/v1/account`
 
 Deletes the caller's account and all of its data. Body (strict, `application/json`, ≤ 1 KiB):
-`{ "confirm": "ELIMINAR" }`. Spends the `account` rate limit (10 requests per 60 s per user).
+`{ "confirm": "ELIMINAR" }`. Spends the `account` rate limit (10 requests per 60 s per user), except when answering an already completed deletion.
 
 - **Recent authentication.** Requesting a deletion for the first time requires the session's first
   factor to have been verified within the last 10 minutes: the Clerk session token's `fva` claim
   (`[firstFactorAgeMinutes, secondFactorAgeMinutes]`, exposed by `auth().factorVerificationAge`) must
-  have `0 ≤ fva[0] ≤ 10`. A token's `iat` is useless here (session tokens are refreshed every minute).
+  have `0 ≤ fva[0] < 10` (Clerk's own reverification rule). A token's `iat` is useless here (session tokens are refreshed every minute).
   Otherwise (or without the claim) → `403 REAUTH_REQUIRED`, nothing is locked; the client signs in
   again (or runs Clerk reverification) and retries. Resuming an already requested deletion does not
   require recent authentication.
@@ -442,12 +442,20 @@ Deletes the caller's account and all of its data. Body (strict, `application/jso
   Postgres row in one transaction (the 14 synced tables, `sync_changes`, `sync_mutations`,
   `media_deletions`, `subscription_entitlements`, `billing_events` of the user's token hashes,
   `api_rate_buckets` of `sha256(userId)`, `ai_reports`, `ai_responses`, `reported_ai_responses`) →
-  second R2 sweep → Clerk user (`users.deleteUser`; 404 = already deleted) → done (the job keeps only
-  the salted hash, status and timestamps).
-- **Responses.** `200 { status: "deleted", step: "done", retryable: false, activeSubscription }` or
-  `202 { status: "in_progress", step, retryable: true, errorCode?, activeSubscription }` when a step
+  second R2 sweep → Clerk user (`users.deleteUser`; 404 = already deleted) → final `database_sweep`
+  (rows + R2 again, run only ≥ 120 s after the request, by the cron or a repeated call) → done (the job
+  keeps only the domain-separated hash, status and timestamps).
+- **Late writers.** Writes that are not serialized by the sync lock re-check the lock inside the write
+  and refuse it: AI report storage, AI-response reports (`403 ACCOUNT_DELETING`), Play `verify`
+  (`403 ACCOUNT_DELETING`), RTDN (logged, not written), media deletion queue (skipped). Anything that
+  still races past the check is removed by the final sweep.
+- **Responses.** `200 { status: "deleted", step, retryable: false, finalCleanupPending, activeSubscription }`
+  (`finalCleanupPending: true`, `step: "database_sweep"` = data, objects and Clerk user already gone, only
+  the delayed safety sweep is left) or
+  `202 { status: "in_progress", step, retryable: true, errorCode?, finalCleanupPending: false, activeSubscription }` when a step
   failed (`STORAGE_FAILED`, `DATABASE_FAILED`, `IDENTITY_FAILED`): the account stays locked and the
-  deletion resumes on the next `DELETE` or by the daily cron. A repeated `DELETE` after completion
+  deletion resumes on the next `DELETE` or by the daily cron. The job also stores a sanitized
+  `last_error_class` (e.g. `ClerkAPIResponseError:429`, never a message) for operators. A repeated `DELETE` after completion
   answers `200 deleted`. `503 DELETION_UNAVAILABLE` (retryable) when R2 is not configured, before
   locking.
 - **Google Play subscription.** `activeSubscription` (`{ productId, state, validUntil, willRenew,

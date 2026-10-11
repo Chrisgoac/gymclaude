@@ -120,7 +120,7 @@ describe('DELETE /api/v1/account', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(res.headers.get('x-request-id')).toBeTruthy();
-    expect(await res.json()).toEqual({ status: 'deleted', step: 'done', retryable: false, activeSubscription: SUB });
+    expect(await res.json()).toEqual({ status: 'deleted', step: 'done', retryable: false, finalCleanupPending: false, activeSubscription: SUB });
     expect(h.rate).toHaveBeenCalledWith('account', USER);
     const svc = h.service as AccountDeletionService;
     expect(svc.requestDeletion).toHaveBeenCalledWith(USER);
@@ -137,7 +137,7 @@ describe('DELETE /api/v1/account', () => {
     const first = await del();
     expect(first.status).toBe(202);
     expect(await first.json()).toEqual({
-      status: 'in_progress', step: 'identity', retryable: true, errorCode: 'IDENTITY_FAILED', activeSubscription: SUB,
+      status: 'in_progress', step: 'identity', retryable: true, errorCode: 'IDENTITY_FAILED', finalCleanupPending: false, activeSubscription: SUB,
     });
 
     signedIn([45, -1]); // already confirmed: resuming needs no fresh authentication
@@ -145,6 +145,16 @@ describe('DELETE /api/v1/account', () => {
     expect(second.status).toBe(200);
     expect(service.requestDeletion).toHaveBeenCalledTimes(1);
     expect(service.runJob).toHaveBeenCalledTimes(2);
+  });
+
+  it('200 deleted (finalCleanupPending) when only the delayed final sweep remains', async () => {
+    h.service = fakeService([{ status: 'in_progress', step: 'database_sweep', errorCode: null }]).service;
+    signedIn();
+    const res = await del();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      status: 'deleted', step: 'database_sweep', retryable: false, finalCleanupPending: true, activeSubscription: SUB,
+    });
   });
 
   it('a repeated DELETE after completion answers deleted without running again', async () => {
@@ -157,6 +167,8 @@ describe('DELETE /api/v1/account', () => {
     expect(again.status).toBe(200);
     expect(await again.json()).toMatchObject({ status: 'deleted' });
     expect(service.runJob).toHaveBeenCalledTimes(1);
+    // Answering an already completed deletion spends no rate limit (no new bucket row for the user).
+    expect(h.rate).toHaveBeenCalledTimes(1);
   });
 
   it('is not blocked by the ACCOUNT_DELETING guard (it must be able to resume its own deletion)', async () => {

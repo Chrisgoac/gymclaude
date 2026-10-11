@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mediaDeletions } from '@/db/schema';
 import type { PoolDb, PoolTx } from '@/db/pool';
+import { isAccountDeleting } from '@/lib/account/access';
 import { MEDIA_KINDS, type MediaKind } from './contracts';
 
 // Claves de objeto y cola de borrado diferido (`media_deletions`). Módulo sin dependencias de
@@ -55,6 +56,8 @@ export async function enqueueMediaDeletion(
   q: PoolDb | PoolTx,
   input: { userId: string; objectKey: string; at: number },
 ): Promise<void> {
+  // An account being deleted gets no new queue rows: its objects go with the account deletion.
+  if (await isAccountDeleting(q, input.userId)) return;
   await q
     .insert(mediaDeletions)
     .values({

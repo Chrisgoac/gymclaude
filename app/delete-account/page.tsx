@@ -78,8 +78,9 @@ export default async function DeleteAccountPage({
           <li>El vínculo entre tu cuenta y tu suscripción, y su historial de verificación.</li>
         </ul>
         <p>
-          El acceso se bloquea en cuanto confirmas, y el borrado termina normalmente en unos segundos (como mucho,
-          en las 24 horas siguientes si algún servicio falla y hay que reintentarlo). No se puede deshacer. Las
+          El acceso se bloquea en cuanto confirmas y tus datos se borran normalmente en minutos; una limpieza final
+          de seguridad, o un reintento si algún servicio falla, puede tardar como máximo unos días. No se puede
+          deshacer. Las
           copias que hayas exportado tú y los datos guardados sin conexión en tus dispositivos no se borran: elimina
           la app o sus datos del dispositivo si quieres quitarlos también.
         </p>

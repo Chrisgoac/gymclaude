@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { getPoolDb, type PoolDb, type PoolTx } from '@/db/pool';
 import { ApiError } from '@/lib/api/v1/errors';
+import { accountDeleting, isAccountDeleting } from '@/lib/account/access';
 import { entitlementUnavailable } from '@/lib/api/v1/ai/guard';
 import {
   PRO_GRANTING_STATES,
@@ -81,7 +82,7 @@ export interface EntitlementStore {
    * Upserts the verified row by (user, token hash). `already_bound` (nothing written) when the
    * hash already belongs to another user.
    */
-  upsertPlay(write: PlayEntitlementWrite): Promise<'bound' | 'already_bound'>;
+  upsertPlay(write: PlayEntitlementWrite): Promise<UpsertPlayOutcome>;
   /** The caller's best row: a Pro-granting one with the latest expiry, else the latest expiry; test rows follow isPro. */
   findBest(userId: string, now: number): Promise<EntitlementRow | null>;
 }
@@ -97,8 +98,14 @@ export function hashPurchaseToken(purchaseToken: string): string {
  * could otherwise both bind the same token concurrently); refuses a hash bound to another user; an
  * older verification (`verifiedAt`) never overwrites a newer one.
  */
-export async function upsertPlayInTx(tx: Pick<PoolTx, 'execute'>, w: PlayEntitlementWrite): Promise<'bound' | 'already_bound'> {
+/** `account_deleting`: nothing written, the user has an account-deletion request (never re-associate). */
+export type UpsertPlayOutcome = 'bound' | 'already_bound' | 'account_deleting';
+
+export async function upsertPlayInTx(tx: Pick<PoolTx, 'execute'>, w: PlayEntitlementWrite): Promise<UpsertPlayOutcome> {
   await lockTokenHash(tx, w.purchaseTokenHash);
+  // Re-checked inside the write transaction: a verify/RTDN that started before the deletion request
+  // must not recreate the association afterwards (the deletion's final sweep covers the residual race).
+  if (await isAccountDeleting(tx, w.userId)) return 'account_deleting';
   const other = await tx.execute(sql`
     SELECT 1 FROM subscription_entitlements
     WHERE purchase_token_hash = ${w.purchaseTokenHash} AND user_id <> ${w.userId}
@@ -256,7 +263,7 @@ export async function verifyPurchase(deps: BillingDeps, userId: string, request:
   }
 
   const now = deps.now();
-  let outcome: 'bound' | 'already_bound';
+  let outcome: UpsertPlayOutcome;
   try {
     outcome = await store.upsertPlay({
       userId,
@@ -271,6 +278,7 @@ export async function verifyPurchase(deps: BillingDeps, userId: string, request:
     console.error('[billing] entitlement store unavailable', errorName(error));
     throw entitlementUnavailable();
   }
+  if (outcome === 'account_deleting') throw accountDeleting();
   if (outcome === 'already_bound') {
     console.warn('[billing] purchase token already bound to another account');
     throw purchaseAlreadyBound();

@@ -291,7 +291,7 @@ export const reportedAiResponses = pgTable('reported_ai_responses', {
 
 // Un trabajo por cuenta cuyo borrado se ha pedido. Que exista la fila ES el bloqueo de acceso
 // (403 ACCOUNT_DELETING en /api/v1 y en las rutas legacy de sync/fotos). Sin contenido del usuario:
-// `user_id_hash` es un SHA-256 con sal del id de Clerk y `user_id` solo se guarda mientras el trabajo
+// `user_id_hash` es un SHA-256 (con prefijo de dominio, sin clave) del id de Clerk y `user_id` solo se guarda mientras el trabajo
 // está pendiente (hace falta para reanudar R2/Postgres/Clerk); al terminar pasa a NULL.
 export const accountDeletionJobs = pgTable('account_deletion_jobs', {
   userIdHash: text('user_id_hash').primaryKey(),
@@ -300,6 +300,8 @@ export const accountDeletionJobs = pgTable('account_deletion_jobs', {
   step: text('step').notNull(),
   attempts: integer('attempts').notNull().default(0),
   lastErrorCode: text('last_error_code'),
+  // Clase saneada del último error (p. ej. `ClerkAPIResponseError:429`), nunca su mensaje.
+  lastErrorClass: text('last_error_class'),
   leaseOwner: text('lease_owner'),
   leaseExpiresAt: bigint('lease_expires_at', { mode: 'number' }), // epoch ms
   requestedAt: bigint('requested_at', { mode: 'number' }).notNull(),
@@ -309,6 +311,6 @@ export const accountDeletionJobs = pgTable('account_deletion_jobs', {
   index('account_deletion_jobs_pending_idx').on(t.updatedAt).where(sql`${t.status} = 'pending'`),
   check('account_deletion_jobs_status_check', sql`${t.status} IN ('pending','done')`),
   check('account_deletion_jobs_step_check',
-    sql`${t.step} IN ('storage','database','storage_sweep','identity','done')`),
+    sql`${t.step} IN ('storage','database','storage_sweep','identity','database_sweep','done')`),
   check('account_deletion_jobs_user_id_check', sql`(${t.status} = 'done') = (${t.userId} IS NULL)`),
 ]);
