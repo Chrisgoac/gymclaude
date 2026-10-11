@@ -25,7 +25,11 @@ data class StatSetRow(
 /** Total volume (sum of weight × reps over its live sets, 0 without sets) of one live logged exercise. */
 data class StatExerciseVolumeRow(val id: String, val sessionId: String, val exerciseId: String, val startedAt: Long, val gymId: String?, val volume: Double)
 
-/** Heaviest live set per (exercise, date or week side, reps): enough to rebuild max weight and best Epley 1RM exactly. */
+/**
+ * Heaviest live set per (exercise, date or week side, reps): enough to rebuild max weight and best
+ * Epley 1RM exactly. [startedAt] is a date inside the group (its latest), NOT the date the record
+ * was set; it only tells which side of a date boundary the group is on.
+ */
 data class StatBestSetRow(val exerciseId: String, val startedAt: Long, val reps: Int, val peso: Double)
 
 /** First logged-exercise id (PWA iteration order) and last date of one exercise. */
@@ -67,6 +71,7 @@ interface StatsDao {
     @Query("SELECT $SET_COLUMNS $FROM_SETS WHERE $LIVE_SET AND le.exerciseId = :exerciseId AND s.fecha >= :since")
     suspend fun setsOfExercise(exerciseId: String, since: Long, gymId: String?): List<StatSetRow>
 
+    /** Best set per reps of one exercise; [StatBestSetRow.startedAt] is meaningless here (not the PR date). */
     @Query("SELECT le.exerciseId AS exerciseId, MAX(s.fecha) AS startedAt, ls.reps AS reps, MAX(ls.peso) AS peso $FROM_SETS WHERE $LIVE_SET AND le.exerciseId = :exerciseId GROUP BY ls.reps")
     suspend fun bestSetsOfExercise(exerciseId: String, gymId: String?): List<StatBestSetRow>
 

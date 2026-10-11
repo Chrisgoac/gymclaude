@@ -7,7 +7,6 @@ import com.chrisgoac.gymlog.database.dao.StatBestSetRow
 import com.chrisgoac.gymlog.database.dao.StatExerciseVolumeRow
 import com.chrisgoac.gymlog.database.dao.StatsDao
 import com.chrisgoac.gymlog.domain.exercise.MuscleGroup
-import com.chrisgoac.gymlog.domain.history.InvalidationScope
 import com.chrisgoac.gymlog.domain.stats.BalanceRow
 import com.chrisgoac.gymlog.domain.stats.ExerciseInfo
 import com.chrisgoac.gymlog.domain.stats.ExerciseRecords
@@ -22,7 +21,6 @@ import com.chrisgoac.gymlog.domain.stats.StatRows
 import com.chrisgoac.gymlog.domain.stats.StatSession
 import com.chrisgoac.gymlog.domain.stats.StatSet
 import com.chrisgoac.gymlog.domain.stats.StatsFilter
-import com.chrisgoac.gymlog.domain.stats.StatsInvalidation
 import com.chrisgoac.gymlog.domain.stats.StatsRepository
 import com.chrisgoac.gymlog.domain.stats.Streak
 import com.chrisgoac.gymlog.domain.stats.VolumeOverview
@@ -37,7 +35,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.merge
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -48,9 +45,13 @@ import kotlin.math.ceil
 
 /**
  * [StatsRepository] over the open account's Room database. Each flow re-reads on every commit to
- * the workout/exercise/settings tables (Room invalidation) and on [StatsInvalidation] events for the
- * scopes it depends on, then runs the shared pure reducers ([WorkoutStats], [Insights]) inside one
- * read transaction. Clock ([now], server-corrected) and [zone] are sampled per emission.
+ * the workout/exercise/settings tables (Room invalidation), then runs the shared pure reducers
+ * ([WorkoutStats], [Insights]) inside one read transaction. Every statistic here is read from Room,
+ * so a historical edit (one local mutation) refreshes each flow exactly once; the edit's
+ * [com.chrisgoac.gymlog.domain.stats.StatsInvalidation] scopes are for consumers outside Room
+ * (Coach snapshot, achievement reconciliation). Suggestions and the estimated 1RM are derived from
+ * the stalls and records flows, never re-queried. Clock ([now], server-corrected) and [zone] are
+ * sampled per emission.
  *
  * Cost per emission (n = live rows of the history):
  * - period flows (volume, balance) read the sessions/logged exercises since the period start
@@ -65,13 +66,12 @@ import kotlin.math.ceil
 @OptIn(ExperimentalCoroutinesApi::class)
 class OfflineStatsRepository(
     private val databases: UserDatabaseManager,
-    private val invalidation: StatsInvalidation,
     private val now: () -> Long,
     private val zone: () -> ZoneId,
 ) : StatsRepository {
 
     override fun observeWeeklyInsight(gym: GymFilter): Flow<WeeklyInsight> =
-        observe(WEEKLY_SCOPES, WeeklyInsight(WeeklySummary(0, 0.0, 0.0, null), emptyList())) { dao ->
+        observe(WeeklyInsight(WeeklySummary(0, 0.0, 0.0, null), emptyList())) { dao ->
             val at = Instant.ofEpochMilli(now())
             val z = zone()
             val thisWeek = Periods.weekStart(at, z).toEpochMilli()
@@ -88,7 +88,7 @@ class OfflineStatsRepository(
         }
 
     override fun observeExerciseSeries(exerciseId: String, filter: StatsFilter): Flow<List<ProgressPoint>> =
-        observe(setOf(InvalidationScope.CHARTS), emptyList()) { dao ->
+        observe(emptyList()) { dao ->
             val since = Periods.since(filter.period, Instant.ofEpochMilli(now())).toEpochMilli()
             val sets = dao.setsOfExercise(exerciseId, since, filter.gym.gymId).map {
                 StatSet(it.id, it.loggedExerciseId, it.sessionId, it.exerciseId, it.startedAt, it.gymId, it.peso, it.reps, it.esCalentamiento == true)
@@ -97,13 +97,13 @@ class OfflineStatsRepository(
         }
 
     override fun observeExerciseRecords(exerciseId: String, gym: GymFilter): Flow<ExerciseRecords?> =
-        observe(RECORD_SCOPES, null) { dao -> records(dao, exerciseId, gym) }
+        observe(null) { dao -> records(dao, exerciseId, gym) }
 
     override fun observeEstimatedOneRepMax(exerciseId: String, gym: GymFilter): Flow<Double?> =
-        observe(RECORD_SCOPES, null) { dao -> records(dao, exerciseId, gym)?.bestOneRepMax }
+        observeExerciseRecords(exerciseId, gym).map { it?.bestOneRepMax }
 
     override fun observeVolume(filter: StatsFilter): Flow<VolumeOverview> =
-        observe(setOf(InvalidationScope.VOLUME), VolumeOverview(PeriodSummary(0, 0.0), emptyList())) { dao ->
+        observe(VolumeOverview(PeriodSummary(0, 0.0), emptyList())) { dao ->
             val since = Periods.since(filter.period, Instant.ofEpochMilli(now())).toEpochMilli()
             val rows = volumeRows(dao, since, filter.gym)
             VolumeOverview(
@@ -113,7 +113,7 @@ class OfflineStatsRepository(
         }
 
     override fun observeMuscleBalance(filter: StatsFilter): Flow<List<BalanceRow>> =
-        observe(BALANCE_SCOPES, emptyList()) { dao ->
+        observe(emptyList()) { dao ->
             val at = Instant.ofEpochMilli(now())
             val z = zone()
             val since = Periods.since(filter.period, at).toEpochMilli()
@@ -136,7 +136,7 @@ class OfflineStatsRepository(
         }
 
     override fun observeStreak(): Flow<Streak> =
-        observe(setOf(InvalidationScope.STREAKS), Streak(0, WeeklyStreak(0, 0), DEFAULT_WEEKLY_TARGET)) { dao ->
+        observe(Streak(0, WeeklyStreak(0, 0), DEFAULT_WEEKLY_TARGET)) { dao ->
             val at = Instant.ofEpochMilli(now())
             val z = zone()
             val starts = dao.allSessionStarts()
@@ -145,22 +145,22 @@ class OfflineStatsRepository(
         }
 
     override fun observeStalls(gym: GymFilter): Flow<List<Stall>> =
-        observe(setOf(InvalidationScope.STALLS), emptyList()) { dao -> stalls(dao, gym) }
+        observe(emptyList()) { dao -> stalls(dao, gym) }
 
     override fun observeProgressionSuggestions(gym: GymFilter): Flow<List<ProgressionSuggestion>> =
-        observe(setOf(InvalidationScope.STALLS), emptyList()) { dao -> Insights.suggestions(stalls(dao, gym)) }
+        observeStalls(gym).map(Insights::suggestions)
 
     /**
-     * Re-runs [read] (in one transaction) on every commit to [STATS_TABLES] and on every [StatsInvalidation]
-     * event touching [scopes]; [empty] while no account database is open.
+     * Re-runs [read] (in one transaction) on every commit to [STATS_TABLES]; [empty] while no account
+     * database is open.
      */
-    private fun <T> observe(scopes: Set<InvalidationScope>, empty: T, read: suspend (StatsDao) -> T): Flow<T> =
+    private fun <T> observe(empty: T, read: suspend (StatsDao) -> T): Flow<T> =
         databases.current.flatMapLatest { open ->
             if (open == null) {
                 flowOf(empty)
             } else {
                 val database: GymLogDatabase = open.database
-                merge(database.invalidationTracker.createFlow(*STATS_TABLES).map { }, invalidation.changes(scopes))
+                database.invalidationTracker.createFlow(*STATS_TABLES)
                     .mapLatest { database.withTransaction { read(database.statsDao()) } }
             }
         }
@@ -224,9 +224,6 @@ class OfflineStatsRepository(
         /** Tables whose commits can change a statistic. */
         val STATS_TABLES = arrayOf("workout_sessions", "logged_exercises", "logged_sets", "exercises", "catalog_exercises", "user_settings")
 
-        private val WEEKLY_SCOPES = setOf(InvalidationScope.WEEKLY_SUMMARY, InvalidationScope.VOLUME, InvalidationScope.PERSONAL_RECORDS)
-        private val RECORD_SCOPES = setOf(InvalidationScope.PERSONAL_RECORDS, InvalidationScope.ONE_REP_MAX)
-        private val BALANCE_SCOPES = setOf(InvalidationScope.MUSCLE_BALANCE, InvalidationScope.VOLUME)
 
         /** Below SQLite's 999 bound-variable limit (API 26). */
         private const val CHUNK = 400

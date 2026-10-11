@@ -3172,6 +3172,1230 @@
       }
     },
     {
+      "name": "dst spring @ Europe/Madrid",
+      "zone": "Europe/Madrid",
+      "now": 1774864800000,
+      "objetivosVolumen": {
+        "pecho": 2000,
+        "gemelo": 500,
+        "espalda": 0
+      },
+      "exercises": [
+        {
+          "id": "ex-press",
+          "nombre": "Press de banca",
+          "grupoMuscular": "pecho",
+          "deletedAt": null
+        },
+        {
+          "id": "ex-squat",
+          "nombre": "Sentadilla",
+          "grupoMuscular": "cuadriceps",
+          "deletedAt": null
+        },
+        {
+          "id": "ex-curl",
+          "nombre": "Curl de bíceps",
+          "grupoMuscular": "biceps",
+          "deletedAt": null
+        },
+        {
+          "id": "ex-calf",
+          "nombre": "Gemelo de pie",
+          "grupoMuscular": "gemelo",
+          "deletedAt": null
+        },
+        {
+          "id": "ex-row",
+          "nombre": "Remo propio",
+          "grupoMuscular": "espalda",
+          "deletedAt": 1
+        }
+      ],
+      "sessions": [
+        {
+          "id": "m1",
+          "fecha": 1774180800000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "m2",
+          "fecha": 1774737000000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "m3",
+          "fecha": 1774744200000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "m4",
+          "fecha": 1774747800000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "m5",
+          "fecha": 1774819800000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "m6",
+          "fecha": 1774823400000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "m7",
+          "fecha": 1774857600000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        }
+      ],
+      "loggedExercises": [
+        {
+          "id": "lm1",
+          "sessionId": "m1",
+          "exerciseId": "ex-press",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "lm2",
+          "sessionId": "m2",
+          "exerciseId": "ex-squat",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "lm3",
+          "sessionId": "m3",
+          "exerciseId": "ex-press",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "lm4",
+          "sessionId": "m4",
+          "exerciseId": "ex-squat",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "lm5",
+          "sessionId": "m5",
+          "exerciseId": "ex-press",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "lm6",
+          "sessionId": "m6",
+          "exerciseId": "ex-squat",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "lm7",
+          "sessionId": "m7",
+          "exerciseId": "ex-press",
+          "orden": 0,
+          "deletedAt": null
+        }
+      ],
+      "sets": [
+        {
+          "id": "tm1",
+          "loggedExerciseId": "lm1",
+          "orden": 0,
+          "peso": 80,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tm2",
+          "loggedExerciseId": "lm2",
+          "orden": 0,
+          "peso": 82.5,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tm3",
+          "loggedExerciseId": "lm3",
+          "orden": 0,
+          "peso": 85,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tm4",
+          "loggedExerciseId": "lm4",
+          "orden": 0,
+          "peso": 87.5,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tm5",
+          "loggedExerciseId": "lm5",
+          "orden": 0,
+          "peso": 90,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tm6",
+          "loggedExerciseId": "lm6",
+          "orden": 0,
+          "peso": 92.5,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tm7",
+          "loggedExerciseId": "lm7",
+          "orden": 0,
+          "peso": 95,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        }
+      ],
+      "expected": {
+        "byGym": [
+          {
+            "gymId": null,
+            "weeklySummary": {
+              "sesiones": 2,
+              "volumenSemana": 937.5,
+              "volumenSemanaPrevia": 1725,
+              "deltaPct": -46
+            },
+            "prsThisWeek": [
+              {
+                "exerciseId": "ex-squat",
+                "nombre": "Sentadilla",
+                "tipo": "peso"
+              },
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "tipo": "peso"
+              }
+            ],
+            "volumenSemanaByMuscle": {
+              "pecho": 475,
+              "espalda": 0,
+              "hombros": 0,
+              "biceps": 0,
+              "triceps": 0,
+              "cuadriceps": 462.5,
+              "femoral": 0,
+              "gluteo": 0,
+              "gemelo": 0,
+              "abdomen": 0,
+              "antebrazo": 0,
+              "otro": 0
+            },
+            "lastTrainedByMuscle": {
+              "pecho": 1774857600000,
+              "espalda": null,
+              "hombros": null,
+              "biceps": null,
+              "triceps": null,
+              "cuadriceps": 1774823400000,
+              "femoral": null,
+              "gluteo": null,
+              "gemelo": null,
+              "abdomen": null,
+              "antebrazo": null,
+              "otro": null
+            },
+            "estancados": [],
+            "periods": [
+              {
+                "periodo": "4s",
+                "since": 1772445600000,
+                "periodSummary": {
+                  "sesiones": 7,
+                  "volumen": 3062.5
+                },
+                "weeklyVolume": [
+                  {
+                    "semanaInicioTs": 1773615600000,
+                    "volumen": 400,
+                    "deltaPct": null
+                  },
+                  {
+                    "semanaInicioTs": 1774220400000,
+                    "volumen": 1725,
+                    "deltaPct": 331
+                  },
+                  {
+                    "semanaInicioTs": 1774821600000,
+                    "volumen": 937.5,
+                    "deltaPct": -46
+                  }
+                ],
+                "volumeByMuscle": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5
+                  }
+                ],
+                "balance": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": 24
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": null
+                  }
+                ]
+              },
+              {
+                "periodo": "3m",
+                "since": 1767088800000,
+                "periodSummary": {
+                  "sesiones": 7,
+                  "volumen": 3062.5
+                },
+                "weeklyVolume": [
+                  {
+                    "semanaInicioTs": 1773615600000,
+                    "volumen": 400,
+                    "deltaPct": null
+                  },
+                  {
+                    "semanaInicioTs": 1774220400000,
+                    "volumen": 1725,
+                    "deltaPct": 331
+                  },
+                  {
+                    "semanaInicioTs": 1774821600000,
+                    "volumen": 937.5,
+                    "deltaPct": -46
+                  }
+                ],
+                "volumeByMuscle": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5
+                  }
+                ],
+                "balance": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": 24
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": null
+                  }
+                ]
+              },
+              {
+                "periodo": "todo",
+                "since": 0,
+                "periodSummary": {
+                  "sesiones": 7,
+                  "volumen": 3062.5
+                },
+                "weeklyVolume": [
+                  {
+                    "semanaInicioTs": 1773615600000,
+                    "volumen": 400,
+                    "deltaPct": null
+                  },
+                  {
+                    "semanaInicioTs": 1774220400000,
+                    "volumen": 1725,
+                    "deltaPct": 331
+                  },
+                  {
+                    "semanaInicioTs": 1774821600000,
+                    "volumen": 937.5,
+                    "deltaPct": -46
+                  }
+                ],
+                "volumeByMuscle": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5
+                  }
+                ],
+                "balance": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": 24
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": null
+                  }
+                ]
+              }
+            ],
+            "exercises": [
+              {
+                "exerciseId": "ex-press",
+                "prs": {
+                  "maxPeso": 95,
+                  "mejor1RM": 110.8
+                },
+                "progress": [
+                  {
+                    "periodo": "4s",
+                    "points": [
+                      {
+                        "fecha": 1774180800000,
+                        "maxPeso": 80,
+                        "mejor1RM": 93.3,
+                        "volumen": 400
+                      },
+                      {
+                        "fecha": 1774744200000,
+                        "maxPeso": 85,
+                        "mejor1RM": 99.2,
+                        "volumen": 425
+                      },
+                      {
+                        "fecha": 1774819800000,
+                        "maxPeso": 90,
+                        "mejor1RM": 105,
+                        "volumen": 450
+                      },
+                      {
+                        "fecha": 1774857600000,
+                        "maxPeso": 95,
+                        "mejor1RM": 110.8,
+                        "volumen": 475
+                      }
+                    ]
+                  },
+                  {
+                    "periodo": "3m",
+                    "points": [
+                      {
+                        "fecha": 1774180800000,
+                        "maxPeso": 80,
+                        "mejor1RM": 93.3,
+                        "volumen": 400
+                      },
+                      {
+                        "fecha": 1774744200000,
+                        "maxPeso": 85,
+                        "mejor1RM": 99.2,
+                        "volumen": 425
+                      },
+                      {
+                        "fecha": 1774819800000,
+                        "maxPeso": 90,
+                        "mejor1RM": 105,
+                        "volumen": 450
+                      },
+                      {
+                        "fecha": 1774857600000,
+                        "maxPeso": 95,
+                        "mejor1RM": 110.8,
+                        "volumen": 475
+                      }
+                    ]
+                  },
+                  {
+                    "periodo": "todo",
+                    "points": [
+                      {
+                        "fecha": 1774180800000,
+                        "maxPeso": 80,
+                        "mejor1RM": 93.3,
+                        "volumen": 400
+                      },
+                      {
+                        "fecha": 1774744200000,
+                        "maxPeso": 85,
+                        "mejor1RM": 99.2,
+                        "volumen": 425
+                      },
+                      {
+                        "fecha": 1774819800000,
+                        "maxPeso": 90,
+                        "mejor1RM": 105,
+                        "volumen": 450
+                      },
+                      {
+                        "fecha": 1774857600000,
+                        "maxPeso": 95,
+                        "mejor1RM": 110.8,
+                        "volumen": 475
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "exerciseId": "ex-squat",
+                "prs": {
+                  "maxPeso": 92.5,
+                  "mejor1RM": 107.9
+                },
+                "progress": [
+                  {
+                    "periodo": "4s",
+                    "points": [
+                      {
+                        "fecha": 1774737000000,
+                        "maxPeso": 82.5,
+                        "mejor1RM": 96.3,
+                        "volumen": 412.5
+                      },
+                      {
+                        "fecha": 1774747800000,
+                        "maxPeso": 87.5,
+                        "mejor1RM": 102.1,
+                        "volumen": 437.5
+                      },
+                      {
+                        "fecha": 1774823400000,
+                        "maxPeso": 92.5,
+                        "mejor1RM": 107.9,
+                        "volumen": 462.5
+                      }
+                    ]
+                  },
+                  {
+                    "periodo": "3m",
+                    "points": [
+                      {
+                        "fecha": 1774737000000,
+                        "maxPeso": 82.5,
+                        "mejor1RM": 96.3,
+                        "volumen": 412.5
+                      },
+                      {
+                        "fecha": 1774747800000,
+                        "maxPeso": 87.5,
+                        "mejor1RM": 102.1,
+                        "volumen": 437.5
+                      },
+                      {
+                        "fecha": 1774823400000,
+                        "maxPeso": 92.5,
+                        "mejor1RM": 107.9,
+                        "volumen": 462.5
+                      }
+                    ]
+                  },
+                  {
+                    "periodo": "todo",
+                    "points": [
+                      {
+                        "fecha": 1774737000000,
+                        "maxPeso": 82.5,
+                        "mejor1RM": 96.3,
+                        "volumen": 412.5
+                      },
+                      {
+                        "fecha": 1774747800000,
+                        "maxPeso": 87.5,
+                        "mejor1RM": 102.1,
+                        "volumen": 437.5
+                      },
+                      {
+                        "fecha": 1774823400000,
+                        "maxPeso": 92.5,
+                        "mejor1RM": 107.9,
+                        "volumen": 462.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "currentStreakDays": 3,
+        "racha": [
+          {
+            "objetivo": 1,
+            "actual": 3,
+            "mejor": 3
+          },
+          {
+            "objetivo": 2,
+            "actual": 2,
+            "mejor": 2
+          },
+          {
+            "objetivo": 3,
+            "actual": 1,
+            "mejor": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "dst fall @ America/New_York",
+      "zone": "America/New_York",
+      "now": 1793631600000,
+      "objetivosVolumen": {
+        "pecho": 2000,
+        "gemelo": 500,
+        "espalda": 0
+      },
+      "exercises": [
+        {
+          "id": "ex-press",
+          "nombre": "Press de banca",
+          "grupoMuscular": "pecho",
+          "deletedAt": null
+        },
+        {
+          "id": "ex-squat",
+          "nombre": "Sentadilla",
+          "grupoMuscular": "cuadriceps",
+          "deletedAt": null
+        },
+        {
+          "id": "ex-curl",
+          "nombre": "Curl de bíceps",
+          "grupoMuscular": "biceps",
+          "deletedAt": null
+        },
+        {
+          "id": "ex-calf",
+          "nombre": "Gemelo de pie",
+          "grupoMuscular": "gemelo",
+          "deletedAt": null
+        },
+        {
+          "id": "ex-row",
+          "nombre": "Remo propio",
+          "grupoMuscular": "espalda",
+          "deletedAt": 1
+        }
+      ],
+      "sessions": [
+        {
+          "id": "n1",
+          "fecha": 1792936800000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "n2",
+          "fecha": 1793503800000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "n3",
+          "fecha": 1793511000000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "n4",
+          "fecha": 1793514600000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "n5",
+          "fecha": 1793593800000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "n6",
+          "fecha": 1793597400000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        },
+        {
+          "id": "n7",
+          "fecha": 1793628000000,
+          "gymId": null,
+          "duracionSegundos": 3600,
+          "deletedAt": null
+        }
+      ],
+      "loggedExercises": [
+        {
+          "id": "ln1",
+          "sessionId": "n1",
+          "exerciseId": "ex-press",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "ln2",
+          "sessionId": "n2",
+          "exerciseId": "ex-squat",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "ln3",
+          "sessionId": "n3",
+          "exerciseId": "ex-press",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "ln4",
+          "sessionId": "n4",
+          "exerciseId": "ex-squat",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "ln5",
+          "sessionId": "n5",
+          "exerciseId": "ex-press",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "ln6",
+          "sessionId": "n6",
+          "exerciseId": "ex-squat",
+          "orden": 0,
+          "deletedAt": null
+        },
+        {
+          "id": "ln7",
+          "sessionId": "n7",
+          "exerciseId": "ex-press",
+          "orden": 0,
+          "deletedAt": null
+        }
+      ],
+      "sets": [
+        {
+          "id": "tn1",
+          "loggedExerciseId": "ln1",
+          "orden": 0,
+          "peso": 80,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tn2",
+          "loggedExerciseId": "ln2",
+          "orden": 0,
+          "peso": 82.5,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tn3",
+          "loggedExerciseId": "ln3",
+          "orden": 0,
+          "peso": 85,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tn4",
+          "loggedExerciseId": "ln4",
+          "orden": 0,
+          "peso": 87.5,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tn5",
+          "loggedExerciseId": "ln5",
+          "orden": 0,
+          "peso": 90,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tn6",
+          "loggedExerciseId": "ln6",
+          "orden": 0,
+          "peso": 92.5,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        },
+        {
+          "id": "tn7",
+          "loggedExerciseId": "ln7",
+          "orden": 0,
+          "peso": 95,
+          "reps": 5,
+          "esCalentamiento": false,
+          "deletedAt": null
+        }
+      ],
+      "expected": {
+        "byGym": [
+          {
+            "gymId": null,
+            "weeklySummary": {
+              "sesiones": 2,
+              "volumenSemana": 937.5,
+              "volumenSemanaPrevia": 1725,
+              "deltaPct": -46
+            },
+            "prsThisWeek": [
+              {
+                "exerciseId": "ex-squat",
+                "nombre": "Sentadilla",
+                "tipo": "peso"
+              },
+              {
+                "exerciseId": "ex-press",
+                "nombre": "Press de banca",
+                "tipo": "peso"
+              }
+            ],
+            "volumenSemanaByMuscle": {
+              "pecho": 475,
+              "espalda": 0,
+              "hombros": 0,
+              "biceps": 0,
+              "triceps": 0,
+              "cuadriceps": 462.5,
+              "femoral": 0,
+              "gluteo": 0,
+              "gemelo": 0,
+              "abdomen": 0,
+              "antebrazo": 0,
+              "otro": 0
+            },
+            "lastTrainedByMuscle": {
+              "pecho": 1793628000000,
+              "espalda": null,
+              "hombros": null,
+              "biceps": null,
+              "triceps": null,
+              "cuadriceps": 1793597400000,
+              "femoral": null,
+              "gluteo": null,
+              "gemelo": null,
+              "abdomen": null,
+              "antebrazo": null,
+              "otro": null
+            },
+            "estancados": [],
+            "periods": [
+              {
+                "periodo": "4s",
+                "since": 1791212400000,
+                "periodSummary": {
+                  "sesiones": 7,
+                  "volumen": 3062.5
+                },
+                "weeklyVolume": [
+                  {
+                    "semanaInicioTs": 1792382400000,
+                    "volumen": 400,
+                    "deltaPct": null
+                  },
+                  {
+                    "semanaInicioTs": 1792987200000,
+                    "volumen": 1725,
+                    "deltaPct": 331
+                  },
+                  {
+                    "semanaInicioTs": 1793595600000,
+                    "volumen": 937.5,
+                    "deltaPct": -46
+                  }
+                ],
+                "volumeByMuscle": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5
+                  }
+                ],
+                "balance": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": 24
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": null
+                  }
+                ]
+              },
+              {
+                "periodo": "3m",
+                "since": 1785855600000,
+                "periodSummary": {
+                  "sesiones": 7,
+                  "volumen": 3062.5
+                },
+                "weeklyVolume": [
+                  {
+                    "semanaInicioTs": 1792382400000,
+                    "volumen": 400,
+                    "deltaPct": null
+                  },
+                  {
+                    "semanaInicioTs": 1792987200000,
+                    "volumen": 1725,
+                    "deltaPct": 331
+                  },
+                  {
+                    "semanaInicioTs": 1793595600000,
+                    "volumen": 937.5,
+                    "deltaPct": -46
+                  }
+                ],
+                "volumeByMuscle": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5
+                  }
+                ],
+                "balance": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": 24
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": null
+                  }
+                ]
+              },
+              {
+                "periodo": "todo",
+                "since": 0,
+                "periodSummary": {
+                  "sesiones": 7,
+                  "volumen": 3062.5
+                },
+                "weeklyVolume": [
+                  {
+                    "semanaInicioTs": 1792382400000,
+                    "volumen": 400,
+                    "deltaPct": null
+                  },
+                  {
+                    "semanaInicioTs": 1792987200000,
+                    "volumen": 1725,
+                    "deltaPct": 331
+                  },
+                  {
+                    "semanaInicioTs": 1793595600000,
+                    "volumen": 937.5,
+                    "deltaPct": -46
+                  }
+                ],
+                "volumeByMuscle": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5
+                  }
+                ],
+                "balance": [
+                  {
+                    "grupo": "pecho",
+                    "volumen": 1750,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": 24
+                  },
+                  {
+                    "grupo": "cuadriceps",
+                    "volumen": 1312.5,
+                    "diasSinEntrenar": 0,
+                    "descuidado": false,
+                    "metaPct": null
+                  }
+                ]
+              }
+            ],
+            "exercises": [
+              {
+                "exerciseId": "ex-press",
+                "prs": {
+                  "maxPeso": 95,
+                  "mejor1RM": 110.8
+                },
+                "progress": [
+                  {
+                    "periodo": "4s",
+                    "points": [
+                      {
+                        "fecha": 1792936800000,
+                        "maxPeso": 80,
+                        "mejor1RM": 93.3,
+                        "volumen": 400
+                      },
+                      {
+                        "fecha": 1793511000000,
+                        "maxPeso": 85,
+                        "mejor1RM": 99.2,
+                        "volumen": 425
+                      },
+                      {
+                        "fecha": 1793593800000,
+                        "maxPeso": 90,
+                        "mejor1RM": 105,
+                        "volumen": 450
+                      },
+                      {
+                        "fecha": 1793628000000,
+                        "maxPeso": 95,
+                        "mejor1RM": 110.8,
+                        "volumen": 475
+                      }
+                    ]
+                  },
+                  {
+                    "periodo": "3m",
+                    "points": [
+                      {
+                        "fecha": 1792936800000,
+                        "maxPeso": 80,
+                        "mejor1RM": 93.3,
+                        "volumen": 400
+                      },
+                      {
+                        "fecha": 1793511000000,
+                        "maxPeso": 85,
+                        "mejor1RM": 99.2,
+                        "volumen": 425
+                      },
+                      {
+                        "fecha": 1793593800000,
+                        "maxPeso": 90,
+                        "mejor1RM": 105,
+                        "volumen": 450
+                      },
+                      {
+                        "fecha": 1793628000000,
+                        "maxPeso": 95,
+                        "mejor1RM": 110.8,
+                        "volumen": 475
+                      }
+                    ]
+                  },
+                  {
+                    "periodo": "todo",
+                    "points": [
+                      {
+                        "fecha": 1792936800000,
+                        "maxPeso": 80,
+                        "mejor1RM": 93.3,
+                        "volumen": 400
+                      },
+                      {
+                        "fecha": 1793511000000,
+                        "maxPeso": 85,
+                        "mejor1RM": 99.2,
+                        "volumen": 425
+                      },
+                      {
+                        "fecha": 1793593800000,
+                        "maxPeso": 90,
+                        "mejor1RM": 105,
+                        "volumen": 450
+                      },
+                      {
+                        "fecha": 1793628000000,
+                        "maxPeso": 95,
+                        "mejor1RM": 110.8,
+                        "volumen": 475
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "exerciseId": "ex-squat",
+                "prs": {
+                  "maxPeso": 92.5,
+                  "mejor1RM": 107.9
+                },
+                "progress": [
+                  {
+                    "periodo": "4s",
+                    "points": [
+                      {
+                        "fecha": 1793503800000,
+                        "maxPeso": 82.5,
+                        "mejor1RM": 96.3,
+                        "volumen": 412.5
+                      },
+                      {
+                        "fecha": 1793514600000,
+                        "maxPeso": 87.5,
+                        "mejor1RM": 102.1,
+                        "volumen": 437.5
+                      },
+                      {
+                        "fecha": 1793597400000,
+                        "maxPeso": 92.5,
+                        "mejor1RM": 107.9,
+                        "volumen": 462.5
+                      }
+                    ]
+                  },
+                  {
+                    "periodo": "3m",
+                    "points": [
+                      {
+                        "fecha": 1793503800000,
+                        "maxPeso": 82.5,
+                        "mejor1RM": 96.3,
+                        "volumen": 412.5
+                      },
+                      {
+                        "fecha": 1793514600000,
+                        "maxPeso": 87.5,
+                        "mejor1RM": 102.1,
+                        "volumen": 437.5
+                      },
+                      {
+                        "fecha": 1793597400000,
+                        "maxPeso": 92.5,
+                        "mejor1RM": 107.9,
+                        "volumen": 462.5
+                      }
+                    ]
+                  },
+                  {
+                    "periodo": "todo",
+                    "points": [
+                      {
+                        "fecha": 1793503800000,
+                        "maxPeso": 82.5,
+                        "mejor1RM": 96.3,
+                        "volumen": 412.5
+                      },
+                      {
+                        "fecha": 1793514600000,
+                        "maxPeso": 87.5,
+                        "mejor1RM": 102.1,
+                        "volumen": 437.5
+                      },
+                      {
+                        "fecha": 1793597400000,
+                        "maxPeso": 92.5,
+                        "mejor1RM": 107.9,
+                        "volumen": 462.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "currentStreakDays": 3,
+        "racha": [
+          {
+            "objetivo": 1,
+            "actual": 3,
+            "mejor": 3
+          },
+          {
+            "objetivo": 2,
+            "actual": 2,
+            "mejor": 2
+          },
+          {
+            "objetivo": 3,
+            "actual": 1,
+            "mejor": 1
+          }
+        ]
+      }
+    },
+    {
       "name": "boundary @ UTC",
       "zone": "UTC",
       "now": 1781482500000,

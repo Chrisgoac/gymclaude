@@ -57,9 +57,9 @@ interface StatsRepository {
 
 /**
  * Broadcasts which derived data a write made stale ([InvalidationScope], from [SaveResult.Saved]).
- * Room already re-runs a stats query when its tables change; these events additionally force a
- * recompute of exactly the flows that depend on the scopes (e.g. after an edit whose rows another
- * flow does not read, or for consumers outside Room such as the Coach snapshot).
+ * The Room-backed [StatsRepository] flows do not need it (Room invalidation already re-runs them,
+ * once per edit); it is for derived data kept outside those queries, such as the Coach snapshot and
+ * achievement reconciliation, which subscribe to [changes] for the scopes they depend on.
  */
 class StatsInvalidation {
     private val events = MutableSharedFlow<Set<InvalidationScope>>(extraBufferCapacity = 64)

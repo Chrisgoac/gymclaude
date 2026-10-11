@@ -224,6 +224,19 @@ function boundaryDataset() {
   };
 }
 
+/**
+ * Sessions on both sides of a DST change, evaluated in that zone the day after: Europe/Madrid springs forward on
+ * Sun 2026-03-29 (02:00 CET -> 03:00 CEST), America/New_York falls back on Sun 2026-11-01 (02:00 EDT -> 01:00 EST).
+ * Weeks (local Monday), local days for the day streak and 24 h-based periods all cross the change.
+ */
+function dstDataset(sessions) {
+  return {
+    sessions: sessions.map(([id, at]) => ses(id, at, null)),
+    loggedExercises: sessions.map(([id], i) => le(`l${id}`, id, i % 2 === 0 ? 'ex-press' : 'ex-squat')),
+    sets: sessions.map(([id], i) => set(`t${id}`, `l${id}`, 0, 80 + 2.5 * i, 5)),
+  };
+}
+
 async function seed(dataset) {
   await Promise.all([db.workoutSessions.clear(), db.loggedExercises.clear(), db.loggedSets.clear(), db.exercises.clear()]);
   await db.exercises.bulkPut(dataset.exercises.map((e) => ({ ...e, userId: null, equipamiento: 'barra', tipo: 'compuesto', esPersonalizado: e.id === 'ex-row', updatedAt: 1 })));
@@ -288,6 +301,20 @@ async function datasetCases() {
     { name: 'empty', zone: 'Europe/Madrid', now: '2026-06-09T20:00:00Z', data: empty, gyms: [null, 'g1'] },
     { name: 'one set', zone: 'Europe/Madrid', now: '2026-06-09T20:00:00Z', data: oneSet, gyms: [null, 'g1', 'g2'] },
     { name: 'history', zone: 'Europe/Madrid', now: '2026-06-09T20:00:00Z', data: historyDataset(), gyms: [null, 'g1', 'g2'] },
+    {
+      name: 'dst spring @ Europe/Madrid', zone: 'Europe/Madrid', now: '2026-03-30T10:00:00Z', gyms: [null],
+      data: dstDataset([
+        ['m1', '2026-03-22T12:00:00Z'], ['m2', '2026-03-28T22:30:00Z'], ['m3', '2026-03-29T00:30:00Z'],
+        ['m4', '2026-03-29T01:30:00Z'], ['m5', '2026-03-29T21:30:00Z'], ['m6', '2026-03-29T22:30:00Z'], ['m7', '2026-03-30T08:00:00Z'],
+      ]),
+    },
+    {
+      name: 'dst fall @ America/New_York', zone: 'America/New_York', now: '2026-11-02T15:00:00Z', gyms: [null],
+      data: dstDataset([
+        ['n1', '2026-10-25T14:00:00Z'], ['n2', '2026-11-01T03:30:00Z'], ['n3', '2026-11-01T05:30:00Z'],
+        ['n4', '2026-11-01T06:30:00Z'], ['n5', '2026-11-02T04:30:00Z'], ['n6', '2026-11-02T05:30:00Z'], ['n7', '2026-11-02T14:00:00Z'],
+      ]),
+    },
     ...['UTC', 'Europe/Madrid', 'America/New_York', 'Pacific/Auckland'].map((zone) => (
       { name: `boundary @ ${zone}`, zone, now: '2026-06-15T00:15:00Z', data: boundaryDataset(), gyms: [null] }
     )),

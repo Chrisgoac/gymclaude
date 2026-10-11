@@ -96,7 +96,8 @@ data class WeeklyStreak(val current: Int, val best: Int)
  * [ZoneId] are always explicit.
  *
  * Float sums follow the PWA's iteration order (logged exercises, then sets, by id; sessions by id),
- * so volumes match the PWA to the last bit for the same rows. A logged exercise without sets counts
+ * so on this pure path volumes match the PWA to the last bit for the same rows (the Room repository
+ * sums per logged exercise in SQL, which can differ in the last bits). A logged exercise without sets counts
  * as training its group (last trained, a 0 in the period's group volume), like the PWA.
  */
 object WorkoutStats {

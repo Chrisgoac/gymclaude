@@ -171,7 +171,7 @@ class AppContainer(private val application: Application) {
     val historyRepository: HistoryRepository =
         OfflineHistoryRepository(databases, ::localMutationRunner, exerciseRepository, routineRepository, now = syncClock::nowMillis)
 
-    /** Stale-data events (SaveResult scopes) that make the progress statistics recompute. */
+    /** Stale-data events (SaveResult scopes) for derived data outside the Room stats queries (Coach snapshot, achievements). */
     val statsInvalidation: StatsInvalidation = StatsInvalidation()
 
     /**
@@ -188,7 +188,7 @@ class AppContainer(private val application: Application) {
 
     /** Progress statistics of the open account (server-corrected clock, device time zone); read-only. */
     val statsRepository: StatsRepository =
-        OfflineStatsRepository(databases, statsInvalidation, now = syncClock::nowMillis, zone = ZoneId::systemDefault)
+        OfflineStatsRepository(databases, now = syncClock::nowMillis, zone = ZoneId::systemDefault)
 
     private val syncApi: SyncApi = createSyncApi(BuildConfig.API_BASE_URL, authSession, serverClock)
     private val bootstrapRepository = BootstrapRepository(syncApi, syncLocks)

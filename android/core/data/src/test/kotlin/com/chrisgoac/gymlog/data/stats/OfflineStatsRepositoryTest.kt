@@ -34,6 +34,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -62,7 +63,7 @@ import java.time.ZoneId
 /**
  * The Room-backed repository must give the PWA's numbers: every dataset of
  * contracts/domain/insight-cases.json (tombstones included) is loaded into Room and each flow is
- * compared with the fixture. Then a historical edit must refresh every live flow.
+ * compared with the fixture. Then a historical edit must refresh every live flow, once.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -135,7 +136,7 @@ class OfflineStatsRepositoryTest {
             val weeklyTarget = 2
             val db = database()
             load(db, c, weeklyTarget)
-            val repo = OfflineStatsRepository(Manager(db), StatsInvalidation(), now = { c.getValue("now").jsonPrimitive.long }, zone = { ZoneId.of(c.str("zone")) })
+            val repo = OfflineStatsRepository(Manager(db), now = { c.getValue("now").jsonPrimitive.long }, zone = { ZoneId.of(c.str("zone")) })
 
             val streak = repo.observeStreak().first()
             assertEquals("$name days", expected.getValue("currentStreakDays").jsonPrimitive.int, streak.days)
@@ -246,7 +247,11 @@ class OfflineStatsRepositoryTest {
         seedPressHistory(db)
         val manager = Manager(db)
         val invalidation = StatsInvalidation()
-        val repo = OfflineStatsRepository(manager, invalidation, now = { now }, zone = { ZoneId.of("UTC") })
+        val repo = OfflineStatsRepository(manager, now = { now }, zone = { ZoneId.of("UTC") })
+        val published = mutableListOf<Set<InvalidationScope>>()
+        scope.launch { invalidation.scopes.collect { published += it } }
+        val stallEmissions = MutableStateFlow(0)
+        scope.launch { repo.observeStalls(GymFilter.All).collect { stallEmissions.value++ } }
         val filter = StatsFilter(Period.FOUR_WEEKS, GymFilter.All)
 
         val weekly = live(repo.observeWeeklyInsight(GymFilter.All))
@@ -288,27 +293,12 @@ class OfflineStatsRepositoryTest {
         streak.awaitValue<com.chrisgoac.gymlog.domain.stats.Streak>("streak") { it.days == 1 }
         stalls.awaitValue<List<*>>("stalls") { it.isEmpty() }
         suggestions.awaitValue<List<*>>("suggestions") { it.isEmpty() }
-    }
 
-    @Test fun `scope events recompute exactly the flows that depend on them`() = runBlocking {
-        val db = database()
-        seedPressHistory(db)
-        val invalidation = StatsInvalidation()
-        val repo = OfflineStatsRepository(Manager(db), invalidation, now = { now }, zone = { ZoneId.of("UTC") })
-        val stallEmissions = MutableStateFlow(0)
-        val streakEmissions = MutableStateFlow(0)
-        scope.launch { repo.observeStalls(GymFilter.All).collect { stallEmissions.value++ } }
-        scope.launch { repo.observeStreak().collect { streakEmissions.value++ } }
-        withTimeout(10_000) { stallEmissions.first { it == 1 } }
-        withTimeout(10_000) { streakEmissions.first { it == 1 } }
-
-        invalidation.publish(setOf(InvalidationScope.STALLS, InvalidationScope.COACH_SNAPSHOT))
-        withTimeout(10_000) { stallEmissions.first { it == 2 } }
-        invalidation.publish(setOf(InvalidationScope.STREAKS))
-        withTimeout(10_000) { streakEmissions.first { it == 2 } }
-        // Each flow saw exactly one event of its own: the other scope did not wake it.
-        assertEquals(2, stallEmissions.value)
-        assertEquals(2, streakEmissions.value)
+        // One recompute per edit (no second, redundant pass), and the scopes reached the coordinator.
+        delay(300)
+        assertEquals("stall reads: initial + one after the edit", 2, stallEmissions.value)
+        assertEquals(listOf((result as SaveResult.Saved).invalidatedScopes), published)
+        assertTrue(published.single().containsAll(InvalidationScope.entries.toSet() - InvalidationScope.ACHIEVEMENTS - InvalidationScope.COACH_SNAPSHOT))
     }
 
     @Test fun `stored settings parse like the PWA`() {
