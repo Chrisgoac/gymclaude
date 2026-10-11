@@ -6,6 +6,7 @@ import com.chrisgoac.gymlog.domain.history.InvalidationScope
 import com.chrisgoac.gymlog.domain.history.SaveResult
 import com.chrisgoac.gymlog.domain.history.SaveWorkoutDraftUseCase
 import com.chrisgoac.gymlog.domain.history.WorkoutDraft
+import com.chrisgoac.gymlog.domain.settings.SettingsRepository
 import com.chrisgoac.gymlog.domain.time.Period
 import com.chrisgoac.gymlog.domain.workout.HistoryRepository
 import com.chrisgoac.gymlog.domain.workout.WorkoutAggregate
@@ -118,5 +119,21 @@ class InvalidatingHistoryRepository(
     override suspend fun deleteSession(sessionId: String) {
         inner.deleteSession(sessionId)
         invalidation.publish(InvalidationScope.entries.toSet(), localEdit = true)
+    }
+}
+
+/**
+ * Publishes [InvalidationScope.ACHIEVEMENTS] after the weekly target changes: it is achievement
+ * evidence (weekly-streak achievements count weeks that met it), and reconciliation listens to
+ * invalidation events, not to the settings table. NOT a local edit of history: reconciliation may
+ * unlock but never revokes because of a settings change. The other settings feed no achievement.
+ */
+class InvalidatingSettingsRepository(
+    private val inner: SettingsRepository,
+    private val invalidation: StatsInvalidation,
+) : SettingsRepository by inner {
+    override suspend fun setWeeklyTarget(sessionsPerWeek: Int) {
+        inner.setWeeklyTarget(sessionsPerWeek)
+        invalidation.publish(setOf(InvalidationScope.ACHIEVEMENTS), localEdit = false)
     }
 }

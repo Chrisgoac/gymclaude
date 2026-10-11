@@ -40,6 +40,7 @@ import com.chrisgoac.gymlog.devicesettings.UserScopedPreferenceStores
 import com.chrisgoac.gymlog.domain.settings.DeviceSettingsRepository
 import com.chrisgoac.gymlog.domain.settings.GymRepository
 import com.chrisgoac.gymlog.domain.settings.SettingsRepository
+import com.chrisgoac.gymlog.domain.stats.InvalidatingSettingsRepository
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
@@ -269,7 +270,9 @@ class AppContainer(private val application: Application) {
     val bodyRepository: BodyRepository = OfflineBodyRepository(databases, ::localMutationRunner, now = syncClock::nowMillis)
 
     /** Synced PWA settings (goal, progression, volume goals) of the open account; writes are local (outbox). */
-    val settingsRepository: SettingsRepository = OfflineSettingsRepository(databases, ::localMutationRunner)
+    /** Weekly-target changes publish ACHIEVEMENTS (non-local) so reconciliation re-checks the evidence. */
+    val settingsRepository: SettingsRepository =
+        InvalidatingSettingsRepository(OfflineSettingsRepository(databases, ::localMutationRunner), statsInvalidation)
 
     /**
      * Backup export/import of the open account (PWA file format). A committed import invalidates every derived
