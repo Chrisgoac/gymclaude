@@ -160,6 +160,18 @@ describe('POST /api/v1/sync/push', () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
+  it('400 INVALID_REQUEST for server-only Pro/AI tables, before any transaction', async () => {
+    for (const table of ['subscriptionEntitlements', 'subscription_entitlements', 'aiReports', 'ai_reports',
+      'reportedAiResponses', 'reported_ai_responses', 'aiResponses', 'ai_responses']) {
+      const op = { ...validBody.mutations[0].operations[0], table };
+      const res = await post(JSON.stringify({ mutations: [{ ...validBody.mutations[0], operations: [op] }] }));
+      expect(res.status, table).toBe(400);
+      expect((await errorOf(res)).code).toBe('INVALID_REQUEST');
+    }
+    expect(transaction).not.toHaveBeenCalled();
+    expect(pushMutations).not.toHaveBeenCalled();
+  });
+
   it('passes retryable ApiErrors from the service through as stable JSON', async () => {
     vi.mocked(pushMutations).mockRejectedValueOnce(
       new ApiError(409, 'MUTATION_IN_FLIGHT', 'Mutation is being processed', true, { mutationId: [MUTATION_ID] }),

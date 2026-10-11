@@ -14,7 +14,9 @@
     "export:android-catalog": "tsx scripts/export-android-catalog.mjs",
     "export:domain-fixtures": "tsx scripts/export-domain-fixtures.mjs",
     "db:migrate:sync": "node scripts/migrate-sync-foundation.mjs",
-    "db:migrate:media": "node scripts/migrate-private-media.mjs"
+    "db:migrate:media": "node scripts/migrate-private-media.mjs",
+    "db:migrate:ai": "node scripts/migrate-ai-entitlements.mjs",
+    "ai:seed-test-entitlement": "node scripts/seed-test-entitlement.mjs"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",

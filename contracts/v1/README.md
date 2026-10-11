@@ -207,3 +207,58 @@ schema error points at a client bug rather than at one specific queued mutation.
 | `pull-pagination-cases.json` | Cursor round-trips, invalid cursors, page-size expectations |
 
 All IDs and text in fixtures are synthetic.
+
+## AI (Pro)
+
+Schemas: `lib/api/v1/ai/contracts.ts`. Routes live under `/api/v1/ai/*` (Coach, mesocycles,
+intelligent reports, `POST /api/v1/ai/responses/:id/report`). The legacy PWA routes
+`/api/coach` and `/api/coach/mesociclo` are not part of v1 and are not Pro-gated.
+
+### Authorization
+
+Every `/api/v1/ai/*` route authenticates the Bearer session (`withApiRoute`) and then calls
+`requirePro` (`lib/api/v1/ai/guard.ts`). Pro is decided only on the server from
+`subscription_entitlements` (`lib/entitlements/reader.ts`): a user is Pro iff one of their rows has
+`state` `ACTIVE` or `GRACE` **and** `expires_at > now`. `ON_HOLD`, `PAUSED`, `CANCELED`, `EXPIRED`,
+`REVOKED` and a missing row are not Pro. A canceled purchase with paid time left stays `ACTIVE`
+(`auto_renewing = false`) until it expires. The client never sends entitlement state; Android's
+own gating is presentation only.
+
+| HTTP | code | retryable | Cause |
+|------|------|-----------|-------|
+| 403 | `PRO_REQUIRED` | false | No active Pro entitlement |
+| 503 | `ENTITLEMENT_UNAVAILABLE` | true | Entitlement store unreachable; the request is refused, never granted (fail closed) |
+| 404 | `RESPONSE_NOT_FOUND` | false | Reported response does not exist or belongs to another user (indistinguishable) |
+
+### Server-only tables
+
+`subscription_entitlements`, `ai_responses`, `ai_reports` and `reported_ai_responses`
+(`drizzle/0003_ai_and_entitlements.sql`, applied with `npm run db:migrate:ai`) are written only by
+the server. They are not sync tables: a push naming any of them fails with `400 INVALID_REQUEST`.
+
+### Limits
+
+- Coach `text`: 1..2000 chars, not blank. `clientMessageId`: UUID (retries reuse it).
+  Optional `history`: ≤ 20 `{ role: user|assistant, text ≤ 4000 }` turns.
+- Coach `snapshot`: strict allowlist of `CoachSnapshot` (`lib/coach-snapshot.ts`): stalled ≤ 5,
+  muscle groups ≤ 12, measurements ≤ 6, weekly PRs ≤ 100; no photos, ids, URLs or object keys;
+  ≤ 32 KiB as UTF-8 JSON.
+- Mesocycle: `clientRequestId` UUID; `objetivo` ∈ {hipertrofia, fuerza, general}, 2..6 days/week,
+  4..8 weeks, 30..90 min/session; catalog ≤ 400 entries with known muscle group/equipment.
+- Response report: `category` ∈ {inaccurate, harmful, medical, offensive, other}, optional
+  `context` ≤ 500 chars. A repeated report of the same response is idempotent.
+- Stream events (one JSON object each): `start{clientMessageId}`, `delta{text}`,
+  `complete{responseId}`, `error{code, retryable}`.
+
+### Test entitlement (non-production only)
+
+There is no production bypass. To exercise the AI routes locally, seed a test entitlement into a
+**local** database (the script refuses any host other than `localhost`/`127.0.0.1`/`::1` and never
+reads `.env.local`):
+
+```bash
+MIGRATION_DATABASE_URL=postgresql://postgres:teacher123@127.0.0.1:5432/gymlog_sync_test \
+  npm run ai:seed-test-entitlement -- --user <clerkUserId> [--days 30] [--state ACTIVE]
+```
+
+Re-running renews the same row; `--state REVOKED` (or `EXPIRED`, …) takes Pro away again.

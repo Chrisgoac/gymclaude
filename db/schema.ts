@@ -1,4 +1,5 @@
-import { pgTable, text, doublePrecision, integer, bigint, bigserial, boolean, jsonb, primaryKey, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, doublePrecision, integer, bigint, bigserial, boolean, jsonb, primaryKey, index, uniqueIndex, check } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 // Metadatos solo-servidor de la sync v1. Nunca llegan del cliente.
 // serverVersion = sync_changes.sequence de la última escritura (nullable por compatibilidad con
@@ -195,3 +196,66 @@ export const mediaDeletions = pgTable('media_deletions', {
   lastError: text('last_error'),
   createdAt: bigint('created_at', { mode: 'number' }).notNull(), // epoch ms
 }, (t) => [index('media_deletions_due_at_idx').on(t.dueAt)]);
+
+// ── Pro y artefactos de IA (0003). Solo servidor: ninguno se sincroniza ni lo escribe un cliente. ──
+
+// Derecho Pro verificado por el servidor (la fase 6 lo rellena desde Google Play; `source='test'`
+// solo lo crea scripts/seed-test-entitlement.mjs en BD locales). Nunca se guarda el purchase token
+// en claro: solo su SHA-256. Concede Pro si `state` ∈ {ACTIVE, GRACE} y `expires_at` > ahora.
+export const subscriptionEntitlements = pgTable('subscription_entitlements', {
+  userId: text('user_id').notNull(),
+  productId: text('product_id').notNull(),
+  purchaseTokenHash: text('purchase_token_hash').notNull(),
+  state: text('state').notNull(),
+  expiresAt: bigint('expires_at', { mode: 'number' }).notNull(), // epoch ms
+  autoRenewing: boolean('auto_renewing').notNull(),
+  lastVerifiedAt: bigint('last_verified_at', { mode: 'number' }).notNull(), // epoch ms
+  source: text('source').notNull(),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.userId, t.purchaseTokenHash] }),
+  check('subscription_entitlements_state_check',
+    sql`${t.state} IN ('ACTIVE','GRACE','ON_HOLD','PAUSED','CANCELED','EXPIRED','REVOKED')`),
+  check('subscription_entitlements_source_check', sql`${t.source} IN ('play','test')`),
+]);
+
+// Informes inteligentes cacheados por huella de los datos de origen.
+export const aiReports = pgTable('ai_reports', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  kind: text('kind').notNull(),
+  sourceFingerprint: text('source_fingerprint').notNull(),
+  payload: jsonb('payload').notNull(),
+  model: text('model').notNull(),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [uniqueIndex('ai_reports_user_kind_fingerprint_idx').on(t.userId, t.kind, t.sourceFingerprint)]);
+
+// Metadatos de cada respuesta de IA (Coach/mesociclo). `client_message_id` hace idempotente el
+// reintento de un envío: nunca dos respuestas por el mismo mensaje del usuario.
+export const aiResponses = pgTable('ai_responses', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  clientMessageId: text('client_message_id').notNull(),
+  status: text('status').notNull(),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('ai_responses_user_client_message_idx').on(t.userId, t.clientMessageId),
+  check('ai_responses_status_check', sql`${t.status} IN ('complete','incomplete')`),
+]);
+
+// Reportes de respuestas de IA problemáticas (uno por usuario y respuesta).
+export const reportedAiResponses = pgTable('reported_ai_responses', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  responseId: text('response_id').notNull(),
+  category: text('category').notNull(),
+  context: text('context'),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('reported_ai_responses_user_response_idx').on(t.userId, t.responseId),
+  // Mismo enum que AI_REPORT_CATEGORIES (lib/api/v1/ai/contracts.ts).
+  check('reported_ai_responses_category_check',
+    sql`${t.category} IN ('inaccurate','harmful','medical','offensive','other')`),
+]);
