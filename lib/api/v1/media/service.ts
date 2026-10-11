@@ -20,7 +20,6 @@ import {
   type ProgressMediaFields,
 } from './contracts';
 import {
-  MEDIA_DELETION_DELAY_MS,
   V1_MEDIA_KEY_PREFIX,
   enqueueMediaDeletion,
   isOwnedMediaKey,

@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "public/sw.js",
     "public/sw.js.map",
     "public/swe-worker-*.js",
+    // Gradle outputs of the Android project (e.g. instrumented-test HTML reports):
+    "android/**/build/**",
   ]),
 ]);
 
