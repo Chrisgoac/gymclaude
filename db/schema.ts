@@ -238,6 +238,8 @@ export const aiResponses = pgTable('ai_responses', {
   userId: text('user_id').notNull(),
   clientMessageId: text('client_message_id').notNull(),
   status: text('status').notNull(),
+  // Texto final de una respuesta completa del Coach (NULL mientras está incompleta).
+  content: text('content'),
   createdAt: bigint('created_at', { mode: 'number' }).notNull(),
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [

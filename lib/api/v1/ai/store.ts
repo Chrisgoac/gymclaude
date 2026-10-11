@@ -66,6 +66,11 @@ export interface CoachContextTurn {
  * `limitTurns`, and keeps the most recent contiguous run whose total length fits `maxChars`
  * (a message that would overflow the budget ends the window). Returned oldest first.
  * `excludeId` drops the message being answered (it may already have synced).
+ *
+ * Assistant turns are trusted only when their id is a COMPLETE `ai_responses` row of the same
+ * user, and their text is the server-stored `content`, never the synced copy: a client can sync
+ * any assistant row it likes, so a forged or edited one never reaches the model. User turns are
+ * the user's own words and are kept as synced.
  */
 export async function loadCoachContext(
   db: Db,
@@ -76,12 +81,16 @@ export async function loadCoachContext(
 ): Promise<CoachContextTurn[]> {
   if (!Number.isInteger(limitTurns) || limitTurns <= 0 || maxChars <= 0) return [];
   const result = await db.execute(sql`
-    SELECT rol, contenido FROM coach_messages
-    WHERE user_id = ${userId}
-      AND deleted_at IS NULL
-      AND rol IN ('user', 'assistant')
-      AND id <> ${excludeId ?? ''}
-    ORDER BY created_at DESC, id DESC
+    SELECT m.rol, CASE WHEN m.rol = 'assistant' THEN r.content ELSE m.contenido END AS contenido
+    FROM coach_messages m
+    LEFT JOIN ai_responses r
+      ON r.id = m.id AND r.user_id = m.user_id AND r.status = 'complete'
+    WHERE m.user_id = ${userId}
+      AND m.deleted_at IS NULL
+      AND m.rol IN ('user', 'assistant')
+      AND m.id <> ${excludeId ?? ''}
+      AND (m.rol = 'user' OR r.content IS NOT NULL)
+    ORDER BY m.created_at DESC, m.id DESC
     LIMIT ${Math.min(limitTurns, 200)}`);
   const turns: CoachContextTurn[] = [];
   let used = 0;
@@ -91,4 +100,62 @@ export async function loadCoachContext(
     turns.push({ role: row.rol, text: row.contenido });
   }
   return turns.reverse();
+}
+
+/** Outcome of claiming the response to one user message (see claimCoachResponse). */
+export type CoachResponseClaim =
+  | { status: 'complete'; responseId: string; content: string }
+  | { status: 'incomplete'; responseId: string };
+
+/**
+ * Claims the single `ai_responses` row of (userId, clientMessageId). A first request inserts it
+ * as `incomplete` with `newId`; a retry of an incomplete one reuses its id (a new attempt of the
+ * same response, never a second response); a complete one is returned with its stored text so
+ * the caller replays it without calling the model. The server never writes the user's message:
+ * it lives only in the client's synced `coach_messages`.
+ */
+export async function claimCoachResponse(
+  db: Db,
+  userId: string,
+  clientMessageId: string,
+  newId: string,
+  now: number,
+): Promise<CoachResponseClaim> {
+  const claimed = await db.execute(sql`
+    INSERT INTO ai_responses (id, user_id, client_message_id, status, content, created_at, updated_at)
+    VALUES (${newId}, ${userId}, ${clientMessageId}, 'incomplete', NULL, ${now}, ${now})
+    ON CONFLICT (user_id, client_message_id)
+    DO UPDATE SET updated_at = EXCLUDED.updated_at WHERE ai_responses.status = 'incomplete'
+    RETURNING id`);
+  const fresh = claimed.rows[0] as { id: string } | undefined;
+  if (fresh) return { status: 'incomplete', responseId: fresh.id };
+
+  // The conflict row was not updated, so it is complete (a row never goes back to incomplete).
+  const existing = await db.execute(sql`
+    SELECT id, status, content FROM ai_responses
+    WHERE user_id = ${userId} AND client_message_id = ${clientMessageId}`);
+  const row = existing.rows[0] as { id: string; status: string; content: string | null } | undefined;
+  if (!row || row.status !== 'complete' || row.content === null) {
+    throw new Error('ai_responses claim found no usable row');
+  }
+  return { status: 'complete', responseId: row.id, content: row.content };
+}
+
+/**
+ * Stores the final text and marks the response complete. Returns false when the row was no longer
+ * incomplete (a concurrent attempt of the same clientMessageId completed first): the caller must
+ * not report its own text as the response.
+ */
+export async function completeCoachResponse(
+  db: Db,
+  userId: string,
+  responseId: string,
+  content: string,
+  now: number,
+): Promise<boolean> {
+  const updated = await db.execute(sql`
+    UPDATE ai_responses SET status = 'complete', content = ${content}, updated_at = ${now}
+    WHERE id = ${responseId} AND user_id = ${userId} AND status = 'incomplete'
+    RETURNING id`);
+  return updated.rows.length > 0;
 }

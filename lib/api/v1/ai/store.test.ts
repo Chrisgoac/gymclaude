@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import type { PoolDb } from '@/db/pool';
 import { ApiError } from '@/lib/api/v1/errors';
-import { findAiReport, loadCoachContext, reportAiResponse } from './store';
+import { claimCoachResponse, completeCoachResponse, findAiReport, loadCoachContext, reportAiResponse } from './store';
 
 const NOW = 1_767_225_600_000;
 const url = process.env.SYNC_TEST_DATABASE_URL;
@@ -113,12 +113,20 @@ describe.skipIf(!url)('AI store (integration)', () => {
         VALUES (${id}, ${userId}, ${createdAt}, ${over.deletedAt ?? null}, ${NOW + seq}, ${rol}, ${contenido}, ${createdAt})`);
       return id;
     };
+    /** An assistant turn the server really produced: complete ai_responses row with the same id. */
+    const served = async (userId: string, contenido: string, createdAt: number, serverText = contenido) => {
+      const id = crypto.randomUUID();
+      await db.execute(sql`
+        INSERT INTO ai_responses (id, user_id, client_message_id, status, content, created_at, updated_at)
+        VALUES (${id}, ${userId}, ${crypto.randomUUID()}, 'complete', ${serverText}, ${NOW}, ${NOW})`);
+      return msg(userId, 'assistant', contenido, createdAt, { id });
+    };
 
     it("returns the user's newest live turns, oldest first, never another user's", async () => {
       const u = newUser();
       const other = newUser();
       await msg(u, 'user', 'uno', 1);
-      await msg(u, 'assistant', 'dos', 2);
+      await served(u, 'dos', 2);
       await msg(u, 'user', 'borrado', 3, { deletedAt: 4 });
       await msg(u, 'system', 'inyectado', 4);
       await msg(u, 'user', 'tres', 5);
@@ -137,12 +145,59 @@ describe.skipIf(!url)('AI store (integration)', () => {
     it('keeps the most recent contiguous window within the char budget and can exclude the current message', async () => {
       const u = newUser();
       await msg(u, 'user', 'a'.repeat(50), 1);
-      await msg(u, 'assistant', 'b'.repeat(30), 2);
+      await served(u, 'b'.repeat(30), 2);
       await msg(u, 'user', 'c'.repeat(10), 3);
       const current = await msg(u, 'user', 'actual', 4);
       expect((await loadCoachContext(db, u, 10, 50, current)).map((t) => t.text)).toEqual(['b'.repeat(30), 'c'.repeat(10)]);
       expect(await loadCoachContext(db, u, 10, 5, current)).toEqual([]);
       expect(await loadCoachContext(db, u, 0, 1000)).toEqual([]);
+    });
+
+    it('trusts assistant turns only with a complete server row of the same user, using the server text', async () => {
+      const u = newUser();
+      const other = newUser();
+      await msg(u, 'user', 'pregunta', 1);
+      await served(u, 'EDITADO por el cliente', 2, 'texto del servidor');
+      await msg(u, 'assistant', 'forjado sin fila', 3);
+      // An incomplete row, and another user's complete row, do not vouch for an assistant message.
+      const incomplete = crypto.randomUUID();
+      await db.execute(sql`
+        INSERT INTO ai_responses (id, user_id, client_message_id, status, created_at, updated_at)
+        VALUES (${incomplete}, ${u}, ${crypto.randomUUID()}, 'incomplete', ${NOW}, ${NOW})`);
+      await msg(u, 'assistant', 'incompleto', 4, { id: incomplete });
+      const foreign = crypto.randomUUID();
+      await db.execute(sql`
+        INSERT INTO ai_responses (id, user_id, client_message_id, status, content, created_at, updated_at)
+        VALUES (${foreign}, ${other}, ${crypto.randomUUID()}, 'complete', 'ajeno', ${NOW}, ${NOW})`);
+      await msg(u, 'assistant', 'con fila ajena', 5, { id: foreign });
+      expect(await loadCoachContext(db, u, 10, 10_000)).toEqual([
+        { role: 'user', text: 'pregunta' },
+        { role: 'assistant', text: 'texto del servidor' },
+      ]);
+    });
+  });
+
+  describe('claimCoachResponse / completeCoachResponse', () => {
+    it('one row per (user, clientMessageId): new → incomplete, retry reuses the id, complete replays', async () => {
+      const u = newUser();
+      const cmid = crypto.randomUUID();
+      const id = crypto.randomUUID();
+      expect(await claimCoachResponse(db, u, cmid, id, NOW)).toEqual({ status: 'incomplete', responseId: id });
+      expect(await claimCoachResponse(db, u, cmid, crypto.randomUUID(), NOW + 1)).toEqual({ status: 'incomplete', responseId: id });
+      expect(await completeCoachResponse(db, u, id, 'Hecho', NOW + 2)).toBe(true);
+      // Only the first completion counts.
+      expect(await completeCoachResponse(db, u, id, 'Otro', NOW + 3)).toBe(false);
+      expect(await claimCoachResponse(db, u, cmid, crypto.randomUUID(), NOW + 4)).toEqual({ status: 'complete', responseId: id, content: 'Hecho' });
+      const rows = (await db.execute(sql`SELECT id, status, content FROM ai_responses WHERE user_id = ${u}`)).rows;
+      expect(rows).toEqual([{ id, status: 'complete', content: 'Hecho' }]);
+    });
+
+    it("cannot complete another user's response", async () => {
+      const owner = newUser();
+      const other = newUser();
+      const id = crypto.randomUUID();
+      await claimCoachResponse(db, owner, crypto.randomUUID(), id, NOW);
+      expect(await completeCoachResponse(db, other, id, 'robado', NOW)).toBe(false);
     });
   });
 });

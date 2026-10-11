@@ -229,6 +229,7 @@ own gating is presentation only.
 | 403 | `PRO_REQUIRED` | false | No active Pro entitlement |
 | 503 | `ENTITLEMENT_UNAVAILABLE` | true | Entitlement store unreachable; the request is refused, never granted (fail closed) |
 | 404 | `RESPONSE_NOT_FOUND` | false | Reported response does not exist or belongs to another user (indistinguishable) |
+| 503 | `AI_UNAVAILABLE` | true | The AI provider is not configured on the server |
 
 ### Server-only tables
 
@@ -248,8 +249,40 @@ the server. They are not sync tables: a push naming any of them fails with `400 
   4..8 weeks, 30..90 min/session; catalog ≤ 400 entries with known muscle group/equipment.
 - Response report: `category` ∈ {inaccurate, harmful, medical, offensive, other}, optional
   `context` ≤ 500 chars. A repeated report of the same response is idempotent.
-- Stream events (one JSON object each): `start{clientMessageId}`, `delta{text ≤ 8000 chars}`,
-  `complete{responseId}`, `error{code ^[A-Z_]{1,64}$, retryable}`.
+- Stream events (one JSON object each): `start{clientMessageId, responseId}`, `delta{text ≤ 8000 chars}`,
+  `complete{responseId, disclaimer: true}`, `error{code ^[A-Z_]{1,64}$, retryable}`.
+
+### Coach (`POST /api/v1/ai/coach`)
+
+Order: Bearer session → `ai` rate limit (429 + `Retry-After`) → `requirePro` → `503 AI_UNAVAILABLE`
+(retryable) if DeepSeek is not configured → JSON body (`application/json`, ≤ 64 KiB, else 415/413)
+validated by `CoachRequestSchema` (400 `INVALID_REQUEST`). All of these are ordinary JSON errors.
+Then the response is `200 application/x-ndjson`: one event per line, `start` first, then `delta`s,
+ending in exactly one `complete` or `error`. Concatenated `delta`s are the answer.
+
+- `responseId` is the same for every attempt of one `clientMessageId` (`ai_responses` holds one row
+  per user and `clientMessageId`). Store the assistant `coachMessages` row under `responseId`.
+- Retry with the same `clientMessageId` after any failure. A complete response is replayed
+  (start/delta/complete) without calling the model; an incomplete one is regenerated under the same
+  `responseId`. The server never writes the user's message: it is only the client's synced
+  `coachMessages` row (id = `clientMessageId`), so a retry cannot duplicate it.
+- Context: the newest 20 live user/assistant turns (≤ 16 000 chars) of the user's synced
+  `coachMessages`, excluding `clientMessageId`. Assistant turns count only if their id is a complete
+  `ai_responses` row of that user, and the text used is the server-stored one (`ai_responses.content`):
+  forged or edited synced assistant rows never reach the model.
+- `complete.disclaimer: true`: the answer is general training guidance, not medical advice; show the
+  disclaimer with it. The system prompt also forbids diagnoses/treatments.
+- Stream error codes (all `retryable: true`): `AI_TIMEOUT` (model cut at 45 s), `AI_PROVIDER_ERROR`,
+  `AI_EMPTY_RESPONSE`, `AI_RESPONSE_CONFLICT` (a concurrent attempt of the same `clientMessageId`
+  completed first; retrying replays it), `INTERNAL_ERROR`. Partial deltas before an error are not a
+  response. A client disconnect stops the model; the response stays incomplete.
+
+### Report (`POST /api/v1/ai/responses/:id/report`)
+
+Any signed-in user may report a response they own (no Pro needed); `ai` rate limit. Body
+`{category, context?}`. `201 {responseId, created: true}` on the first report, `200 {…, created:
+false}` on a repeat (the first report is kept). Unknown, malformed or another user's id: `404
+RESPONSE_NOT_FOUND`.
 
 ### Test entitlement (non-production only)
 

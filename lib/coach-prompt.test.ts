@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { systemPrompt, DISCLAIMER } from '@/lib/coach-prompt';
+import { coachSystemPrompt, MEDICAL_DISCLAIMER_INSTRUCTION, systemPrompt, DISCLAIMER } from '@/lib/coach-prompt';
 import type { CoachSnapshot } from '@/lib/coach-snapshot';
 
 const snap: CoachSnapshot = {
@@ -34,5 +34,22 @@ describe('systemPrompt', () => {
     const p = systemPrompt(snap).toLowerCase();
     expect(p).toMatch(/recordatorio final/);
     expect(p).toMatch(/aunque la conversación anterior/);
+  });
+});
+
+describe('coachSystemPrompt (v1)', () => {
+  it('añade la instrucción médica explícita, antes del recordatorio final', () => {
+    const p = coachSystemPrompt(snap);
+    expect(p).toContain(DISCLAIMER);
+    expect(p).toContain(MEDICAL_DISCLAIMER_INSTRUCTION);
+    expect(MEDICAL_DISCLAIMER_INSTRUCTION.toLowerCase()).toMatch(/no diagnostiques/);
+    expect(MEDICAL_DISCLAIMER_INSTRUCTION.toLowerCase()).toMatch(/no es consejo médico/);
+    expect(p.indexOf(MEDICAL_DISCLAIMER_INSTRUCTION)).toBeLessThan(p.indexOf('RECORDATORIO FINAL'));
+  });
+  it('el prompt del PWA (legacy) no cambia', () => {
+    expect(systemPrompt(snap)).not.toContain(MEDICAL_DISCLAIMER_INSTRUCTION);
+    expect(coachSystemPrompt(snap)).toBe(
+      systemPrompt(snap).replace(DISCLAIMER, `${DISCLAIMER}\n${MEDICAL_DISCLAIMER_INSTRUCTION}`),
+    );
   });
 });

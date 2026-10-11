@@ -185,9 +185,9 @@ describe('ReportResponseRequestSchema', () => {
 describe('AiStreamEventSchema', () => {
   it('parses the four event kinds', () => {
     const events = [
-      { type: 'start', clientMessageId: '6f1c1c4e-2b0c-4a59-9a43-6d6c2f0f6a11' },
+      { type: 'start', clientMessageId: '6f1c1c4e-2b0c-4a59-9a43-6d6c2f0f6a11', responseId: '9a7e1f7c-0d5b-4b3e-8a51-3d9b1f0c6e22' },
       { type: 'delta', text: 'Sube ' },
-      { type: 'complete', responseId: '9a7e1f7c-0d5b-4b3e-8a51-3d9b1f0c6e22' },
+      { type: 'complete', responseId: '9a7e1f7c-0d5b-4b3e-8a51-3d9b1f0c6e22', disclaimer: true },
       { type: 'error', code: 'PROVIDER_TIMEOUT', retryable: true },
     ];
     for (const e of events) expect(AiStreamEventSchema.parse(e)).toEqual(e);
@@ -196,7 +196,10 @@ describe('AiStreamEventSchema', () => {
   it('rejects malformed events', () => {
     for (const e of [
       { type: 'complete' },
-      { type: 'complete', responseId: 'r1' },
+      { type: 'complete', responseId: 'r1', disclaimer: true },
+      { type: 'complete', responseId: '9a7e1f7c-0d5b-4b3e-8a51-3d9b1f0c6e22' },
+      { type: 'complete', responseId: '9a7e1f7c-0d5b-4b3e-8a51-3d9b1f0c6e22', disclaimer: false },
+      { type: 'start', clientMessageId: '6f1c1c4e-2b0c-4a59-9a43-6d6c2f0f6a11' },
       { type: 'error', code: 'X' },
       { type: 'delta' },
       { type: 'done' },

@@ -41,11 +41,16 @@ CREATE TABLE IF NOT EXISTS "ai_responses" (
 	"user_id" text NOT NULL,
 	"client_message_id" text NOT NULL,
 	"status" text NOT NULL,
+	"content" text,
 	"created_at" bigint NOT NULL,
 	"updated_at" bigint NOT NULL,
 	CONSTRAINT "ai_responses_status_check" CHECK ("status" IN ('complete','incomplete'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "ai_responses_user_client_message_idx" ON "ai_responses" USING btree ("user_id","client_message_id");
+-- Final text of a complete Coach response (NULL while incomplete). The server replays it on a retry
+-- of the same clientMessageId and uses it, never the client-synced copy, as assistant context.
+-- ADD COLUMN for databases where an earlier revision of this file already created the table.
+ALTER TABLE "ai_responses" ADD COLUMN IF NOT EXISTS "content" text;
 
 -- 4. User reports of problematic AI responses (one per user and response).
 CREATE TABLE IF NOT EXISTS "reported_ai_responses" (

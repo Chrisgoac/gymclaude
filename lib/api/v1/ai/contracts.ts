@@ -144,12 +144,16 @@ export const ReportResponseRequestSchema = z
   .strict();
 export type ReportResponseRequest = z.infer<typeof ReportResponseRequestSchema>;
 
-// ── Streaming events (one JSON object per event) ──
+// ── Streaming events (newline-delimited JSON, one object per line: application/x-ndjson) ──
 
 export const AiStreamEventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('start'), clientMessageId: z.uuid() }).strict(),
+  // responseId is stable across retries of the same clientMessageId; the client stores the
+  // assistant coach_message under this id.
+  z.object({ type: z.literal('start'), clientMessageId: z.uuid(), responseId: AiResponseIdSchema }).strict(),
   z.object({ type: z.literal('delta'), text: z.string().max(MAX_STREAM_DELTA_CHARS) }).strict(),
-  z.object({ type: z.literal('complete'), responseId: AiResponseIdSchema }).strict(),
+  // disclaimer: the response is general training guidance, not medical advice; the client must
+  // show the disclaimer with it.
+  z.object({ type: z.literal('complete'), responseId: AiResponseIdSchema, disclaimer: z.literal(true) }).strict(),
   z.object({ type: z.literal('error'), code: z.string().regex(/^[A-Z_]{1,64}$/), retryable: z.boolean() }).strict(),
 ]);
 export type AiStreamEvent = z.infer<typeof AiStreamEventSchema>;
