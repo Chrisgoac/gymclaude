@@ -12,6 +12,7 @@ import com.chrisgoac.gymlog.database.RoomLocalMutationRunner
 import com.chrisgoac.gymlog.database.UserDatabaseManager
 import com.chrisgoac.gymlog.domain.backup.ImportMode
 import com.chrisgoac.gymlog.domain.backup.PreparedImport
+import com.chrisgoac.gymlog.domain.workout.ActiveWorkoutPolicy
 import com.chrisgoac.gymlog.model.ContractJson
 import com.chrisgoac.gymlog.model.DeviceId
 import com.chrisgoac.gymlog.model.AchievementRecord
@@ -201,6 +202,52 @@ class BackupRepositoryTest {
         }
         assertEquals(before, rowCount() to outbox().size)
         assertEquals(0, imported)
+    }
+
+    @Test fun `a stale unfinished session does not block the import, a fresh one does`() = runTest {
+        val stale = RecordId("stale")
+        runnerOf(db).run(
+            LocalMutation {
+                put(WorkoutSessionRecord(stale, nextTimestamp(SyncTable.WORKOUT_SESSIONS, stale), null, null, null, null, now - ActiveWorkoutPolicy.WINDOW_MILLIS - 60_000, null, null))
+            },
+        )
+        val repo = repository()
+        val result = repo.import(repo.prepareBytes(fixture("pwa-backup-v6.json")), ImportMode.Merge)
+        assertEquals(2, result.written)
+        assertEquals(1, imported)
+
+        now += 1000
+        val fresh = RecordId("fresh")
+        runnerOf(db).run(
+            LocalMutation { put(WorkoutSessionRecord(fresh, nextTimestamp(SyncTable.WORKOUT_SESSIONS, fresh), null, null, null, null, now - 60_000, null, null)) },
+        )
+        try {
+            repo.import(repo.prepareBytes(fixture("pwa-backup-v12.json")), ImportMode.Merge)
+            fail("imported over a fresh active workout")
+        } catch (_: BackupException.ActiveWorkout) {
+        }
+        assertEquals(1, imported)
+    }
+
+    @Test fun `a file with records dated in the future is refused at prepare`() = runTest {
+        val limit = now + 5 * 60 * 1000L
+        val repo = repository()
+        val atLimit = withGyms("""{"id":"g1","nombre":"Ok","orden":0,"archivada":false,"updatedAt":$limit,"deletedAt":null}""")
+        repo.prepareBytes(atLimit.encodeToByteArray()) // exactly the allowed skew: accepted
+
+        listOf(
+            """{"id":"g1","nombre":"Futuro","orden":0,"archivada":false,"updatedAt":${limit + 1},"deletedAt":null}""",
+            """{"id":"g1","nombre":"Futuro","orden":0,"archivada":false,"updatedAt":$now,"deletedAt":${limit + 1}}""",
+        ).forEach { row ->
+            try {
+                repo.prepareBytes(withGyms(row).encodeToByteArray())
+                fail("accepted a future-dated record: $row")
+            } catch (e: BackupException.FutureTimestamps) {
+                assertEquals(1, e.count)
+            }
+        }
+        assertEquals(0, rowCount())
+        assertEquals(0, outbox().size)
     }
 
     @Test fun `a file prepared for one account is refused in another`() = runTest {

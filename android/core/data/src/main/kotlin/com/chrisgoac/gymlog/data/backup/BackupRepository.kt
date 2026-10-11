@@ -1,6 +1,7 @@
 package com.chrisgoac.gymlog.data.backup
 
 import androidx.room.withTransaction
+import com.chrisgoac.gymlog.data.workout.findActiveSessionId
 import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.LocalMutation
 import com.chrisgoac.gymlog.database.LocalMutationRunner
@@ -52,7 +53,10 @@ import java.io.OutputStream
  *   is touched; a file the server would reject is refused whole;
  * - whatever `userId` the file carries is ignored: rows land in the account the file was prepared
  *   for, and importing into another open account is refused; so is importing while a workout is
- *   being recorded;
+ *   being recorded (the active workout per [com.chrisgoac.gymlog.domain.workout.ActiveWorkoutPolicy]:
+ *   a stale unfinished session does not block);
+ * - a file with records dated more than [MAX_FUTURE_SKEW_MILLIS] after the server-corrected now is
+ *   refused at prepare: under last-writer-wins those rows would beat every later edit;
  * - [ImportMode.Merge] never deletes: file tombstones are ignored; a live file row is written only if
  *   the row is new or the file's copy is newer (`updatedAt` strictly greater) and differs, and it
  *   keeps the file's `updatedAt` (it already beats the stored version, so the runner's LWW rule holds);
@@ -91,6 +95,11 @@ class RoomBackupRepository(
         val decoded = withContext(io) { BackupCodec.read(source) }
         val problems = validate(decoded.backup.entities)
         if (problems.isNotEmpty()) throw BackupException.InvalidRecords(problems)
+        val latestAllowed = now() + MAX_FUTURE_SKEW_MILLIS
+        val future = decoded.backup.entities.byTable().sumOf { (_, rows) ->
+            rows.count { it.updatedAt > latestAllowed || (it.deletedAt ?: Long.MIN_VALUE) > latestAllowed }
+        }
+        if (future > 0) throw BackupException.FutureTimestamps(future)
         return PreparedImport(decoded.backup, decoded.skippedCatalogExercises, accountId)
     }
 
@@ -100,7 +109,7 @@ class RoomBackupRepository(
         val database = open.database
         val runner = runnerFor(database)
         val result = database.withTransaction {
-            if (database.workoutSessionDao().findActive().isNotEmpty()) throw BackupException.ActiveWorkout()
+            if (database.workoutSessionDao().findActiveSessionId(now()) != null) throw BackupException.ActiveWorkout()
             val plan = plan(database, prepared.backup, mode)
             plan.writes.chunked(batchSize).forEach { batch ->
                 runner.run(
@@ -166,6 +175,9 @@ class RoomBackupRepository(
 
     private companion object {
         const val DEFAULT_BATCH_SIZE = 250
+
+        /** Records dated later than the server-corrected now plus this are refused (clock skew allowance). */
+        const val MAX_FUTURE_SKEW_MILLIS = 5 * 60 * 1000L
 
         /** Placeholder identity for validation only; the real mutations get theirs from the runner. */
         val VALIDATION_MUTATION_ID = MutationId("00000000-0000-0000-0000-000000000000")

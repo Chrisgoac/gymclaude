@@ -141,6 +141,12 @@ sealed class BackupException(message: String, cause: Throwable? = null) : Except
     /** Records the server would reject (id format, U+0000, non-finite numbers, timestamps, duplicates). */
     class InvalidRecords(val problems: List<String>) : BackupException("Invalid backup records: ${problems.take(5).joinToString("; ")}")
 
+    /**
+     * [count] records carry an `updatedAt`/`deletedAt` later than the (server-corrected) clock plus the
+     * allowed skew: imported, they would beat every future edit under last-writer-wins.
+     */
+    class FutureTimestamps(val count: Int) : BackupException("$count backup records are dated in the future")
+
     /** No account database is open. */
     class NoAccount : BackupException("No account is open")
 

@@ -153,6 +153,7 @@
     <string name="settings_backup_error_too_large">El archivo es demasiado grande (máximo 20 MB).</string>
     <string name="settings_backup_error_corrupt">El archivo está dañado o incompleto. No se ha cambiado nada.</string>
     <string name="settings_backup_error_invalid">El archivo contiene datos no válidos. No se ha cambiado nada.</string>
+    <string name="settings_backup_error_future_dates">El archivo tiene datos con fecha futura (revisa la hora del dispositivo que hizo la copia). No se ha cambiado nada.</string>
     <string name="settings_backup_error_no_account">No hay ninguna cuenta abierta.</string>
     <string name="settings_backup_error_account_changed">La cuenta abierta ha cambiado desde que elegiste el archivo. Vuelve a elegirlo.</string>
     <string name="settings_backup_error_active_workout">Tienes un entrenamiento en curso. Termínalo o descártalo antes de importar. No se ha cambiado nada.</string>

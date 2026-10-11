@@ -167,6 +167,7 @@ private fun BackupFailure.message(): Int = when (this) {
     BackupFailure.TooLarge -> R.string.settings_backup_error_too_large
     BackupFailure.Corrupt -> R.string.settings_backup_error_corrupt
     BackupFailure.InvalidRecords -> R.string.settings_backup_error_invalid
+    BackupFailure.FutureDates -> R.string.settings_backup_error_future_dates
     BackupFailure.NoAccount -> R.string.settings_backup_error_no_account
     BackupFailure.AccountChanged -> R.string.settings_backup_error_account_changed
     BackupFailure.ActiveWorkout -> R.string.settings_backup_error_active_workout

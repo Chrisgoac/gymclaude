@@ -31,7 +31,7 @@ interface BackupDocuments {
     fun delete(uri: String)
 }
 
-enum class BackupFailure { NotABackup, NewerVersion, TooLarge, Corrupt, InvalidRecords, NoAccount, AccountChanged, ActiveWorkout, ReadFailed, WriteFailed, ImportFailed }
+enum class BackupFailure { NotABackup, NewerVersion, TooLarge, Corrupt, InvalidRecords, FutureDates, NoAccount, AccountChanged, ActiveWorkout, ReadFailed, WriteFailed, ImportFailed }
 
 /** What the file holds, shown before anything is written. */
 data class BackupPreview(val totalRows: Int, val workouts: Int, val skippedCatalogExercises: Int, val exportedAt: Long)
@@ -183,6 +183,7 @@ class BackupViewModel(
         is BackupException.TooLarge -> BackupFailure.TooLarge
         is BackupException.Corrupt -> BackupFailure.Corrupt
         is BackupException.InvalidRecords -> BackupFailure.InvalidRecords
+        is BackupException.FutureTimestamps -> BackupFailure.FutureDates
         is BackupException.NoAccount -> BackupFailure.NoAccount
         is BackupException.AccountChanged -> BackupFailure.AccountChanged
         is BackupException.ActiveWorkout -> BackupFailure.ActiveWorkout

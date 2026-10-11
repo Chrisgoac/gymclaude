@@ -115,6 +115,7 @@ class BackupViewModelTest {
             BackupException.TooLarge(1) to BackupFailure.TooLarge,
             BackupException.Corrupt("x") to BackupFailure.Corrupt,
             BackupException.InvalidRecords(listOf("x")) to BackupFailure.InvalidRecords,
+            BackupException.FutureTimestamps(3) to BackupFailure.FutureDates,
             BackupException.AccountChanged() to BackupFailure.AccountChanged,
             BackupException.ActiveWorkout() to BackupFailure.ActiveWorkout,
             IOException("gone") to BackupFailure.ReadFailed,
