@@ -293,6 +293,37 @@ class MediaRepositoryTest {
         assertEquals(MediaStatus.Synced, items.single().status)
     }
 
+    @Test fun `phase gate - capture offline, restart, reconnect uploads once, cached photo shows offline and never to another account`() = runTest {
+        // Capture while offline: stored locally, queued, nothing sent.
+        api.uploadFailure = { SyncApiException.Transport(IOException("offline")) }
+        val id = queuedId(media.enqueue(sourceJpeg(100, 100), MediaOwner.Progress(fecha = 7, angulo = "frente", nota = null)))
+        assertEquals(MediaWorkOutcome.RETRY, media.process(USER_A, id))
+        assertTrue(api.uploads.isEmpty())
+
+        // Process kill + reopen: a fresh instance finds the queued photo; the network is back.
+        val reopened = repo()
+        assertEquals(listOf(id), reopened.pendingWork(USER_A))
+        api.uploadFailure = null
+        assertEquals(MediaWorkOutcome.DONE, reopened.process(USER_A, id))
+        assertEquals(MediaWorkOutcome.DONE, reopened.process(USER_A, id)) // duplicate worker: nothing more to do
+        assertEquals(1, api.uploads.count { it.first == id })
+        assertTrue(reopened.pendingWork(USER_A).isEmpty())
+
+        // Offline again with a new process (no in-memory signed URLs): the thumbnail comes from the private cache.
+        api.grantFailure = { SyncApiException.Transport(IOException("offline")) }
+        api.downloadFailure = { SyncApiException.Transport(IOException("offline")) }
+        val afterRestart = repo()
+        val cached = File(cacheDir(), "$id.jpg")
+        assertEquals(MediaImage.Available(cached.path), afterRestart.image(id))
+        assertEquals(0, api.downloads.size)
+
+        // Another account on the same device sees neither the row nor the file.
+        manager.current.value = OpenUserDatabase(USER_B, memoryDb())
+        assertTrue(afterRestart.observe(MediaKind.PROGRESS).first().isEmpty())
+        assertEquals(MediaImage.Unavailable(MediaImage.Unavailable.Reason.OFFLINE), afterRestart.image(id))
+        assertTrue(cached.isFile) // A's copy is untouched, just unreachable from B
+    }
+
     @Test fun `an ingest interrupted before its row leaves an orphan file that the next resume removes`() = runTest {
         val orphan = File(pendingDir().apply { mkdirs() }, "orphan.jpg").apply { writeBytes(byteArrayOf(1)); setLastModified(0) }
         media.pendingWork(USER_A)

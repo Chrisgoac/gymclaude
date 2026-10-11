@@ -177,6 +177,18 @@ Status: **automated evidence complete; device checks pending.**
 
 Evidence: [android-phase-04-insights-settings.md](../../verification/android-phase-04-insights-settings.md).
 
+### Private media and Pro AI gate (Plan 5)
+
+Status: **automated evidence complete; device and real-service checks pending.**
+
+- [x] Photo path: capture offline, kill/reopen, reconnect, upload once, short signed read grant, cached thumbnail offline (JVM harness + real routes on a disposable Postgres with fake R2).
+- [x] A second user cannot read or delete another user's media (404) nor see the first user's local cache.
+- [x] The server returns `PRO_REQUIRED` for Coach, mesocycles and reports regardless of client state or payload; a seeded test entitlement unlocks Coach streaming/interruption/retry/replay, mesocycle drafts and fingerprint-cached reports with invalidation.
+- [x] Backend `vitest` 1073/1073, lint, build; Android `testDebugUnitTest test lintDebug assembleDebug verifyModuleGraph` green (1007 tests); `:app:connectedDebugAndroidTest` 11/11 on API 36.
+- [ ] Real R2 private bucket (+ CORS/CSP), real DeepSeek stream, Photo Picker/camera on devices, API 26 run, Play entitlements (Plan 6), production `db:migrate:media` + `db:migrate:ai`, `processDeletions` cron, legacy PWA `/api/coach` gating decision, Serwist must not cache `/api/media/read`.
+
+Evidence: [android-phase-05-media-ai.md](../../verification/android-phase-05-media-ai.md).
+
 ### Product parity gate
 
 - [ ] Complete the inventory in design spec section 6 without WebView screens.
