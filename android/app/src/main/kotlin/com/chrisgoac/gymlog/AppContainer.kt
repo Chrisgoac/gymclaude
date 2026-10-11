@@ -7,6 +7,10 @@ import androidx.core.content.edit
 import com.chrisgoac.gymlog.auth.ClerkAuthGateway
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
 import com.chrisgoac.gymlog.data.achievement.OfflineAchievementRepository
+import com.chrisgoac.gymlog.data.backup.RoomBackupRepository
+import com.chrisgoac.gymlog.domain.backup.BackupRepository
+import com.chrisgoac.gymlog.navigation.BackupServices
+import com.chrisgoac.gymlog.sync.ContentResolverBackupDocuments
 import com.chrisgoac.gymlog.data.catalog.CatalogAsset
 import com.chrisgoac.gymlog.domain.achievement.AchievementReconcileScheduler
 import com.chrisgoac.gymlog.domain.achievement.AchievementRepository
@@ -266,6 +270,18 @@ class AppContainer(private val application: Application) {
     /** Synced PWA settings (goal, progression, volume goals) of the open account; writes are local (outbox). */
     val settingsRepository: SettingsRepository = OfflineSettingsRepository(databases, ::localMutationRunner)
 
+    /**
+     * Backup export/import of the open account (PWA file format). A committed import invalidates every derived
+     * scope (achievement reconcile runs unlock/retain only: not a local edit) and asks for a sync.
+     */
+    val backupRepository: BackupRepository = RoomBackupRepository(
+        databases, ::localMutationRunner, now = syncClock::nowMillis,
+        onImported = {
+            statsInvalidation.publish(InvalidationScope.entries.toSet())
+            syncTriggers.onLocalMutation()
+        },
+    )
+
     /** Gyms of the open account; writes are local (outbox). */
     val gymRepository: GymRepository = OfflineGymRepository(databases, ::localMutationRunner)
 
@@ -355,7 +371,10 @@ class AppContainer(private val application: Application) {
     /** Null when Clerk is not configured: the signed-in shell is unreachable then. */
     val settingsServices: SettingsServices? by lazy {
         if (clerkConfigured) {
-            SettingsServices(syncUseCases, signOutUseCase, gyms = gymRepository, training = settingsRepository, device = deviceSettings)
+            SettingsServices(
+                syncUseCases, signOutUseCase, gyms = gymRepository, training = settingsRepository, device = deviceSettings,
+                backup = BackupServices(backupRepository, ContentResolverBackupDocuments(application.contentResolver), syncClock::nowMillis, ZoneId::systemDefault),
+            )
         } else {
             null
         }

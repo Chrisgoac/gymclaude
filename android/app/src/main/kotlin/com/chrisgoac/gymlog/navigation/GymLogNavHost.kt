@@ -84,6 +84,10 @@ import com.chrisgoac.gymlog.exercises.ExerciseListViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chrisgoac.gymlog.domain.SignOutUseCase
 import com.chrisgoac.gymlog.domain.SyncUseCases
+import com.chrisgoac.gymlog.settings.BackupDocuments
+import com.chrisgoac.gymlog.settings.BackupScreen
+import com.chrisgoac.gymlog.settings.BackupViewModel
+import com.chrisgoac.gymlog.domain.backup.BackupRepository
 import com.chrisgoac.gymlog.settings.GymsScreen
 import com.chrisgoac.gymlog.settings.GymsViewModel
 import com.chrisgoac.gymlog.settings.TrainingSettingsScreen
@@ -132,7 +136,11 @@ class SettingsServices(
     val gyms: GymRepository? = null,
     val training: SettingsRepository? = null,
     val device: DeviceSettingsRepository? = null,
+    val backup: BackupServices? = null,
 )
+
+/** Backup export/import: the repository, the SAF document opener and the clock/zone for the file name and dates. */
+class BackupServices(val repository: BackupRepository, val documents: BackupDocuments, val now: () -> Long, val zone: () -> ZoneId)
 
 /** What the history editor needs: the atomic save and the server-corrected clock (future-date check). */
 class HistoryEditServices(val save: SaveWorkoutDraftUseCase, val now: () -> Long)
@@ -528,6 +536,7 @@ private fun GymLogNavHost(
                         onSyncDetails = { navController.navigate(GymLogDestination.SyncDiagnostics) },
                         onGyms = settings?.takeIf { it.gyms != null && it.device != null }?.let { { navController.navigate(GymLogDestination.Gyms) } },
                         onTraining = settings?.takeIf { it.training != null && it.device != null }?.let { { navController.navigate(GymLogDestination.TrainingSettings) } },
+                        onBackup = settings?.backup?.let { { navController.navigate(GymLogDestination.Backup) } },
                     )
                 }
             }
@@ -547,6 +556,18 @@ private fun GymLogNavHost(
                     SmokeScreen(GymLogDestination.TrainingSettings, navController, secondary = true)
                 } else {
                     TrainingSettingsScreen(viewModel { TrainingSettingsViewModel(training, device, routines) }, onBack = { navController.popBackStack() })
+                }
+            }
+            composable<GymLogDestination.Backup> {
+                val backup = settings?.backup
+                if (backup == null) {
+                    SmokeScreen(GymLogDestination.Backup, navController, secondary = true)
+                } else {
+                    BackupScreen(
+                        viewModel { BackupViewModel(backup.repository, backup.documents, backup.now, backup.zone) },
+                        onBack = { navController.popBackStack() },
+                        zone = backup.zone,
+                    )
                 }
             }
             composable<GymLogDestination.SyncDiagnostics> {

@@ -32,6 +32,7 @@ fun SettingsScreen(
     /** Null hides the entry (the destination is not wired). */
     onGyms: (() -> Unit)? = null,
     onTraining: (() -> Unit)? = null,
+    onBackup: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsState()
     Column(modifier.fillMaxSize()) {
@@ -41,6 +42,7 @@ fun SettingsScreen(
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (onTraining != null) HierroButton(stringResource(R.string.settings_training), onTraining, variant = HierroButtonVariant.Secondary)
             if (onGyms != null) HierroButton(stringResource(R.string.settings_gyms), onGyms, variant = HierroButtonVariant.Secondary)
+            if (onBackup != null) HierroButton(stringResource(R.string.settings_backup), onBackup, variant = HierroButtonVariant.Secondary)
             SyncStatusCard(state.sync, onSyncNow = viewModel::syncNow, onDetails = onSyncDetails)
             AccountCard(state.signOut, viewModel)
         }

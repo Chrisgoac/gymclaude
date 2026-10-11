@@ -1,0 +1,11 @@
+{
+  "app": "gymlog",
+  "version": 6,
+  "exportedAt": 1000,
+  "data": {
+    "gyms": [], "exercises": [],
+    "routines": [{ "id": "r1", "userId": null, "nombre": "R", "orden": 0, "archivada": false, "updatedAt": 1000, "deletedAt": null }],
+    "routineExercises": [{ "id": "re1", "routineId": "r1", "exerciseId": "seed-press-banca", "orden": 0, "updatedAt": 1000, "deletedAt": null }],
+    "workoutSessions": [], "loggedExercises": [], "loggedSets": [], "exercisePhotos": []
+  }
+}

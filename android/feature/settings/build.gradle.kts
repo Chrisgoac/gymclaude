@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewmodel)
 
     testImplementation(libs.junit)
