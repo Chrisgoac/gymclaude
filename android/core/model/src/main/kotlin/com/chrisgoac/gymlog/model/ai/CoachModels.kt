@@ -25,6 +25,9 @@ object CoachLimits {
 
     /** Body-metric labels in the snapshot. */
     const val MAX_METRIC_LABEL_CHARS = 80
+
+    /** Weekly personal records in the snapshot (`semana.prs` ≤ 100; more is a permanent 400). */
+    const val MAX_WEEK_PRS = 100
 }
 
 /** `AI_REPORT_CATEGORIES`. */

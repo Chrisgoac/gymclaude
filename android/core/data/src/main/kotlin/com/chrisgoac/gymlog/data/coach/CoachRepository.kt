@@ -42,8 +42,10 @@ import kotlinx.coroutines.flow.map
  * again (a retry replay, a sync from another device) never creates a second row. Nothing is logged: the
  * question, the answer and tokens never reach logs.
  *
- * [snapshot] is read for every attempt (current Room data, never cached). A `409 AI_RESPONSE_IN_PROGRESS`
- * (another attempt of the same message holds the server lease) is waited out with [inProgressBackoffMillis]
+ * [snapshot] is read for every attempt (current Room data, never cached) from the same open database the
+ * turn was started on, so an account switch mid-turn can never mix another account's data into the request.
+ * A `409 AI_RESPONSE_IN_PROGRESS` (another attempt of the same message holds the server lease) is waited
+ * out with [inProgressBackoffMillis] (a server `Retry-After` is honoured up to [MAX_RETRY_AFTER_SECONDS])
  * before giving up as [CoachFailure.BUSY].
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -51,7 +53,7 @@ class OfflineCoachRepository(
     private val databases: UserDatabaseManager,
     private val runnerFor: (GymLogDatabase) -> LocalMutationRunner,
     private val api: CoachApi,
-    private val snapshot: suspend () -> CoachSnapshot,
+    private val snapshot: suspend (GymLogDatabase) -> CoachSnapshot,
     private val inProgressBackoffMillis: List<Long> = DEFAULT_IN_PROGRESS_BACKOFF_MILLIS,
     private val wait: suspend (Long) -> Unit = { delay(it) },
 ) : CoachRepository {
@@ -66,12 +68,12 @@ class OfflineCoachRepository(
         var waits = 0
         while (true) {
             try {
-                val request = CoachRequestDto(clientMessageId, question, snapshot().toDto())
+                val request = CoachRequestDto(clientMessageId, question, snapshot(open.database).toDto())
                 streamOnce(open, request) { emit(it) }
                 return@flow
             } catch (e: SyncApiException.Api) {
                 if (e.rawCode != IN_PROGRESS || waits >= inProgressBackoffMillis.size) throw e.toCoach()
-                wait(e.retryAfterSeconds?.let { it * 1000 } ?: inProgressBackoffMillis[waits])
+                wait(retryAfterMillis(e.retryAfterSeconds) ?: inProgressBackoffMillis[waits])
                 waits++
             } catch (e: SyncApiException) {
                 throw e.toCoach()
@@ -94,27 +96,33 @@ class OfflineCoachRepository(
         val answer = StringBuilder()
         var responseId: String? = null
         var completed = false
-        api.coach(open.userId, request) { event ->
-            if (completed) return@coach
-            when (event) {
-                is CoachStreamEvent.Start -> {
-                    responseId = event.responseId
-                    emit(CoachStreamUpdate.Started(event.responseId))
+        try {
+            api.coach(open.userId, request) { event ->
+                if (completed) return@coach
+                when (event) {
+                    is CoachStreamEvent.Start -> {
+                        responseId = event.responseId
+                        emit(CoachStreamUpdate.Started(event.responseId))
+                    }
+                    is CoachStreamEvent.Delta -> {
+                        answer.append(event.text)
+                        emit(CoachStreamUpdate.Delta(event.text))
+                    }
+                    is CoachStreamEvent.Complete -> {
+                        // A complete whose id is not the started one is not this turn's answer.
+                        if (responseId != null && responseId != event.responseId) throw CoachException(CoachFailure.INTERRUPTED)
+                        storeAssistantMessage(open, event.responseId, answer.toString())
+                        completed = true
+                        emit(CoachStreamUpdate.Completed(event.responseId))
+                    }
+                    is CoachStreamEvent.Error ->
+                        throw CoachException(if (event.retryable) CoachFailure.UNAVAILABLE else CoachFailure.REJECTED)
                 }
-                is CoachStreamEvent.Delta -> {
-                    answer.append(event.text)
-                    emit(CoachStreamUpdate.Delta(event.text))
-                }
-                is CoachStreamEvent.Complete -> {
-                    // A complete whose id is not the started one is not this turn's answer.
-                    if (responseId != null && responseId != event.responseId) throw CoachException(CoachFailure.INTERRUPTED)
-                    storeAssistantMessage(open, event.responseId, answer.toString())
-                    completed = true
-                    emit(CoachStreamUpdate.Completed(event.responseId))
-                }
-                is CoachStreamEvent.Error ->
-                    throw CoachException(if (event.retryable) CoachFailure.UNAVAILABLE else CoachFailure.REJECTED)
             }
+        } catch (e: SyncApiException) {
+            // The answer is already stored: a connection drop while closing the stream is not a failure
+            // (surfacing it would show a duplicate "incomplete" turn under the completed one).
+            if (!completed || !(e is SyncApiException.Transport || e is SyncApiException.Malformed)) throw e
         }
         if (!completed) throw CoachException(CoachFailure.INTERRUPTED)
     }
@@ -151,6 +159,9 @@ class OfflineCoachRepository(
     companion object {
         /** ~14 s in total: a live attempt's lease ends when it finishes or fails, at worst 60 s later. */
         val DEFAULT_IN_PROGRESS_BACKOFF_MILLIS = listOf(2_000L, 4_000L, 8_000L)
+
+        /** Longest `Retry-After` the in-progress wait honours: a larger one (or a daily quota) is not waited out inline. */
+        const val MAX_RETRY_AFTER_SECONDS = 15L
         private const val IN_PROGRESS = "AI_RESPONSE_IN_PROGRESS"
         private const val PRO_REQUIRED = "PRO_REQUIRED"
     }
@@ -170,6 +181,10 @@ class OfflineCoachRepository(
     )
 }
 
+/** A server `Retry-After` in ms, capped at [OfflineCoachRepository.MAX_RETRY_AFTER_SECONDS]; null when absent. */
+internal fun retryAfterMillis(seconds: Long?): Long? =
+    seconds?.coerceIn(0L, OfflineCoachRepository.MAX_RETRY_AFTER_SECONDS)?.let { it * 1000 }
+
 /** The wire allowlist of a [CoachSnapshot]; labels are clipped to the server's bounds (a blank one becomes "?"). */
 fun CoachSnapshot.toDto(): CoachSnapshotDto = CoachSnapshotDto(
     estancados = stalls.map { CoachSnapshotDto.Estancado(it.exercise.label(WireLimits.MAX_EXERCISE_NAME_CHARS), it.sessionsWithoutImprovement) },
@@ -178,7 +193,7 @@ fun CoachSnapshot.toDto(): CoachSnapshotDto = CoachSnapshotDto(
         objetivo = week.target,
         volumen = week.volume,
         deltaPct = week.deltaPct,
-        prs = week.records.map { CoachSnapshotDto.Pr(it.exercise.label(WireLimits.MAX_EXERCISE_NAME_CHARS), it.kind.wire) },
+        prs = week.records.take(WireLimits.MAX_WEEK_PRS).map { CoachSnapshotDto.Pr(it.exercise.label(WireLimits.MAX_EXERCISE_NAME_CHARS), it.kind.wire) },
     ),
     grupos = groups.map {
         CoachSnapshotDto.Grupo(it.group.label(WireLimits.MAX_GROUP_LABEL_CHARS), it.weekVolume, it.daysWithoutTraining, it.target)

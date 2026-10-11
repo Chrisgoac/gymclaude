@@ -287,7 +287,7 @@ class AppContainer(private val application: Application) {
             repository = OfflineCoachRepository(
                 databases, ::localMutationRunner,
                 api = createCoachApi(BuildConfig.API_BASE_URL, authSession, serverClock),
-                snapshot = { offlineStats.readCoachSnapshot(GymFilter.All) },
+                snapshot = { database -> offlineStats.readCoachSnapshot(GymFilter.All, database) },
             ),
             entitlements = entitlements,
             online = connectivity.online,

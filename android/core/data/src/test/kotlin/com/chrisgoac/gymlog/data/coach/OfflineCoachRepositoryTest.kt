@@ -82,13 +82,14 @@ class OfflineCoachRepositoryTest {
     }
 
     private var snapshotReads = 0
+    private val snapshotDatabases = mutableListOf<GymLogDatabase>()
     private val waits = mutableListOf<Long>()
 
     private fun repo(api: CoachApi) = OfflineCoachRepository(
         FakeManager(db),
         { RoomLocalMutationRunner(db, DeviceId("test-device"), clock = { now++ }) },
         api,
-        snapshot = { snapshotReads++; SNAPSHOT },
+        snapshot = { database -> snapshotDatabases += database; snapshotReads++; SNAPSHOT },
         wait = { waits += it },
     )
 
@@ -191,6 +192,34 @@ class OfflineCoachRepositoryTest {
         assertEquals(listOf(2_000L, 4_000L, 8_000L), waits)
     }
 
+    @Test fun `a server Retry-After is honoured but capped at 15 seconds`() = runTest {
+        fun busy(retryAfter: Long) = SyncApiException.Api(409, ApiErrorCode.Unknown, "AI_RESPONSE_IN_PROGRESS", true, retryAfter, null, null, "busy")
+        val coach = repo(FakeApi(Attempt(emptyList(), busy(3)), Attempt(emptyList(), busy(86_400)), complete()))
+        coach.send(MSG, "q").toList()
+        assertEquals(listOf(3_000L, 15_000L), waits)
+    }
+
+    @Test fun `a transport error after complete is not a failure and leaves one answer`() = runTest {
+        val api = FakeApi(Attempt(complete().events, SyncApiException.Transport(IOException("closed while draining"))))
+        val coach = repo(api)
+
+        val updates = coach.send(MSG, "q").toList()
+
+        assertEquals(CoachStreamUpdate.Completed(RESP), updates.last())
+        assertEquals(listOf(MSG, RESP), coach.observeThread().first().map { it.id })
+        assertEquals(1, api.requests.size)
+    }
+
+    @Test fun `an api error is still a failure even after complete`() = runTest {
+        val coach = repo(FakeApi(Attempt(complete().events, SyncApiException.SessionRequired())))
+        assertEquals(CoachFailure.SESSION, failureOf { coach.send(MSG, "q").toList() })
+    }
+
+    @Test fun `the snapshot is read from the database the turn started on`() = runTest {
+        repo(FakeApi(complete())).send(MSG, "q").toList()
+        assertEquals(listOf(db), snapshotDatabases)
+    }
+
     @Test fun `server errors map to what the screen offers`() = runTest {
         fun api(status: Int, code: String, retryable: Boolean) =
             FakeApi(Attempt(emptyList(), SyncApiException.Api(status, ApiErrorCode.Unknown, code, retryable, null, null, null, "m")))
@@ -239,6 +268,8 @@ class OfflineCoachRepositoryTest {
                 """"cuerpo":{"peso":{"actual":80.5,"delta4sem":-1.0},"medidas":[]}}""",
             json,
         )
+        val manyPrs = SNAPSHOT.copy(week = SNAPSHOT.week.copy(records = List(150) { CoachSnapshot.Record("E$it", RecordKind.ONE_REP_MAX) }))
+        assertEquals("the server accepts at most 100 weekly PRs", 100, manyPrs.toDto().semana.prs.size)
         val long = SNAPSHOT.copy(stalls = listOf(CoachSnapshot.Line("a".repeat(199) + "💪", 1), CoachSnapshot.Line(" ", 1)))
         assertEquals(listOf("a".repeat(199), "?"), long.toDto().estancados.map { it.ejercicio })
     }

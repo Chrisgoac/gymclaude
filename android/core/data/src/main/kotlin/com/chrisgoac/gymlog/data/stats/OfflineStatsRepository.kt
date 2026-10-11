@@ -158,8 +158,11 @@ class OfflineStatsRepository(
      * trained / goals and the body summary. Read fresh for every Coach turn, so a historical edit or a
      * sync is reflected in the next one. Never contains photos, ids or URLs.
      */
-    suspend fun readCoachSnapshot(gym: GymFilter): CoachSnapshot {
-        val database = checkNotNull(databases.current.value) { "No account database is open" }.database
+    suspend fun readCoachSnapshot(gym: GymFilter): CoachSnapshot =
+        readCoachSnapshot(gym, checkNotNull(databases.current.value) { "No account database is open" }.database)
+
+    /** [readCoachSnapshot] from a [database] the caller already holds (the one its request belongs to). */
+    suspend fun readCoachSnapshot(gym: GymFilter, database: GymLogDatabase): CoachSnapshot {
         return database.withTransaction {
             val dao = database.statsDao()
             val at = Instant.ofEpochMilli(now())

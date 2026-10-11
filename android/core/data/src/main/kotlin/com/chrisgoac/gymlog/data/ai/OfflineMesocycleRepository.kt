@@ -1,5 +1,6 @@
 package com.chrisgoac.gymlog.data.ai
 
+import com.chrisgoac.gymlog.data.coach.retryAfterMillis
 import com.chrisgoac.gymlog.data.coach.toDto
 import com.chrisgoac.gymlog.database.GymLogDatabase
 import com.chrisgoac.gymlog.database.LocalMutation
@@ -201,7 +202,7 @@ internal suspend fun <T> withInProgressRetry(backoff: List<Long>, wait: suspend 
             return call()
         } catch (e: SyncApiException.Api) {
             if (e.rawCode != IN_PROGRESS || waits >= backoff.size) throw e.toAiFailure()
-            wait(e.retryAfterSeconds?.let { it * 1000 } ?: backoff[waits])
+            wait(retryAfterMillis(e.retryAfterSeconds) ?: backoff[waits])
             waits++
         } catch (e: SyncApiException) {
             throw e.toAiFailure()
