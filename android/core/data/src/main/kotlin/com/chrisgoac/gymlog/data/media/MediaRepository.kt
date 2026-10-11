@@ -28,6 +28,7 @@ import com.chrisgoac.gymlog.network.SyncApiException
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
@@ -52,7 +53,9 @@ import kotlinx.coroutines.withContext
  *   tombstones the server rows itself. A confirmed upload writes the row locally only if pull has not
  *   brought it yet (same id, so pull later replaces it; never a duplicate) and moves the file to the
  *   cache; a confirmed delete tombstones the local row.
- * - Signed read URLs are kept in memory only, keyed by account and photo, and refreshed when expired.
+ * - Displayable copies and signed read URLs are keyed by photo id **and object key**: a photo replaced
+ *   elsewhere under the same id (the PWA swaps the key of its single exercise photo) never shows the old
+ *   image. Signed URLs are kept in memory only and refreshed when expired.
  */
 class OfflineMediaRepository(
     private val databases: UserDatabaseManager,
@@ -200,18 +203,25 @@ class OfflineMediaRepository(
             val file = row.fileName?.let { File(pendingDir(hash), it) }
             if (file != null && file.isFile) return MediaImage.Available(file.path)
         }
-        val cached = cacheFile(hash, mediaId)
+        val objectKey = liveObjectKey(open.database, mediaId)
+        val cached = cacheFile(hash, mediaId, objectKey)
         if (cached.isFile) {
             cached.setLastModified(System.currentTimeMillis()) // LRU recency
             return MediaImage.Available(cached.path)
         }
-        return download(open.userId, hash, mediaId, cached)
+        return download(open.userId, hash, mediaId, objectKey, cached)
     }
 
-    private suspend fun download(userId: String, hash: String, mediaId: String, target: File): MediaImage {
+    /** The current object key of a live synced photo (null when there is no live row). */
+    private suspend fun liveObjectKey(db: GymLogDatabase, mediaId: String): String? =
+        db.exercisePhotoDao().findById(mediaId)?.takeIf { it.deletedAt == null }?.key
+            ?: db.progressPhotoDao().findById(mediaId)?.takeIf { it.deletedAt == null }?.key
+
+    private suspend fun download(userId: String, hash: String, mediaId: String, objectKey: String?, target: File): MediaImage {
         repeat(2) { attempt ->
             val grant = try {
-                validGrant(hash, mediaId) ?: api.readGrant(userId, mediaId).also { grants[grantKey(hash, mediaId)] = it }
+                validGrant(hash, mediaId, objectKey)
+                    ?: api.readGrant(userId, mediaId).also { grants[grantKey(hash, mediaId, objectKey)] = it }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SyncApiException) {
@@ -223,7 +233,7 @@ class OfflineMediaRepository(
                 throw e
             } catch (e: SyncApiException.Api) {
                 // An expired/refused signed URL: forget it and ask for a fresh grant once.
-                grants.remove(grantKey(hash, mediaId))
+                grants.remove(grantKey(hash, mediaId, objectKey))
                 if (e.rawCode == MediaApiImpl.SIGNED_URL_REJECTED && !e.retryable && attempt == 0) return@repeat
                 return MediaImage.Unavailable(MediaImage.Unavailable.Reason.OFFLINE)
             } catch (e: SyncApiException) {
@@ -235,6 +245,8 @@ class OfflineMediaRepository(
                 if (databases.current.value?.userId != userId) return@withLock false
                 withContext(Dispatchers.IO) {
                     writeAtomically(target, bytes)
+                    // Copies of an older key of this photo are stale from now on.
+                    cachedFiles(hash, mediaId).filter { it != target }.forEach { it.delete() }
                     trimCache(hash)
                 }
                 true
@@ -254,8 +266,8 @@ class OfflineMediaRepository(
     )
 
     /** A memory grant still usable for [GRANT_SAFETY_MILLIS]; expired ones are dropped. */
-    private fun validGrant(hash: String, mediaId: String): MediaReadGrant? {
-        val key = grantKey(hash, mediaId)
+    private fun validGrant(hash: String, mediaId: String, objectKey: String?): MediaReadGrant? {
+        val key = grantKey(hash, mediaId, objectKey)
         val grant = grants[key] ?: return null
         if (grant.expiresAt - GRANT_SAFETY_MILLIS > now()) return grant
         grants.remove(key, grant)
@@ -300,8 +312,8 @@ class OfflineMediaRepository(
             }
         }
         dropFile?.let { File(pendingDir(hash), it).delete() }
-        cacheFile(hash, mediaId).delete()
-        grants.remove(grantKey(hash, mediaId))
+        cachedFiles(hash, mediaId).forEach { it.delete() }
+        forgetGrants(hash, mediaId)
         if (queued) schedule(hash, mediaId)
     }
 
@@ -382,8 +394,11 @@ class OfflineMediaRepository(
                     dropped += it
                 }
         }
-        dropped.forEach { grants.remove(grantKey(hash, it.id)) }
-        val keep = live.mapTo(HashSet()) { fileSafe(it) + JPEG }
+        dropped.forEach { forgetGrants(hash, it.id) }
+        // Only the copy of each live photo's CURRENT key survives (a replaced key's copy is stale).
+        val keep = HashSet<String>()
+        exercise.forEach { if (it.deletedAt == null) keep += cacheName(it.id, it.key) }
+        progress.forEach { if (it.deletedAt == null) keep += cacheName(it.id, it.key) }
         withContext(Dispatchers.IO) {
             dropped.forEach { row -> row.fileName?.let { File(pendingDir(hash), it).delete() } }
             cacheDir(hash).listFiles()?.filter { it.name !in keep }?.forEach { it.delete() }
@@ -444,7 +459,7 @@ class OfflineMediaRepository(
         } catch (e: IOException) {
             return recordAttempt(open.database, row, "IO")
         }
-        grants[grantKey(hash, row.id)] = MediaReadGrant(response.mediaId, response.readUrl, response.readUrlExpiresAt)
+        grants[grantKey(hash, row.id, response.objectKey)] = MediaReadGrant(response.mediaId, response.readUrl, response.readUrlExpiresAt)
 
         val confirmed = open.database.withTransaction {
             val current = open.database.pendingMediaDao().findById(row.id)
@@ -455,7 +470,7 @@ class OfflineMediaRepository(
         }
         if (!confirmed) return null
         withContext(Dispatchers.IO) {
-            moveToCache(file, cacheFile(hash, row.id))
+            moveToCache(file, cacheFile(hash, row.id, response.objectKey))
             trimCache(hash)
         }
         return MediaWorkOutcome.DONE
@@ -485,8 +500,8 @@ class OfflineMediaRepository(
             }
             open.database.pendingMediaDao().delete(row.id)
         }
-        withContext(Dispatchers.IO) { cacheFile(hash, row.id).delete() }
-        grants.remove(grantKey(hash, row.id))
+        withContext(Dispatchers.IO) { cachedFiles(hash, row.id).forEach { it.delete() } }
+        forgetGrants(hash, row.id)
         return MediaWorkOutcome.DONE
     }
 
@@ -569,7 +584,13 @@ class OfflineMediaRepository(
 
     private fun cacheDir(hash: String) = File(cacheRoot, "users/$hash/media")
 
-    private fun cacheFile(hash: String, mediaId: String) = File(cacheDir(hash), "${fileSafe(mediaId)}$JPEG")
+    private fun cacheFile(hash: String, mediaId: String, objectKey: String?) = File(cacheDir(hash), cacheName(mediaId, objectKey))
+
+    /** Every cached copy of [mediaId], whatever object key it was stored under. */
+    private fun cachedFiles(hash: String, mediaId: String): List<File> {
+        val prefix = "${fileSafe(mediaId)}."
+        return cacheDir(hash).listFiles()?.filter { it.name.startsWith(prefix) }.orEmpty()
+    }
 
     /** Evicts least recently used copies until the account's cache fits [maxCacheBytes]. */
     private fun trimCache(hash: String) {
@@ -583,7 +604,11 @@ class OfflineMediaRepository(
         }
     }
 
-    private fun grantKey(hash: String, mediaId: String) = "$hash/$mediaId"
+    private fun grantKey(hash: String, mediaId: String, objectKey: String?) = "$hash/$mediaId/${keyTag(objectKey)}"
+
+    private fun forgetGrants(hash: String, mediaId: String) {
+        grants.keys.removeIf { it.startsWith("$hash/$mediaId/") }
+    }
 
     private fun writeAtomically(target: File, bytes: ByteArray) {
         target.parentFile?.mkdirs()
@@ -649,6 +674,18 @@ class OfflineMediaRepository(
         /** A grant is not used in its last 30 s (download time, clock skew). */
         const val GRANT_SAFETY_MILLIS = 30_000L
         private const val ORPHAN_AGE_MILLIS = 60 * 60_000L
+
+        /** `<id>.<key tag>.jpg`: one copy per photo and object key. */
+        internal fun cacheName(mediaId: String, objectKey: String?) = "${fileSafe(mediaId)}.${keyTag(objectKey)}$JPEG"
+
+        /** Short, file-safe digest of an object key ("none" without one). */
+        private fun keyTag(objectKey: String?): String {
+            if (objectKey == null) return "none"
+            val digest = MessageDigest.getInstance("SHA-256").digest(objectKey.toByteArray())
+            return digest.take(KEY_TAG_BYTES).joinToString("") { "%02x".format(it) }
+        }
+
+        private const val KEY_TAG_BYTES = 8
 
         /** Ids are server-validated record ids; anything outside a safe file-name alphabet is hex-encoded. */
         private fun fileSafe(id: String): String =

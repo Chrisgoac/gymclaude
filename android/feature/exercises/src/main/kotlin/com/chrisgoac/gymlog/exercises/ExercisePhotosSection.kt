@@ -106,15 +106,15 @@ internal fun ExercisePhotosContent(state: ExercisePhotosUiState, actions: Exerci
                 }
             }
         }
-        if (state.canAdd || state.saving) {
-            HierroButton(
-                stringResource(R.string.exercises_photos_pick), actions.onPick, Modifier.fillMaxWidth(),
-                loading = state.saving, loadingLabel = stringResource(R.string.exercises_photos_saving),
-            )
-            HierroButton(stringResource(R.string.exercises_photos_camera), actions.onCamera, Modifier.fillMaxWidth(), variant = HierroButtonVariant.Secondary, enabled = !state.saving)
-        } else {
-            HierroText(stringResource(R.string.exercises_photos_limit, MAX_EXERCISE_PHOTOS), color = HierroTheme.colors.textMuted)
-        }
+        if (state.replaces) HierroText(stringResource(R.string.exercises_photos_replace_note), color = HierroTheme.colors.textMuted)
+        HierroButton(
+            stringResource(if (state.replaces) R.string.exercises_photos_replace_pick else R.string.exercises_photos_pick), actions.onPick, Modifier.fillMaxWidth(),
+            loading = state.saving, loadingLabel = stringResource(R.string.exercises_photos_saving),
+        )
+        HierroButton(
+            stringResource(if (state.replaces) R.string.exercises_photos_replace_camera else R.string.exercises_photos_camera), actions.onCamera, Modifier.fillMaxWidth(),
+            variant = HierroButtonVariant.Secondary, enabled = state.canAdd,
+        )
     }
     state.viewing?.let { photo ->
         PhotoDialog(photo, confirming = state.pendingDelete?.id == photo.id, actions)

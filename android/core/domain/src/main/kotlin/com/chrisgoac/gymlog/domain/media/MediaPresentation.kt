@@ -70,9 +70,12 @@ fun MediaUiState.actions(): MediaActions {
     )
 }
 
-/** Identity of the image a photo currently has: it changes when the photo moves between queue and storage. */
+/**
+ * Identity of the image a photo currently has: it changes when the photo moves between queue and storage,
+ * and when a synced photo gets a new object key (replaced on another device under the same id).
+ */
 fun MediaItem.imageTag(): String = when (status) {
-    MediaStatus.Synced -> "synced"
+    MediaStatus.Synced -> "synced:${objectKey.orEmpty()}"
     is MediaStatus.PendingUpload -> "pending"
     is MediaStatus.Rejected -> "rejected"
 }
@@ -102,6 +105,12 @@ class MediaImageLoader(
     fun retry(item: MediaItem) {
         state.update { it - item.id }
         load(item)
+    }
+
+    /** Reloads photos already loaded whose image changed (e.g. a new object key arrived by sync). */
+    fun refresh(items: List<MediaItem>) {
+        val current = state.value
+        items.filter { item -> current[item.id]?.let { it.tag != item.imageTag() } == true }.forEach(::load)
     }
 
     /** Forgets images of photos that are gone. */

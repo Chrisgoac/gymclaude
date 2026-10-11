@@ -35,8 +35,11 @@ private const val STOP_TIMEOUT_MILLIS = 5_000L
 private const val KEY_CAM_URI = "camera_uri"
 private const val KEY_CAM_TOKEN = "camera_token"
 
-/** Photos one exercise may have; the picker offers no more once reached. */
-const val MAX_EXERCISE_PHOTOS = 6
+/**
+ * Photos one exercise may have (PWA parity: the PWA models exactly one). Adding another replaces it: the
+ * new image is saved first and only then is the old one deleted, so a refused pick never loses the photo.
+ */
+const val MAX_EXERCISE_PHOTOS = 1
 
 data class ExercisePhotoUi(val id: String, val state: MediaUiState)
 
@@ -50,11 +53,15 @@ data class ExercisePhotosUiState(
     val pendingDelete: ExercisePhotoUi? = null,
     val message: PhotoMessage? = null,
 ) {
-    val canAdd: Boolean get() = photos.size < MAX_EXERCISE_PHOTOS && !saving
+    val canAdd: Boolean get() = !saving
+
+    /** True when adding a photo replaces the current one (the exercise already has its photo). */
+    val replaces: Boolean get() = photos.size >= MAX_EXERCISE_PHOTOS
 }
 
 /**
- * Photos attached to one custom exercise: add from the Photo Picker or the camera (no permission),
+ * The photo of one custom exercise (at most [MAX_EXERCISE_PHOTOS]): add or replace it from the Photo
+ * Picker or the camera (no permission),
  * see each one with its upload state, open it, retry / discard a refused upload and delete with
  * confirmation. Photos stay on screen while a reload fails; images are fetched on demand. Exercise
  * photos are not behind the privacy cover (unlike body progress photos). The camera slot lives in
@@ -98,6 +105,8 @@ class ExercisePhotosViewModel(
                         items.value = mine
                         failed.value = false
                         loader.prune(mine.mapTo(HashSet()) { it.id })
+                        // A replacement made elsewhere (same id, new object key) must not keep the old image.
+                        loader.refresh(mine)
                         retries.prune(mine)
                     }
                     .catch { failed.value = true }
@@ -150,10 +159,12 @@ class ExercisePhotosViewModel(
     }
 
     private fun ingest(uri: String, slot: CaptureSlot?) {
-        if (local.value.saving || (items.value?.size ?: 0) >= MAX_EXERCISE_PHOTOS) {
+        if (local.value.saving) {
             slot?.let(camera::release)
             return
         }
+        // The photo(s) this one replaces, as they were when the user picked it.
+        val replaced = items.value.orEmpty()
         local.update { it.copy(saving = true, message = null) }
         viewModelScope.launch {
             val outcome = try {
@@ -165,13 +176,30 @@ class ExercisePhotosViewModel(
             } finally {
                 slot?.let(camera::release)
             }
-            val message = when (outcome) {
+            var message = when (outcome) {
                 is EnqueueResult.Queued -> null
                 is EnqueueResult.Invalid -> PhotoMessage.of(outcome.reason)
                 null -> PhotoMessage.ActionFailed
             }
+            if (outcome is EnqueueResult.Queued) {
+                val removed = runCatchingAction {
+                    replaced.filter { it.id != outcome.mediaId }.forEach { old ->
+                        if (old.status is MediaStatus.Rejected) media.discard(old.id) else media.delete(old.id)
+                    }
+                }
+                if (!removed) message = PhotoMessage.ActionFailed
+            }
             local.update { it.copy(saving = false, message = message) }
         }
+    }
+
+    private suspend fun runCatchingAction(block: suspend () -> Unit): Boolean = try {
+        block()
+        true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        false
     }
 
     fun dismissMessage() = local.update { it.copy(message = null) }

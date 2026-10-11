@@ -200,6 +200,12 @@ class MediaRepositoryTest {
 
     private fun pendingFile(id: String) = File(pendingDir(), "$id.jpg")
 
+    /** The display copy of [id] stored under object key [key]. */
+    private fun cachedCopy(id: String, key: String, hash: String = hashA) = File(cacheDir(hash), OfflineMediaRepository.cacheName(id, key))
+
+    /** The display copy of an uploaded [id] (under the key the fake server assigned). */
+    private fun uploadedCopy(id: String) = cachedCopy(id, api.objects.getValue(id))
+
     // ── Compression ──
 
     @Test fun `EXIF rotation is applied to the pixels and the output carries no EXIF`() = runTest {
@@ -313,7 +319,7 @@ class MediaRepositoryTest {
         api.grantFailure = { SyncApiException.Transport(IOException("offline")) }
         api.downloadFailure = { SyncApiException.Transport(IOException("offline")) }
         val afterRestart = repo()
-        val cached = File(cacheDir(), "$id.jpg")
+        val cached = uploadedCopy(id)
         assertEquals(MediaImage.Available(cached.path), afterRestart.image(id))
         assertEquals(0, api.downloads.size)
 
@@ -418,7 +424,7 @@ class MediaRepositoryTest {
         media.process(USER_A, id)
 
         assertTrue(pendingDir().listFiles().orEmpty().isEmpty())
-        val cached = File(cacheDir(), "$id.jpg")
+        val cached = uploadedCopy(id)
         assertTrue(cached.isFile)
         assertEquals(MediaImage.Available(cached.path), media.image(id))
         assertEquals(0, api.downloads.size)
@@ -427,7 +433,8 @@ class MediaRepositoryTest {
     @Test fun `deleting a synced photo hides it at once and tombstones it once the server confirms`() = runTest {
         dbA.progressPhotoDao().upsert(ProgressPhotoEntity("p1", 10, null, "/api/media/read/p1", "users/h/progress/k", 7, "frente", null, 3))
         api.objects["p1"] = "users/h/progress/k"
-        val cached = File(cacheDir().apply { mkdirs() }, "p1.jpg").apply { writeBytes(byteArrayOf(1)) }
+        cacheDir().mkdirs()
+        val cached = cachedCopy("p1", "users/h/progress/k").apply { writeBytes(byteArrayOf(1)) }
         api.deleteFailure = { SyncApiException.Transport(IOException("offline")) }
 
         media.delete("p1")
@@ -468,7 +475,7 @@ class MediaRepositoryTest {
 
     @Test fun `signed URLs live in memory only and are refreshed once expired`() = runTest {
         dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("x1", 10, null, "e1", "/api/media/read/x1", "users/h/exercise/k", 1))
-        val cached = File(cacheDir(), "x1.jpg")
+        val cached = cachedCopy("x1", "users/h/exercise/k")
 
         assertEquals(MediaImage.Available(cached.path), media.image("x1"))
         assertEquals(1, api.grantsIssued)
@@ -500,6 +507,23 @@ class MediaRepositoryTest {
         assertTrue(written.none { it.contains("https://r2.test") })
     }
 
+    @Test fun `a new object key under the same id never shows the old cached image`() = runTest {
+        dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("x1", 10, null, "e1", "/api/media/read/x1", "users/h/exercise/old", 1))
+        api.objects["x1"] = "users/h/exercise/old"
+        val old = cachedCopy("x1", "users/h/exercise/old")
+        assertEquals(MediaImage.Available(old.path), media.image("x1"))
+        assertEquals(1, api.grantsIssued)
+
+        // The PWA replaced the photo: pull brings the same row with a new key.
+        dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("x1", 20, null, "e1", "/api/media/read/x1", "users/h/exercise/new", 2))
+        api.objects["x1"] = "users/h/exercise/new"
+        val fresh = cachedCopy("x1", "users/h/exercise/new")
+
+        assertEquals(MediaImage.Available(fresh.path), media.image("x1"))
+        assertEquals("the old key's grant is not reused", 2, api.grantsIssued)
+        assertFalse("the old key's copy is dropped", old.exists())
+    }
+
     @Test fun `an uncached photo offline is unavailable, not an error`() = runTest {
         dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("x1", 10, null, "e1", "/api/media/read/x1", "k", 1))
         api.grantFailure = { SyncApiException.Transport(IOException("offline")) }
@@ -511,7 +535,7 @@ class MediaRepositoryTest {
     @Test fun `files, caches and work stay inside the exact account`() = runTest {
         val id = queuedId(media.enqueue(sourceJpeg(100, 100), MediaOwner.Exercise("e1")))
         media.process(USER_A, id)
-        val aCopy = File(cacheDir(), "$id.jpg")
+        val aCopy = uploadedCopy(id)
         assertTrue(aCopy.isFile)
 
         val dbB = memoryDb()
@@ -540,9 +564,10 @@ class MediaRepositoryTest {
         dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("gone", 10, null, "e1", "/api/media/read/gone", "k2", 2))
         val queued = queuedId(media.enqueue(sourceJpeg(100, 100), MediaOwner.Exercise("e1")))
         cacheDir().mkdirs()
-        val liveCopy = File(cacheDir(), "live.jpg").apply { writeBytes(byteArrayOf(1)) }
-        val goneCopy = File(cacheDir(), "gone.jpg").apply { writeBytes(byteArrayOf(1)) }
-        val strayCopy = File(cacheDir(), "never-synced.jpg").apply { writeBytes(byteArrayOf(1)) }
+        val liveCopy = cachedCopy("live", "k1").apply { writeBytes(byteArrayOf(1)) }
+        val staleLiveCopy = cachedCopy("live", "k0").apply { writeBytes(byteArrayOf(1)) } // its key before a replacement
+        val goneCopy = cachedCopy("gone", "k2").apply { writeBytes(byteArrayOf(1)) }
+        val strayCopy = cachedCopy("never-synced", "k9").apply { writeBytes(byteArrayOf(1)) }
 
         // Pull applies tombstones for "gone" and for the photo still queued here (deleted on another device).
         dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("gone", 20, 20, "e1", "/api/media/read/gone", "k2", 3))
@@ -550,6 +575,7 @@ class MediaRepositoryTest {
         media.sweep(USER_A)
 
         assertTrue(liveCopy.isFile)
+        assertFalse(staleLiveCopy.exists())
         assertFalse(goneCopy.exists())
         assertFalse(strayCopy.exists())
         assertNull(dbA.pendingMediaDao().findById(queued))
@@ -604,7 +630,7 @@ class MediaRepositoryTest {
     @Test fun `forgetting an account drops its in-memory grants`() = runTest {
         dbA.exercisePhotoDao().upsert(ExercisePhotoEntity("x1", 10, null, "e1", "/api/media/read/x1", "k", 1))
         media.image("x1")
-        File(cacheDir(), "x1.jpg").delete()
+        cachedCopy("x1", "k").delete()
         media.forgetAccount(hashA)
         media.image("x1")
         assertEquals(2, api.grantsIssued)
@@ -618,14 +644,14 @@ class MediaRepositoryTest {
         }
         bounded.image("a")
         bounded.image("b")
-        File(cacheDir(), "a.jpg").setLastModified(1_000L)
-        File(cacheDir(), "b.jpg").setLastModified(2_000L)
+        cachedCopy("a", "ka").setLastModified(1_000L)
+        cachedCopy("b", "kb").setLastModified(2_000L)
         bounded.image("a") // a cache hit refreshes "a": "b" is now the least recently used
         bounded.image("c")
         // Adding "c" exceeded the budget: "b" (least recently used) went.
-        assertTrue(File(cacheDir(), "a.jpg").isFile)
-        assertFalse(File(cacheDir(), "b.jpg").exists())
-        assertTrue(File(cacheDir(), "c.jpg").isFile)
+        assertTrue(cachedCopy("a", "ka").isFile)
+        assertFalse(cachedCopy("b", "kb").exists())
+        assertTrue(cachedCopy("c", "kc").isFile)
     }
 
     private fun nearest(pixel: Int): Int = if (Color.red(pixel) > Color.blue(pixel)) Color.RED else Color.BLUE

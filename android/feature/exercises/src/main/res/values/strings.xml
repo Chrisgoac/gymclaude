@@ -54,7 +54,9 @@
     <string name="exercises_photos_camera">Hacer una foto</string>
     <string name="exercises_photos_saving">Guardando foto</string>
     <string name="exercises_photos_empty">Aún no hay fotos de este ejercicio.</string>
-    <string name="exercises_photos_limit">Has llegado al máximo de %1$d fotos. Elimina una para añadir otra.</string>
+    <string name="exercises_photos_replace_note">Cada ejercicio tiene una foto: la nueva sustituye a la actual.</string>
+    <string name="exercises_photos_replace_pick">Cambiar foto desde la galería</string>
+    <string name="exercises_photos_replace_camera">Cambiar foto con la cámara</string>
     <string name="exercises_photos_catalog_note">Las fotos solo se pueden añadir a tus propios ejercicios.</string>
     <string name="exercises_photos_loading">Cargando fotos</string>
     <string name="exercises_photos_error">No se pudieron cargar las fotos. Siguen guardadas en tu cuenta.</string>

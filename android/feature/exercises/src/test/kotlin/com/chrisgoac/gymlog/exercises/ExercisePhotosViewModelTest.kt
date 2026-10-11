@@ -143,13 +143,57 @@ class ExercisePhotosViewModelTest {
         assertEquals(PhotoMessage.CameraUnavailable, vm.state.value.message)
     }
 
-    @Test fun `no more than the limit can be added`() = runTest(dispatcher) {
-        media.items.value = (1..MAX_EXERCISE_PHOTOS).map { exerciseItem("p$it") }
+    @Test fun `an exercise has one photo and adding another replaces it after the new one is saved`() = runTest(dispatcher) {
+        assertEquals(1, MAX_EXERCISE_PHOTOS)
+        media.items.value = listOf(exerciseItem("old"))
         val vm = observed()
-        assertFalse(vm.state.value.canAdd)
+        assertTrue(vm.state.value.replaces)
+        assertTrue(vm.state.value.canAdd)
+
         vm.onPhotoPicked("content://picker/1")
         advanceUntilIdle()
-        assertTrue(media.enqueued.isEmpty())
+
+        assertEquals("content://picker/1", media.enqueued.single().first)
+        assertEquals(listOf("old"), media.deleted)
+        assertNull(vm.state.value.message)
+    }
+
+    @Test fun `a refused replacement keeps the current photo`() = runTest(dispatcher) {
+        media.items.value = listOf(exerciseItem("old"))
+        media.enqueueResult = EnqueueResult.Invalid(InvalidImage.CORRUPT)
+        val vm = observed()
+
+        vm.onPhotoPicked("content://picker/1")
+        advanceUntilIdle()
+
+        assertTrue(media.deleted.isEmpty())
+        assertEquals(PhotoMessage.Corrupt, vm.state.value.message)
+        assertEquals(listOf("old"), vm.state.value.photos.map { it.id })
+    }
+
+    @Test fun `replacing a refused upload discards it instead of deleting remotely`() = runTest(dispatcher) {
+        media.items.value = listOf(exerciseItem("bad", status = MediaStatus.Rejected("MEDIA_TOO_LARGE")))
+        val vm = observed()
+        vm.onPhotoPicked("content://picker/1")
+        advanceUntilIdle()
+        assertEquals(listOf("bad"), media.discarded)
+        assertTrue(media.deleted.isEmpty())
+    }
+
+    @Test fun `a new object key under the same id reloads the image instead of showing the old one`() = runTest(dispatcher) {
+        media.items.value = listOf(exerciseItem("a"))
+        media.images["a"] = MediaImage.Available("/cache/a-old.jpg")
+        val vm = observed()
+        vm.requestImage("a")
+        advanceUntilIdle()
+        assertEquals("/cache/a-old.jpg", vm.state.value.photos.single().state.localThumbnail)
+
+        // Replaced on the PWA: same row id, new key (arrives by pull).
+        media.images["a"] = MediaImage.Available("/cache/a-new.jpg")
+        media.items.value = listOf(exerciseItem("a").copy(objectKey = "users/h/exercise/a-v2"))
+        advanceUntilIdle()
+
+        assertEquals("/cache/a-new.jpg", vm.state.value.photos.single().state.localThumbnail)
     }
 
     @Test fun `an uncached photo offline shows unavailable and a retry can fetch it`() = runTest(dispatcher) {

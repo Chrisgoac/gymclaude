@@ -152,6 +152,7 @@ class PhotoGalleryViewModel(
                         loadFailed.value = false
                         val ids = all.mapTo(HashSet()) { it.id }
                         loader.prune(ids)
+                        loader.refresh(all)
                         retries.prune(all)
                         revealed.update { shown -> shown.filterTo(HashSet()) { it in ids } }
                     }
