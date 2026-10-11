@@ -1,6 +1,7 @@
 package com.chrisgoac.gymlog.sync
 
 import android.content.ContentResolver
+import android.provider.DocumentsContract
 import androidx.core.net.toUri
 import com.chrisgoac.gymlog.settings.BackupDocuments
 import java.io.FileNotFoundException
@@ -15,4 +16,8 @@ class ContentResolverBackupDocuments(private val resolver: ContentResolver) : Ba
 
     override fun openForRead(uri: String): InputStream =
         resolver.openInputStream(uri.toUri()) ?: throw FileNotFoundException("Cannot read $uri")
+
+    override fun delete(uri: String) {
+        DocumentsContract.deleteDocument(resolver, uri.toUri())
+    }
 }

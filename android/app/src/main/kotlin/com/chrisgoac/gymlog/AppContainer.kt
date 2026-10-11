@@ -8,6 +8,7 @@ import com.chrisgoac.gymlog.auth.ClerkAuthGateway
 import com.chrisgoac.gymlog.auth.ClerkAuthSessionProvider
 import com.chrisgoac.gymlog.data.achievement.OfflineAchievementRepository
 import com.chrisgoac.gymlog.data.backup.RoomBackupRepository
+import com.chrisgoac.gymlog.domain.backup.BackupImportEffects
 import com.chrisgoac.gymlog.domain.backup.BackupRepository
 import com.chrisgoac.gymlog.navigation.BackupServices
 import com.chrisgoac.gymlog.sync.ContentResolverBackupDocuments
@@ -276,10 +277,7 @@ class AppContainer(private val application: Application) {
      */
     val backupRepository: BackupRepository = RoomBackupRepository(
         databases, ::localMutationRunner, now = syncClock::nowMillis,
-        onImported = {
-            statsInvalidation.publish(InvalidationScope.entries.toSet())
-            syncTriggers.onLocalMutation()
-        },
+        onImported = BackupImportEffects(statsInvalidation, requestSync = { syncTriggers.onLocalMutation() }),
     )
 
     /** Gyms of the open account; writes are local (outbox). */

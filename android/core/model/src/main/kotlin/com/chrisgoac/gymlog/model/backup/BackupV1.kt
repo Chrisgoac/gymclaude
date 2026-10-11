@@ -46,11 +46,16 @@ import java.io.OutputStream
 // no serverVersion, no device settings, no tokens. Catalog exercises (the PWA's `seed-…` rows, which
 // its export includes) are never imported: they are APK assets on Android.
 
-/** A decoded backup. [schemaVersion] is the file's `version`; [entities] its `data`. */
+/**
+ * A decoded backup. [schemaVersion] is the file's `version`; [entities] its `data`. [presentTables] are
+ * the tables whose key the file's `data` actually has: an older file lacks some, and a missing table
+ * means "not in this backup", never "empty" (a replace leaves those tables alone).
+ */
 data class BackupV1(
     val schemaVersion: Int,
     val exportedAt: Long,
     val entities: BackupEntities,
+    val presentTables: Set<SyncTable> = BackupCodec.TABLE_ORDER.toSet(),
 )
 
 /** The 14 synchronized tables of a backup, in the PWA's `data` key order. Missing tables (older files) are empty. */
@@ -138,6 +143,12 @@ sealed class BackupException(message: String, cause: Throwable? = null) : Except
 
     /** No account database is open. */
     class NoAccount : BackupException("No account is open")
+
+    /** The file was read for another account (or database) than the one open now. */
+    class AccountChanged : BackupException("The open account changed since the file was read")
+
+    /** A workout is being recorded; importing now could replace or tombstone it under the user's hands. */
+    class ActiveWorkout : BackupException("Finish or discard the active workout before importing")
 }
 
 /** A decoded file plus how many catalog exercises it carried (dropped, never imported). */
@@ -213,6 +224,7 @@ object BackupCodec {
             ?: throw BackupException.Corrupt("exportedAt is not an integer")
 
         var skippedCatalog = 0
+        val present = TABLE_ORDER.filterTo(LinkedHashSet()) { table -> data[table.wire].let { it != null && it !is JsonNull } }
         val rows = TABLE_ORDER.associateWith { table ->
             val element = data[table.wire] ?: JsonNull
             if (element is JsonNull) return@associateWith emptyList()
@@ -230,7 +242,7 @@ object BackupCodec {
                 throw BackupException.Corrupt("data.${table.wire}: ${e.message}", e)
             }
         }
-        return DecodedBackup(BackupV1(version.toInt(), exportedAt, BackupEntities.of(rows)), skippedCatalog)
+        return DecodedBackup(BackupV1(version.toInt(), exportedAt, BackupEntities.of(rows), present), skippedCatalog)
     }
 
     /** The PWA keeps the catalog in `exercises` (`seed-…` ids, esPersonalizado false) and exports it. */

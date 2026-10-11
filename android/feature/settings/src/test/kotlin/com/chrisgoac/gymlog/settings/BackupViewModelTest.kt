@@ -37,7 +37,7 @@ private class FakeBackups : BackupRepository {
             WorkoutSessionRecord(RecordId("s1"), 1, null, fecha = 1),
             WorkoutSessionRecord(RecordId("s2"), 1, 2, fecha = 1),
         )
-        return PreparedImport(BackupV1(12, 99, BackupEntities(workoutSessions = sessions)), skippedCatalogExercises = 3)
+        return PreparedImport(BackupV1(12, 99, BackupEntities(workoutSessions = sessions)), skippedCatalogExercises = 3, accountId = "u1")
     }
     override suspend fun import(prepared: PreparedImport, mode: ImportMode): ImportResult {
         imports += mode
@@ -46,6 +46,8 @@ private class FakeBackups : BackupRepository {
 }
 
 private class FakeDocuments(private val failWrite: Boolean = false) : BackupDocuments {
+    val deleted = mutableListOf<String>()
+    override fun delete(uri: String) { deleted += uri }
     override fun openForWrite(uri: String): OutputStream = if (failWrite) throw IOException("denied") else ByteArrayOutputStream()
     override fun openForRead(uri: String): InputStream = ByteArrayInputStream(ByteArray(0))
 }
@@ -72,9 +74,11 @@ class BackupViewModelTest {
         assertEquals(BackupPhase.Idle, model.phase.value)
         model.exportTo("content://doc")
         assertEquals(BackupPhase.Exported(7), model.phase.value)
-        val failing = vm(FakeDocuments(failWrite = true))
+        val documents = FakeDocuments(failWrite = true)
+        val failing = vm(documents)
         failing.exportTo("content://doc")
         assertEquals(BackupPhase.Failed(BackupFailure.WriteFailed), failing.phase.value)
+        assertEquals(listOf("content://doc"), documents.deleted) // no partial file left behind
     }
 
     @Test fun `merge imports straight after the preview`() {
@@ -111,6 +115,8 @@ class BackupViewModelTest {
             BackupException.TooLarge(1) to BackupFailure.TooLarge,
             BackupException.Corrupt("x") to BackupFailure.Corrupt,
             BackupException.InvalidRecords(listOf("x")) to BackupFailure.InvalidRecords,
+            BackupException.AccountChanged() to BackupFailure.AccountChanged,
+            BackupException.ActiveWorkout() to BackupFailure.ActiveWorkout,
             IOException("gone") to BackupFailure.ReadFailed,
         )
         cases.forEach { (error, failure) ->

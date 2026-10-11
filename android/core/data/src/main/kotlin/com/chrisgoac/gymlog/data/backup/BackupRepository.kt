@@ -50,20 +50,22 @@ import java.io.OutputStream
  * Import rules (PWA parity where it has one, see lib/repositories/backup.ts):
  * - the whole file is decoded and validated with the push rules ([MutationValidator]) before Room
  *   is touched; a file the server would reject is refused whole;
- * - whatever `userId` the file carries is ignored: rows land in the open account's database;
- * - a written row is stamped with [com.chrisgoac.gymlog.database.LocalMutationScope.nextTimestamp]
- *   (like the PWA's "refresh updatedAt"), so it is newer than the server's copy and syncs;
- * - [ImportMode.Merge] writes a file row only if it is new, or newer than the stored row, and
- *   differs from it; a file tombstone of a row the device never had is skipped (nothing to delete);
- * - [ImportMode.ReplaceAfterConfirmation] writes every file row that differs and tombstones every
- *   live row the file lacks;
+ * - whatever `userId` the file carries is ignored: rows land in the account the file was prepared
+ *   for, and importing into another open account is refused; so is importing while a workout is
+ *   being recorded;
+ * - [ImportMode.Merge] never deletes: file tombstones are ignored; a live file row is written only if
+ *   the row is new or the file's copy is newer (`updatedAt` strictly greater) and differs, and it
+ *   keeps the file's `updatedAt` (it already beats the stored version, so the runner's LWW rule holds);
+ * - [ImportMode.ReplaceAfterConfirmation], only within the tables the file has: every file row that
+ *   differs is written stamped with [com.chrisgoac.gymlog.database.LocalMutationScope.nextTimestamp]
+ *   (the PWA's "refresh updatedAt", so it beats the server's copy), file tombstones delete live rows,
+ *   and every live row the file lacks is tombstoned; tables absent from the file are untouched;
  * - rows identical to the stored ones (timestamps aside) are never rewritten, so re-importing the
  *   same file adds no outbox mutation;
  * - everything runs in ONE Room transaction; inside it the rows go through the runner in batches of
  *   [batchSize] (each split by the runner into outbox mutations of at most 50 operations), so a
  *   failure anywhere rolls back every row and every outbox mutation.
- * After a commit [onImported] runs (stats invalidation + achievement reconcile, unlock/retain only,
- * and a sync request).
+ * After a commit [onImported] runs (see [com.chrisgoac.gymlog.domain.backup.BackupImportEffects]).
  */
 class RoomBackupRepository(
     private val databases: UserDatabaseManager,
@@ -85,23 +87,31 @@ class RoomBackupRepository(
     }
 
     override suspend fun prepare(source: InputStream): PreparedImport {
+        val accountId = databases.current.value?.userId ?: throw BackupException.NoAccount()
         val decoded = withContext(io) { BackupCodec.read(source) }
         val problems = validate(decoded.backup.entities)
         if (problems.isNotEmpty()) throw BackupException.InvalidRecords(problems)
-        return PreparedImport(decoded.backup, decoded.skippedCatalogExercises)
+        return PreparedImport(decoded.backup, decoded.skippedCatalogExercises, accountId)
     }
 
     override suspend fun import(prepared: PreparedImport, mode: ImportMode): ImportResult {
-        val database = openDatabase()
+        val open = databases.current.value ?: throw BackupException.NoAccount()
+        if (open.userId != prepared.accountId) throw BackupException.AccountChanged()
+        val database = open.database
         val runner = runnerFor(database)
         val result = database.withTransaction {
-            val plan = plan(database, prepared.backup.entities, mode)
+            if (database.workoutSessionDao().findActive().isNotEmpty()) throw BackupException.ActiveWorkout()
+            val plan = plan(database, prepared.backup, mode)
             plan.writes.chunked(batchSize).forEach { batch ->
                 runner.run(
                     LocalMutation {
                         batch.forEach { row ->
-                            val stamp = nextTimestamp(row.table, row.id)
-                            put(row.withStamps(updatedAt = stamp, deletedAt = row.deletedAt?.let { stamp }))
+                            if (mode == ImportMode.Merge) {
+                                put(row) // keeps the file's updatedAt, already newer than the stored one
+                            } else {
+                                val stamp = nextTimestamp(row.table, row.id)
+                                put(row.withStamps(updatedAt = stamp, deletedAt = row.deletedAt?.let { stamp }))
+                            }
                         }
                     },
                 )
@@ -114,27 +124,29 @@ class RoomBackupRepository(
 
     private class Plan(val writes: List<SyncRecord>, val written: Int, val deleted: Int, val unchanged: Int)
 
-    private suspend fun plan(database: GymLogDatabase, entities: BackupEntities, mode: ImportMode): Plan {
+    private suspend fun plan(database: GymLogDatabase, backup: BackupV1, mode: ImportMode): Plan {
         val writes = mutableListOf<SyncRecord>()
         var written = 0
         var deleted = 0
         var unchanged = 0
-        BackupCodec.TABLE_ORDER.forEach { table ->
+        BackupCodec.TABLE_ORDER.filter { it in backup.presentTables }.forEach { table ->
             val stored = readAll(database, table).associateBy { it.id }
-            val fileRows = entities.rows(table)
+            val fileRows = backup.entities.rows(table)
             fileRows.forEach { row ->
                 val current = stored[row.id]
+                val tombstone = row.deletedAt != null
                 val write = when {
-                    current == null -> row.deletedAt == null
+                    mode == ImportMode.Merge && tombstone -> false // merge never deletes
+                    current == null -> !tombstone // nothing to delete
                     sameContent(row, current) -> false
+                    tombstone && current.deletedAt != null -> false // already deleted
                     mode == ImportMode.Merge -> row.updatedAt > current.updatedAt
                     else -> true
                 }
-                if (write) {
-                    writes += row
-                    written++
-                } else {
-                    unchanged++
+                when {
+                    !write -> unchanged++
+                    tombstone -> { writes += row; deleted++ }
+                    else -> { writes += row; written++ }
                 }
             }
             if (mode == ImportMode.ReplaceAfterConfirmation) {

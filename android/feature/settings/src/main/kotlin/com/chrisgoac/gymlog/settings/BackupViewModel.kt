@@ -10,6 +10,7 @@ import com.chrisgoac.gymlog.model.backup.BackupException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,9 +26,12 @@ import java.time.ZoneId
 interface BackupDocuments {
     fun openForWrite(uri: String): OutputStream
     fun openForRead(uri: String): InputStream
+
+    /** Removes a document this app created (a partial export); best effort, may throw. */
+    fun delete(uri: String)
 }
 
-enum class BackupFailure { NotABackup, NewerVersion, TooLarge, Corrupt, InvalidRecords, NoAccount, ReadFailed, WriteFailed, ImportFailed }
+enum class BackupFailure { NotABackup, NewerVersion, TooLarge, Corrupt, InvalidRecords, NoAccount, AccountChanged, ActiveWorkout, ReadFailed, WriteFailed, ImportFailed }
 
 /** What the file holds, shown before anything is written. */
 data class BackupPreview(val totalRows: Int, val workouts: Int, val skippedCatalogExercises: Int, val exportedAt: Long)
@@ -77,10 +81,13 @@ class BackupViewModel(
                 val result = withContext(io) { documents.openForWrite(uri).use { backups.export(it) } }
                 BackupPhase.Exported(result.rows)
             } catch (e: CancellationException) {
+                discardPartial(uri)
                 throw e
             } catch (e: BackupException) {
+                discardPartial(uri)
                 BackupPhase.Failed(e.toFailure())
             } catch (_: Exception) {
+                discardPartial(uri)
                 BackupPhase.Failed(BackupFailure.WriteFailed)
             }
         }
@@ -103,6 +110,15 @@ class BackupViewModel(
             } catch (_: Exception) {
                 BackupPhase.Failed(BackupFailure.ReadFailed)
             }
+        }
+    }
+
+    /** A failed export must not leave a truncated file that looks like a backup. */
+    private suspend fun discardPartial(uri: String) {
+        try {
+            withContext(NonCancellable + io) { documents.delete(uri) }
+        } catch (_: Exception) {
+            // best effort: the user can delete it; importing it would fail validation anyway
         }
     }
 
@@ -168,5 +184,7 @@ class BackupViewModel(
         is BackupException.Corrupt -> BackupFailure.Corrupt
         is BackupException.InvalidRecords -> BackupFailure.InvalidRecords
         is BackupException.NoAccount -> BackupFailure.NoAccount
+        is BackupException.AccountChanged -> BackupFailure.AccountChanged
+        is BackupException.ActiveWorkout -> BackupFailure.ActiveWorkout
     }
 }

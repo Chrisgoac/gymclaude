@@ -14,7 +14,20 @@ import com.chrisgoac.gymlog.domain.backup.ImportMode
 import com.chrisgoac.gymlog.domain.backup.PreparedImport
 import com.chrisgoac.gymlog.model.ContractJson
 import com.chrisgoac.gymlog.model.DeviceId
+import com.chrisgoac.gymlog.model.AchievementRecord
+import com.chrisgoac.gymlog.model.BodyMetricRecord
+import com.chrisgoac.gymlog.model.CoachMessageRecord
+import com.chrisgoac.gymlog.model.ExercisePhotoRecord
+import com.chrisgoac.gymlog.model.ExerciseRecord
 import com.chrisgoac.gymlog.model.GymRecord
+import com.chrisgoac.gymlog.model.LoggedExerciseRecord
+import com.chrisgoac.gymlog.model.MesocycleRecord
+import com.chrisgoac.gymlog.model.ProgressPhotoRecord
+import com.chrisgoac.gymlog.model.RoutineExerciseRecord
+import com.chrisgoac.gymlog.model.RoutineRecord
+import com.chrisgoac.gymlog.model.SyncRecord
+import com.chrisgoac.gymlog.model.UserSettingRecord
+import com.chrisgoac.gymlog.database.table
 import com.chrisgoac.gymlog.model.LoggedSetRecord
 import com.chrisgoac.gymlog.model.MAX_OPERATIONS_PER_MUTATION
 import com.chrisgoac.gymlog.model.PushMutation
@@ -25,7 +38,6 @@ import com.chrisgoac.gymlog.model.backup.BackupCodec
 import com.chrisgoac.gymlog.model.backup.BackupException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -58,7 +70,7 @@ class BackupRepositoryTest {
     private fun newDb() = Room.inMemoryDatabaseBuilder(context, GymLogDatabase::class.java).allowMainThreadQueries().build()
 
     private class FakeManager(db: GymLogDatabase) : UserDatabaseManager {
-        override val current: StateFlow<OpenUserDatabase?> = MutableStateFlow(OpenUserDatabase("u1", db))
+        override val current = MutableStateFlow<OpenUserDatabase?>(OpenUserDatabase("u1", db))
         override suspend fun open(userId: String) = current.value!!.database
         override suspend fun close() = Unit
         override suspend fun closeAndDelete(userId: String) = Unit
@@ -70,7 +82,8 @@ class BackupRepositoryTest {
         database: GymLogDatabase = db,
         batchSize: Int = 250,
         runnerFor: (GymLogDatabase) -> LocalMutationRunner = ::runnerOf,
-    ) = RoomBackupRepository(FakeManager(database), runnerFor, now = { now }, onImported = { imported++ }, io = Dispatchers.Unconfined, batchSize = batchSize)
+        manager: FakeManager = FakeManager(database),
+    ) = RoomBackupRepository(manager, runnerFor, now = { now }, onImported = { imported++ }, io = Dispatchers.Unconfined, batchSize = batchSize)
 
     @After fun tearDown() {
         db.close()
@@ -101,7 +114,7 @@ class BackupRepositoryTest {
 
     // --- PWA fixtures (ported from lib/repositories/backup.test.ts) ---
 
-    @Test fun `PWA backup imports every table, skips the catalog and refreshes updatedAt so it syncs`() = runTest {
+    @Test fun `PWA backup merges every table, skips the catalog and keeps the file timestamps`() = runTest {
         val repo = repository()
         val prepared = repo.prepareBytes(fixture("pwa-backup-v12.json"))
         assertEquals(1, prepared.skippedCatalogExercises)
@@ -117,8 +130,8 @@ class BackupRepositoryTest {
         assertEquals("Gold's", (store.find(SyncTable.GYMS, RecordId("g1"))!!.record as GymRecord).nombre)
         assertNull(store.find(SyncTable.EXERCISES, RecordId("seed-press-banca")))
         assertNull(store.find(SyncTable.LOGGED_SETS, RecordId("ls2")))
-        assertTrue(store.find(SyncTable.ROUTINES, RecordId("r1"))!!.record.updatedAt >= now)
-        assertTrue(store.find(SyncTable.ACHIEVEMENTS, RecordId("ab1"))!!.record.updatedAt >= now)
+        assertEquals(1_700_000_000_000L, store.find(SyncTable.ROUTINES, RecordId("r1"))!!.record.updatedAt)
+        assertEquals(9L, store.find(SyncTable.ACHIEVEMENTS, RecordId("ab1"))!!.record.updatedAt)
         // Every written row is in the outbox, in mutations the server accepts (<= 50 operations).
         val operations = outbox().flatMap { it.operations }
         assertEquals(14, operations.size)
@@ -129,7 +142,80 @@ class BackupRepositoryTest {
         val repo = repository()
         val result = repo.import(repo.prepareBytes(fixture("pwa-backup-v6.json")), ImportMode.Merge)
         assertEquals(2, result.written)
-        assertTrue(RecordStore(db).find(SyncTable.ROUTINE_EXERCISES, RecordId("re1"))!!.record.updatedAt >= now)
+        assertEquals(1000L, RecordStore(db).find(SyncTable.ROUTINE_EXERCISES, RecordId("re1"))!!.record.updatedAt)
+    }
+
+    @Test fun `replace stamps file rows fresh so they win`() = runTest {
+        val repo = repository()
+        repo.import(repo.prepareBytes(fixture("pwa-backup-v6.json")), ImportMode.ReplaceAfterConfirmation)
+        assertEquals(now, RecordStore(db).find(SyncTable.ROUTINE_EXERCISES, RecordId("re1"))!!.record.updatedAt)
+    }
+
+    @Test fun `replace with an older file leaves the tables it lacks untouched`() = runTest {
+        val repo = repository()
+        repo.import(repo.prepareBytes(fixture("pwa-backup-v12.json")), ImportMode.Merge)
+        now += 60_000
+        val prepared = repo.prepareBytes(fixture("pwa-backup-v6.json"))
+        assertFalse(SyncTable.BODY_METRICS in prepared.backup.presentTables)
+        val result = repo.import(prepared, ImportMode.ReplaceAfterConfirmation)
+
+        val store = RecordStore(db)
+        // Present (empty) tables are replaced: their rows go.
+        assertTrue(store.find(SyncTable.GYMS, RecordId("g1"))!!.record.deletedAt != null)
+        assertTrue(store.find(SyncTable.LOGGED_SETS, RecordId("ls1"))!!.record.deletedAt != null)
+        // Absent tables are not part of this backup: untouched.
+        listOf(
+            SyncTable.USER_SETTINGS to "objetivoSemanal", SyncTable.COACH_MESSAGES to "b1", SyncTable.BODY_METRICS to "bk1",
+            SyncTable.PROGRESS_PHOTOS to "pp1", SyncTable.MESOCYCLES to "mb1", SyncTable.ACHIEVEMENTS to "ab1",
+        ).forEach { (table, id) -> assertNull("$table/$id", store.find(table, RecordId(id))!!.record.deletedAt) }
+        assertEquals(6, result.deleted) // g1, ex-custom-1, s1, le1, ls1, p1
+    }
+
+    @Test fun `merge never deletes, even for a newer file tombstone`() = runTest {
+        putGym("g1", "Vivo")
+        val tomb = withGyms("""{"id":"g1","nombre":"Vivo","orden":0,"archivada":false,"updatedAt":${now + 10_000},"deletedAt":${now + 10_000}}""")
+        val repo = repository()
+        val result = repo.import(repo.prepareBytes(tomb.encodeToByteArray()), ImportMode.Merge)
+        assertEquals(0, result.written + result.deleted)
+        assertNull(RecordStore(db).find(SyncTable.GYMS, RecordId("g1"))!!.record.deletedAt)
+
+        val replaced = repo.import(repo.prepareBytes(tomb.encodeToByteArray()), ImportMode.ReplaceAfterConfirmation)
+        assertEquals(1, replaced.deleted) // a tombstone write counts as a deletion
+        assertEquals(0, replaced.written)
+        assertTrue(RecordStore(db).find(SyncTable.GYMS, RecordId("g1"))!!.record.deletedAt != null)
+    }
+
+    @Test fun `import is refused while a workout is being recorded`() = runTest {
+        runnerOf(db).run(
+            LocalMutation { put(WorkoutSessionRecord(RecordId("active"), nextTimestamp(SyncTable.WORKOUT_SESSIONS, RecordId("active")), null, null, null, null, now, null, null)) },
+        )
+        val before = rowCount() to outbox().size
+        val repo = repository()
+        val prepared = repo.prepareBytes(fixture("pwa-backup-v12.json"))
+        ImportMode.entries.forEach { mode ->
+            try {
+                repo.import(prepared, mode)
+                fail("imported over an active workout ($mode)")
+            } catch (_: BackupException.ActiveWorkout) {
+            }
+        }
+        assertEquals(before, rowCount() to outbox().size)
+        assertEquals(0, imported)
+    }
+
+    @Test fun `a file prepared for one account is refused in another`() = runTest {
+        val manager = FakeManager(db)
+        val repo = repository(manager = manager)
+        val prepared = repo.prepareBytes(fixture("pwa-backup-v12.json"))
+        assertEquals("u1", prepared.accountId)
+        manager.current.value = OpenUserDatabase("u2", other)
+        try {
+            repo.import(prepared, ImportMode.Merge)
+            fail("imported into another account")
+        } catch (_: BackupException.AccountChanged) {
+        }
+        assertEquals(0, rowCount(other))
+        assertEquals(0, rowCount(db))
     }
 
     @Test fun `foreign userId is stripped and the export has the PWA shape`() = runTest {
@@ -173,26 +259,37 @@ class BackupRepositoryTest {
 
     // --- Round trip ---
 
-    @Test fun `Android to Android round trip restores every row`() = runTest {
-        putGym("g1", "Gold's")
-        runnerOf(db).run(
-            LocalMutation {
-                put(WorkoutSessionRecord(RecordId("s1"), nextTimestamp(SyncTable.WORKOUT_SESSIONS, RecordId("s1")), null, null, null, "g1", 5, 60, "nota"))
-                put(LoggedSetRecord(RecordId("x1"), nextTimestamp(SyncTable.LOGGED_SETS, RecordId("x1")), now, "le1", 0, 50.25, 5, true))
-            },
+    @Test fun `Android to Android round trip restores every row of all 14 tables`() = runTest {
+        fun id(v: String) = RecordId(v)
+        val rows: List<SyncRecord> = listOf(
+            GymRecord(id("g1"), 11, null, "Gold's", 0, false),
+            ExerciseRecord(id("ex1"), 12, null, "Landmine", "hombros", "barra", "compuesto", "https://v", "n", "d", "e", 2.5, true),
+            RoutineRecord(id("r1"), 13, null, "Push", "desc", 0, false, "m1"),
+            RoutineExerciseRecord(id("re1"), 14, null, "r1", "ex1", 0, 3, 10, 6, 90, "nota"),
+            WorkoutSessionRecord(id("s1"), 15, null, null, "r1", "g1", 5, 60, "nota"),
+            LoggedExerciseRecord(id("le1"), 16, null, "s1", "ex1", 0),
+            LoggedSetRecord(id("ls1"), 17, null, "le1", 0, 50.25, 5, true),
+            ExercisePhotoRecord(id("p1"), 18, null, "ex1", "https://pub/x.jpg", "u/e/x.jpg"),
+            UserSettingRecord(id("objetivoSemanal"), 19, null, "4"),
+            CoachMessageRecord(id("c1"), 20, null, "assistant", "hey", 3),
+            BodyMetricRecord(id("b1"), 21, null, "peso", 79.5, 4),
+            ProgressPhotoRecord(id("pp1"), 22, null, "u", "k", 4, "frente", null),
+            MesocycleRecord(id("m1"), 23, null, "H", "general", 5, 3, null, Json.parseToJsonElement("""[{"semana":1,"descarga":false,"ajuste":"x"}]"""), 4),
+            AchievementRecord(id("a1"), 24, null, "racha-4", 9),
         )
+        assertEquals(SyncTable.entries.toSet(), rows.map { it.table }.toSet())
+        val source = RecordStore(db)
+        rows.forEach { source.put(it, serverVersion = 7) }
+
         val bytes = repository().exportBytes()
         val target = repository(other)
         val result = target.import(target.prepareBytes(bytes), ImportMode.Merge)
 
-        assertEquals(2, result.written) // the tombstone x1 never existed on the target
-        val source = RecordStore(db)
+        assertEquals(14, result.written)
         val restored = RecordStore(other)
-        listOf(SyncTable.GYMS to "g1", SyncTable.WORKOUT_SESSIONS to "s1").forEach { (table, id) ->
-            val a = source.find(table, RecordId(id))!!.record
-            val b = restored.find(table, RecordId(id))!!.record
-            assertEquals(a.toString().replaceStamps(), b.toString().replaceStamps())
-        }
+        rows.forEach { row -> assertEquals(row, restored.find(row.table, row.id)!!.record) }
+        // Imported rows are local writes: no server version is carried over.
+        rows.forEach { row -> assertNull(restored.find(row.table, row.id)!!.serverVersion) }
     }
 
     // --- Refused files: typed error, nothing written ---
@@ -339,5 +436,4 @@ class BackupRepositoryTest {
 
     private fun withGyms(rows: String) = """{"app":"gymlog","version":12,"exportedAt":1,"data":{"gyms":[$rows]}}"""
 
-    private fun String.replaceStamps() = replace(Regex("(updatedAt|deletedAt)=\\d+"), "$1=0")
 }

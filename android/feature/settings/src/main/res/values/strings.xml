@@ -135,9 +135,9 @@
     <string name="settings_backup_preview_catalog">Los ejercicios del catálogo del archivo se ignoran: ya vienen con la app.</string>
     <string name="settings_backup_mode_title">Cómo importar</string>
     <string name="settings_backup_mode_merge">Combinar</string>
-    <string name="settings_backup_mode_merge_hint">Añade lo que falta y actualiza lo que sea más reciente en el archivo. No borra nada.</string>
+    <string name="settings_backup_mode_merge_hint">Añade lo que falta y actualiza lo que sea más reciente en el archivo. No borra nada, aunque el archivo tenga elementos borrados.</string>
     <string name="settings_backup_mode_replace">Reemplazar</string>
-    <string name="settings_backup_mode_replace_hint">Deja tus datos exactamente como en el archivo y borra lo que no esté en él.</string>
+    <string name="settings_backup_mode_replace_hint">Deja tus datos como en el archivo y borra lo que no esté en él. Los tipos de datos que el archivo no incluye no se tocan.</string>
     <string name="settings_backup_mode_selected">✓ %s</string>
     <string name="settings_backup_mode_selected_spoken">%s, seleccionado</string>
     <string name="settings_backup_import_apply">Importar</string>
@@ -154,6 +154,8 @@
     <string name="settings_backup_error_corrupt">El archivo está dañado o incompleto. No se ha cambiado nada.</string>
     <string name="settings_backup_error_invalid">El archivo contiene datos no válidos. No se ha cambiado nada.</string>
     <string name="settings_backup_error_no_account">No hay ninguna cuenta abierta.</string>
+    <string name="settings_backup_error_account_changed">La cuenta abierta ha cambiado desde que elegiste el archivo. Vuelve a elegirlo.</string>
+    <string name="settings_backup_error_active_workout">Tienes un entrenamiento en curso. Termínalo o descártalo antes de importar. No se ha cambiado nada.</string>
     <string name="settings_backup_error_read">No se pudo leer el archivo.</string>
     <string name="settings_backup_error_write">No se pudo guardar la copia.</string>
     <string name="settings_backup_error_import">No se pudo importar. No se ha cambiado nada.</string>
