@@ -54,13 +54,17 @@ data class ChartText(
     val empty: String,
 )
 
-/** Past this many points the plot is no longer explorable point by point; the table still lists every one. */
-const val MAX_POINT_NODES = 60
+/**
+ * Up to this many points the plot is explorable point by point (each point is a semantic node). Past
+ * it, swiping through dozens of thin nodes is worse than useless with TalkBack, so the plot exposes
+ * only its summary ([ChartFrame]'s contentDescription) and the table lists every point.
+ */
+const val MAX_POINT_NODES = 12
 
 /**
  * Shared frame of [LineChart] and [BarChart]: bordered plot with bounded y labels, a polite-live
- * readout of the focused point, per-point semantic nodes (touch exploration, D-pad and keyboard focus
- * with a visible ring) and a toggleable table built from the SAME [points]. Colours come only from
+ * readout of the focused point, per-point semantic nodes up to [MAX_POINT_NODES] points (touch
+ * exploration, D-pad and keyboard focus with a visible ring; beyond that, summary only) and a toggleable table built from the SAME [points]. Colours come only from
  * the Hierro theme (ink on chalk / chalk on dark: high contrast); no information is colour-only
  * because the selected point is also enlarged and read out as text.
  */

@@ -27,6 +27,7 @@ import com.chrisgoac.gymlog.designsystem.chart.BarChart
 import com.chrisgoac.gymlog.designsystem.chart.ChartPoint
 import com.chrisgoac.gymlog.designsystem.chart.ChartText
 import com.chrisgoac.gymlog.designsystem.chart.LineChart
+import com.chrisgoac.gymlog.designsystem.chart.MAX_POINT_NODES
 import com.chrisgoac.gymlog.designsystem.theme.GymLogTheme
 import com.chrisgoac.gymlog.domain.exercise.MuscleGroup
 import com.chrisgoac.gymlog.domain.stats.BalanceRow
@@ -277,6 +278,23 @@ class ProgressScreensTest {
         rule.onNodeWithText("Ver como tabla").performClick()
         rule.waitForIdle()
         rule.onAllNodesWithContentDescription("a: ", substring = true).assertCountEquals(0)
+    }
+
+    @Test fun upToTwelvePointsEachPointIsANode() {
+        val points = (1..MAX_POINT_NODES).map { ChartPoint("d$it", it.toDouble()) }
+        showChart { LineChart(points, "Doce", { "${it.toInt()}" }, CHART_TEXT) }
+        rule.onNodeWithContentDescription("Doce").assertExists()
+        (1..MAX_POINT_NODES).forEach { rule.onAllNodesWithContentDescription("d$it: $it").assertCountEquals(1) }
+    }
+
+    @Test fun pastTwelvePointsOnlyTheSummaryAndTheTableRemain() {
+        val points = (1..MAX_POINT_NODES + 1).map { ChartPoint("d$it", it.toDouble()) }
+        showChart { LineChart(points, "Trece", { "${it.toInt()}" }, CHART_TEXT) }
+        rule.onNodeWithContentDescription("Trece").assertExists()
+        (1..MAX_POINT_NODES + 1).forEach { rule.onAllNodesWithContentDescription("d$it: $it").assertCountEquals(0) }
+        rule.onNodeWithText("Ver como tabla").performClick()
+        rule.waitForIdle()
+        (1..MAX_POINT_NODES + 1).forEach { rule.onAllNodesWithContentDescription("d$it: $it").assertCountEquals(1) }
     }
 
     @Test fun longSeriesSkipPointNodesButKeepTheTable() {
