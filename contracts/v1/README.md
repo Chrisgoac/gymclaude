@@ -291,6 +291,40 @@ Any signed-in user may report a response they own (no Pro needed); `ai` rate lim
 false}` on a repeat (the first report is kept). Unknown, malformed or another user's id: `404
 RESPONSE_NOT_FOUND`.
 
+### Mesocycle (`POST /api/v1/ai/mesocycles`)
+
+Same order as the Coach (Bearer → `ai` rate limit → `requirePro` → `503 AI_UNAVAILABLE` → JSON body ≤ 192 KiB
+validated by `MesocycleRequestSchema`). Returns `200 application/json`
+`{clientRequestId, responseId, draft, omitidos, disclaimer: true}` (`MesocycleResponseSchema`): a validated
+**draft**, nothing of the user's data is written. The client reviews it and saves it as its own synced
+`mesocycles` + `routines` (`mesocycleId`) + `routineExercises` rows with its own ids.
+
+- The model answers with structured output (`MESO_SCHEMA`) and the server validates it strictly
+  (`lib/mesocycle-draft.ts`): `semanas`/`diasPorSemana` must be the requested ones, `dias` has exactly
+  `diasPorSemana` entries (sorted by the model's `orden`), `progresion` exactly one entry per week 1..`semanas`
+  (sorted), targets are integers (sets 1..10, reps 1..50, rest 15..600 s), 1..12 exercises per day, texts
+  trimmed and clipped. Exercises are matched to the request `catalogo` by normalized name (case, accents and
+  spacing ignored) and returned with the catalog's exact `nombre`: the client maps that name to its own
+  exercise id. Exercises not in the catalog are dropped and listed in `omitidos`. No ids are ever returned.
+- Anything else is `502 AI_BAD_OUTPUT` (retryable). Provider failure `502 AI_PROVIDER_ERROR`, model cut at
+  90 s `504 AI_TIMEOUT` (both retryable).
+- Idempotency: one `ai_responses` row (`kind = 'mesocycle'`) per user and `clientRequestId`, with the same
+  lease rules as the Coach (`409 AI_RESPONSE_IN_PROGRESS`, `409 AI_RESPONSE_CONFLICT`, retryable). A retry of
+  a completed request returns the stored draft without calling the model. Reusing a `clientRequestId` with
+  different `params` is `409 CLIENT_MESSAGE_ID_CONFLICT` (not retryable); a changed snapshot/catalog is not
+  checked (the stored draft is returned).
+
+### Intelligent report (`POST /api/v1/ai/reports`)
+
+Same order as the Coach. Body `{snapshot}` (`IntelligentReportRequestSchema`: exactly the Coach snapshot
+allowlist). Returns `200 {reportId, generatedAt, cached, report: {resumen, puntosFuertes[], aMejorar[],
+recomendaciones[]}, disclaimer: true}`. Reports are server-owned `ai_reports` rows keyed by
+(user, `kind = 'progress-v1'`, source fingerprint = SHA-256 of the kind and the canonical (key-sorted) JSON
+of the validated snapshot). An identical snapshot returns the stored report (`cached: true`, original
+`generatedAt`) without calling the model; any change generates a new one and deletes the user's older
+reports of that kind. Reports never travel through sync. Errors as for mesocycles (`AI_BAD_OUTPUT`,
+`AI_PROVIDER_ERROR`, `AI_TIMEOUT` at 60 s). `disclaimer: true`: show the medical disclaimer with it.
+
 ### Test entitlement (non-production only)
 
 There is no production bypass. To exercise the AI routes locally, seed a test entitlement into a

@@ -55,6 +55,29 @@ export async function findAiReport(
   return row ? { id: row.id, payload: row.payload, model: row.model, createdAt: Number(row.created_at) } : null;
 }
 
+/**
+ * Stores a freshly generated report and drops the user's older reports of the same kind (a new
+ * fingerprint invalidates them: only the current source's report is kept). A concurrent insert of the
+ * same fingerprint keeps the first row, which is returned.
+ */
+export async function storeAiReport(
+  db: Db,
+  userId: string,
+  kind: string,
+  sourceFingerprint: string,
+  input: { id: string; payload: unknown; model: string; createdAt: number },
+): Promise<StoredAiReport> {
+  await db.execute(sql`
+    INSERT INTO ai_reports (id, user_id, kind, source_fingerprint, payload, model, created_at)
+    VALUES (${input.id}, ${userId}, ${kind}, ${sourceFingerprint}, ${JSON.stringify(input.payload)}::jsonb, ${input.model}, ${input.createdAt})
+    ON CONFLICT (user_id, kind, source_fingerprint) DO NOTHING`);
+  await db.execute(sql`
+    DELETE FROM ai_reports WHERE user_id = ${userId} AND kind = ${kind} AND source_fingerprint <> ${sourceFingerprint}`);
+  const stored = await findAiReport(db, userId, kind, sourceFingerprint);
+  if (!stored) throw new Error('ai_reports row missing after insert');
+  return stored;
+}
+
 export interface CoachContextTurn {
   role: 'user' | 'assistant';
   text: string;
@@ -147,15 +170,33 @@ export async function claimCoachResponse(
   clientMessageId: string,
   input: CoachClaimInput,
 ): Promise<CoachResponseClaim> {
+  return claimAiResponse(db, userId, clientMessageId, 'coach', input);
+}
+
+/** Kinds of `ai_responses` rows (CHECK ai_responses_kind_check). */
+export type AiResponseKind = 'coach' | 'mesocycle';
+
+/**
+ * claimCoachResponse for any kind: one row per (user, client id), leased to one attempt at a time.
+ * A client id already used by another kind → 409 CLIENT_MESSAGE_ID_CONFLICT. `content` of a complete
+ * row is the stored result (Coach text, or the validated mesocycle draft as JSON).
+ */
+export async function claimAiResponse(
+  db: Db,
+  userId: string,
+  clientId: string,
+  kind: AiResponseKind,
+  input: CoachClaimInput,
+): Promise<CoachResponseClaim> {
   const { newId, attemptId, now, leaseExpiresAt } = input;
   const claimed = await db.execute(sql`
     INSERT INTO ai_responses
       (id, user_id, client_message_id, kind, status, content, attempt_id, lease_expires_at, created_at, updated_at)
-    VALUES (${newId}, ${userId}, ${clientMessageId}, 'coach', 'incomplete', NULL, ${attemptId}, ${leaseExpiresAt}, ${now}, ${now})
+    VALUES (${newId}, ${userId}, ${clientId}, ${kind}, 'incomplete', NULL, ${attemptId}, ${leaseExpiresAt}, ${now}, ${now})
     ON CONFLICT (user_id, client_message_id)
     DO UPDATE SET attempt_id = EXCLUDED.attempt_id, lease_expires_at = EXCLUDED.lease_expires_at,
                   updated_at = EXCLUDED.updated_at
-    WHERE ai_responses.kind = 'coach'
+    WHERE ai_responses.kind = ${kind}
       AND ai_responses.status = 'incomplete'
       AND (ai_responses.lease_expires_at IS NULL OR ai_responses.lease_expires_at <= ${now})
     RETURNING id`);
@@ -164,12 +205,12 @@ export async function claimCoachResponse(
 
   const existing = await db.execute(sql`
     SELECT id, kind, status, content FROM ai_responses
-    WHERE user_id = ${userId} AND client_message_id = ${clientMessageId}`);
+    WHERE user_id = ${userId} AND client_message_id = ${clientId}`);
   const row = existing.rows[0] as { id: string; kind: string; status: string; content: string | null } | undefined;
   if (!row) throw new Error('ai_responses claim found no row');
-  if (row.kind !== 'coach') throw clientMessageIdConflict();
+  if (row.kind !== kind) throw clientMessageIdConflict();
   if (row.status === 'incomplete') throw responseInProgress();
-  if (row.content === null) throw new Error('complete Coach response without content');
+  if (row.content === null) throw new Error(`complete ${kind} response without content`);
   return { status: 'complete', responseId: row.id, content: row.content };
 }
 
