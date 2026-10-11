@@ -89,6 +89,11 @@ import com.chrisgoac.gymlog.network.SyncApi
 import com.chrisgoac.gymlog.network.createSyncApi
 import com.chrisgoac.gymlog.network.createMediaApi
 import com.chrisgoac.gymlog.network.createCoachApi
+import com.chrisgoac.gymlog.network.createAiPlanApi
+import com.chrisgoac.gymlog.data.ai.OfflineIntelligentReportRepository
+import com.chrisgoac.gymlog.data.ai.OfflineMesocycleRepository
+import com.chrisgoac.gymlog.domain.stats.CoachSnapshot
+import com.chrisgoac.gymlog.navigation.AiPlanServices
 import com.chrisgoac.gymlog.data.coach.OfflineCoachRepository
 import com.chrisgoac.gymlog.domain.stats.GymFilter
 import com.chrisgoac.gymlog.navigation.CoachServices
@@ -286,6 +291,21 @@ class AppContainer(private val application: Application) {
             ),
             entitlements = entitlements,
             online = connectivity.online,
+        )
+    }
+
+    /** Pro planning: AI mesocycle drafts (saved as local rows) and the server-owned intelligent report. */
+    val aiPlanServices: AiPlanServices by lazy {
+        val api = createAiPlanApi(BuildConfig.API_BASE_URL, authSession, serverClock)
+        val snapshot: suspend () -> CoachSnapshot = { offlineStats.readCoachSnapshot(GymFilter.All) }
+        AiPlanServices(
+            mesocycles = OfflineMesocycleRepository(
+                databases, ::localMutationRunner, api, exerciseRepository, snapshot, now = syncClock::nowMillis,
+            ),
+            reports = OfflineIntelligentReportRepository(databases, api, snapshot),
+            entitlements = entitlements,
+            online = connectivity.online,
+            zone = ZoneId::systemDefault,
         )
     }
 

@@ -54,6 +54,10 @@ sealed interface GymLogDestination {
     @Serializable data class ProgressPhotos(val capture: Boolean = false) : GymLogDestination {
         override val title: Int get() = R.string.nav_progress_photos
     }
+    /** Pro: AI mesocycle generator + review, above the routine list. */
+    @Serializable data object MesocycleGenerator : GymLogDestination { override val title = R.string.nav_mesocycle_generator }
+    /** Pro: intelligent report, above Progress. */
+    @Serializable data object IntelligentReport : GymLogDestination { override val title = R.string.nav_intelligent_report }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 

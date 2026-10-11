@@ -43,6 +43,8 @@ fun RoutineListScreen(
     onStartRoutine: (String) -> Unit,
     onSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onGenerateMesocycle: (() -> Unit)? = null,
+    mesocycleIsPro: Boolean = false,
 ) {
     val state by viewModel.state.collectAsState()
     RoutineListContent(
@@ -57,6 +59,8 @@ fun RoutineListScreen(
         onDismissError = viewModel::dismissError,
         onSettings = onSettings,
         modifier = modifier,
+        onGenerateMesocycle = onGenerateMesocycle,
+        mesocycleIsPro = mesocycleIsPro,
     )
 }
 
@@ -73,6 +77,8 @@ internal fun RoutineListContent(
     onDismissError: () -> Unit,
     onSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onGenerateMesocycle: (() -> Unit)? = null,
+    mesocycleIsPro: Boolean = false,
 ) {
     val newDescription = stringResource(R.string.routines_new_description)
     Column(modifier.fillMaxSize()) {
@@ -92,6 +98,9 @@ internal fun RoutineListContent(
                     )
                 }
                 LoadStatus.Ready -> {
+                    if (onGenerateMesocycle != null) {
+                        item(key = "mesocycle") { MesocycleAction(mesocycleIsPro, onGenerateMesocycle) }
+                    }
                     if (state.reorderFailed) {
                         item(key = "action-failed") {
                             HierroCard {
@@ -201,4 +210,16 @@ private fun ArchivedRoutineCard(routine: RoutineSummary, onEdit: () -> Unit, onR
             )
         }
     }
+}
+
+/** AI mesocycle entry: always visible, enabled only with Pro (presentation only: the server decides). */
+@Composable
+internal fun MesocycleAction(isPro: Boolean, onGenerate: () -> Unit) {
+    HierroButton(
+        text = stringResource(if (isPro) R.string.routines_meso_action else R.string.routines_meso_action_locked),
+        onClick = onGenerate,
+        modifier = Modifier.fillMaxWidth(),
+        variant = HierroButtonVariant.Secondary,
+        enabled = isPro,
+    )
 }

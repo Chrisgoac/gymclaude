@@ -193,4 +193,25 @@
     <string name="progress_photos_compare_choose_b">Elegir foto B</string>
     <string name="progress_photos_compare_selected">seleccionada</string>
     <string name="progress_photos_compare_option">%1$s, %2$s</string>
+    <!-- Intelligent report (Pro) -->
+    <string name="progress_ai_report_title">Informe inteligente</string>
+    <string name="progress_ai_report_back">Volver</string>
+    <string name="progress_ai_report_locked_title">INFORME PRO</string>
+    <string name="progress_ai_report_locked_message">Necesitas una suscripción Pro activa para el informe inteligente. Tus estadísticas siguen disponibles en Progreso.</string>
+    <string name="progress_ai_report_checking">Comprobando tu suscripción…</string>
+    <string name="progress_ai_report_loading">Analizando tu progreso…</string>
+    <string name="progress_ai_report_offline">Sin conexión. El informe necesita internet.</string>
+    <string name="progress_ai_report_offline_cached">Sin conexión: este es el último informe obtenido.</string>
+    <string name="progress_ai_report_failed">No se pudo generar el informe. Reinténtalo.</string>
+    <string name="progress_ai_report_failed_rejected">El servidor rechazó la petición.</string>
+    <string name="progress_ai_report_failed_session">Tu sesión necesita atención. Vuelve a iniciar sesión.</string>
+    <string name="progress_ai_report_retry">Reintentar</string>
+    <string name="progress_ai_report_refresh">Actualizar informe</string>
+    <string name="progress_ai_report_generated">Generado el %1$s</string>
+    <string name="progress_ai_report_cached">Sin cambios en tus datos desde entonces.</string>
+    <string name="progress_ai_report_summary">Resumen</string>
+    <string name="progress_ai_report_strengths">Puntos fuertes</string>
+    <string name="progress_ai_report_improve">A mejorar</string>
+    <string name="progress_ai_report_recommendations">Recomendaciones</string>
+    <string name="progress_ai_report_disclaimer">Esto es orientación general de entrenamiento, no consejo médico. Ante dolor o dudas de salud, consulta a un profesional.</string>
 </resources>

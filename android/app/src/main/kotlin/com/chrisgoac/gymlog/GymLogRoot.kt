@@ -44,6 +44,7 @@ import com.chrisgoac.gymlog.navigation.GymLogApp
 import com.chrisgoac.gymlog.navigation.HistoryEditServices
 import com.chrisgoac.gymlog.navigation.AchievementsServices
 import com.chrisgoac.gymlog.navigation.BodyServices
+import com.chrisgoac.gymlog.navigation.AiPlanServices
 import com.chrisgoac.gymlog.navigation.CoachServices
 import com.chrisgoac.gymlog.navigation.MediaServices
 import com.chrisgoac.gymlog.navigation.ProgressServices
@@ -70,6 +71,7 @@ fun GymLogRoot(
     achievements: AchievementsServices? = null,
     media: MediaServices? = null,
     coach: CoachServices? = null,
+    aiPlans: AiPlanServices? = null,
     syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
     onOpenWorkoutHandled: () -> Unit = {},
@@ -97,6 +99,7 @@ fun GymLogRoot(
                 achievements = achievements,
                 media = media,
                 coach = coach,
+                aiPlans = aiPlans,
                 syncState = syncState,
                 openWorkoutRequest = openWorkoutRequest,
                 onOpenWorkoutHandled = onOpenWorkoutHandled,

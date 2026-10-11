@@ -75,6 +75,8 @@ import com.chrisgoac.gymlog.train.StartWorkoutUseCase
 import com.chrisgoac.gymlog.train.TrainEvent
 import com.chrisgoac.gymlog.train.TrainHomeScreen
 import com.chrisgoac.gymlog.train.TrainHomeViewModel
+import com.chrisgoac.gymlog.routines.MesocycleGeneratorScreen
+import com.chrisgoac.gymlog.routines.MesocycleGeneratorViewModel
 import com.chrisgoac.gymlog.routines.RoutineEditorScreen
 import com.chrisgoac.gymlog.routines.RoutineEditorViewModel
 import com.chrisgoac.gymlog.routines.RoutineListScreen
@@ -137,6 +139,10 @@ import com.chrisgoac.gymlog.progress.ProgressGalleryScreen
 import com.chrisgoac.gymlog.domain.math.WeightUnit
 import kotlinx.coroutines.flow.StateFlow
 import com.chrisgoac.gymlog.progress.ExerciseProgressScreen
+import com.chrisgoac.gymlog.progress.IntelligentReportScreen
+import com.chrisgoac.gymlog.progress.IntelligentReportViewModel
+import com.chrisgoac.gymlog.domain.ai.IntelligentReportRepository
+import com.chrisgoac.gymlog.domain.ai.MesocycleRepository
 import com.chrisgoac.gymlog.progress.ExerciseProgressViewModel
 import com.chrisgoac.gymlog.progress.ProgressClock
 import com.chrisgoac.gymlog.progress.ProgressScreen
@@ -209,6 +215,18 @@ class CoachServices(
     val online: Flow<Boolean>,
 )
 
+/**
+ * What the Pro planning routes need: AI mesocycle drafts, the intelligent report, the Pro entitlement
+ * (presentation only) and connectivity (both need the network), plus the device zone report dates are shown in.
+ */
+class AiPlanServices(
+    val mesocycles: MesocycleRepository,
+    val reports: IntelligentReportRepository,
+    val entitlements: EntitlementReader,
+    val online: Flow<Boolean>,
+    val zone: () -> ZoneId,
+)
+
 /** What the Achievements route needs: the streak (stats), unlocked milestones + records, and the device zone dates are shown in. */
 class AchievementsServices(
     val stats: StatsRepository,
@@ -236,6 +254,7 @@ fun GymLogApp(
     coach: CoachServices? = null,
     syncState: Flow<SyncUiState>? = null,
     openWorkoutRequest: String? = null,
+    aiPlans: AiPlanServices? = null,
     onOpenWorkoutHandled: () -> Unit = {},
 ) {
     val colors = HierroTheme.colors
@@ -256,7 +275,7 @@ fun GymLogApp(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, body, achievements, media, coach, syncState)
+            GymLogNavHost(navController, Modifier.widthIn(max = 720.dp).fillMaxSize(), settings, exercises, routines, workouts, workoutLog, restTimer, finishWorkout, history, historyEditing, progress, body, achievements, media, coach, syncState, aiPlans)
         }
         HierroTabBar {
             BottomDestinations.forEach { item ->
@@ -297,6 +316,7 @@ private fun GymLogNavHost(
     media: MediaServices?,
     coach: CoachServices?,
     syncState: Flow<SyncUiState>?,
+    aiPlans: AiPlanServices?,
 ) {
     // Scoped to the account's shell (see GymLogRoot) so Settings and its diagnostics share one state
     // and it survives navigation and rotation, but never another account.
@@ -395,12 +415,16 @@ private fun GymLogNavHost(
                         SmokeScreen(GymLogDestination.Routines, navController)
                     } else {
                         val viewModel = viewModel { RoutineListViewModel(routines) }
+                        // Presentation only: the server re-checks Pro on every AI request.
+                        val aiPlansIsPro by remember(aiPlans) { aiPlans?.entitlements?.observeIsPro()?.catch { emit(false) } ?: flowOf(false) }.collectAsState(false)
                         RoutineListScreen(
                             viewModel,
                             onOpen = { navController.navigate(GymLogDestination.RoutineEditor(it)) },
                             onCreate = { navController.navigate(GymLogDestination.RoutineEditor()) },
                             onStartRoutine = { trainViewModel?.startRoutine(it) },
                             onSettings = { navController.navigate(GymLogDestination.Settings) },
+                            onGenerateMesocycle = aiPlans?.let { { navController.navigate(GymLogDestination.MesocycleGenerator) { launchSingleTop = true } } },
+                            mesocycleIsPro = aiPlansIsPro,
                         )
                     }
                 }
@@ -489,8 +513,7 @@ private fun GymLogNavHost(
                             onOpenExercise = { id, filter ->
                                 navController.navigate(GymLogDestination.ProgressExercise(id, filter.period.wire, filter.gym.gymId ?: GymFilter.ALL_WIRE))
                             },
-                            // TODO(Plan 5): navigate to the intelligent report once it exists; null keeps the action disabled.
-                            onOpenReport = null,
+                            onOpenReport = aiPlans?.let { { navController.navigate(GymLogDestination.IntelligentReport) { launchSingleTop = true } } },
                             onOpenBody = body?.let { { navController.navigate(GymLogDestination.Body) { launchSingleTop = true } } },
                             onOpenAchievements = achievements?.let { { navController.navigate(GymLogDestination.Achievements) { launchSingleTop = true } } },
                             onOpenPhotos = media?.let { { navController.navigate(GymLogDestination.ProgressPhotos()) { launchSingleTop = true } } },
@@ -570,6 +593,23 @@ private fun GymLogNavHost(
                     // question is offered for retry (same message id) when the Coach is opened again.
                     val viewModel = viewModel { CoachViewModel(coach.repository, coach.entitlements, coach.online, createSavedStateHandle()) }
                     CoachScreen(viewModel, onBack = { navController.popBackStack() })
+                }
+            }
+            composable<GymLogDestination.MesocycleGenerator> {
+                if (aiPlans == null) {
+                    SmokeScreen(GymLogDestination.Routines, navController, secondary = true)
+                } else {
+                    // Entry-scoped: the draft survives rotation; the pending request id survives process death.
+                    val viewModel = viewModel { MesocycleGeneratorViewModel(aiPlans.mesocycles, aiPlans.entitlements, aiPlans.online, createSavedStateHandle()) }
+                    MesocycleGeneratorScreen(viewModel, onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() })
+                }
+            }
+            composable<GymLogDestination.IntelligentReport> {
+                if (aiPlans == null) {
+                    SmokeScreen(GymLogDestination.Progress, navController, secondary = true)
+                } else {
+                    val viewModel = viewModel { IntelligentReportViewModel(aiPlans.reports, aiPlans.entitlements, aiPlans.online) }
+                    IntelligentReportScreen(viewModel, aiPlans.zone, onBack = { navController.popBackStack() })
                 }
             }
             composable<GymLogDestination.Body> {

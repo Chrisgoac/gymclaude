@@ -47,22 +47,8 @@ internal class AuthorizedCalls(
         } catch (e: Exception) {
             throw SyncApiException.Transport(e)
         }
-        val status = response.status.value
-        if (status == HTTP_UNAUTHORIZED || status == HTTP_FORBIDDEN) {
-            throw if (auth.state.value == AuthState.SignedIn(expectedUserId)) {
-                SyncApiException.SessionRejected("HTTP $status with an active session")
-            } else {
-                SyncApiException.SessionRequired("HTTP $status")
-            }
-        }
-        if (status !in 200..299) {
-            throw NetworkErrorMapper.map(
-                status,
-                response.headers[HttpHeaders.RetryAfter],
-                text,
-                response.headers["x-request-id"] ?: sent.requestId,
-            )
-        }
+        // 401/403 → session problem, except a 403 with a route-level code (e.g. PRO_REQUIRED), as in [stream].
+        if (response.status.value !in 200..299) throw failure(expectedUserId, response, text, sent.requestId)
         return try {
             decode(text)
         } catch (e: SerializationException) {

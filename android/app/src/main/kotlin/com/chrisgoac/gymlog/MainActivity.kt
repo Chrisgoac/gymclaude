@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
                     achievements = container.achievementsServices,
                     media = container.mediaServices,
                     coach = container.coachServices,
+                    aiPlans = container.aiPlanServices,
                     syncState = container.syncUiState,
                     openWorkoutRequest = container.openWorkoutRequest.collectAsState().value,
                     onOpenWorkoutHandled = { container.openWorkoutRequest.value = null },
