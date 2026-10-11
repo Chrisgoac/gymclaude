@@ -42,9 +42,9 @@ fun RoutineListScreen(
     onCreate: () -> Unit,
     onStartRoutine: (String) -> Unit,
     onSettings: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
     onGenerateMesocycle: (() -> Unit)? = null,
     mesocycleIsPro: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
     RoutineListContent(
@@ -76,9 +76,9 @@ internal fun RoutineListContent(
     onRetry: () -> Unit,
     onDismissError: () -> Unit,
     onSettings: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
     onGenerateMesocycle: (() -> Unit)? = null,
     mesocycleIsPro: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     val newDescription = stringResource(R.string.routines_new_description)
     Column(modifier.fillMaxSize()) {
