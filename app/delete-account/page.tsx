@@ -89,7 +89,8 @@ export default async function DeleteAccountPage({
       <Section title="Tu suscripción de Google Play">
         <p>
           Borrar la cuenta <strong>no cancela</strong> una suscripción a GymLog Pro: la gestiona Google Play y
-          tienes que cancelarla allí, antes o después de borrar la cuenta, para que no te siga cobrando.
+          tienes que cancelarla allí, antes o después de borrar la cuenta, para que no te siga cobrando. La
+          suscripción activa de Play no se puede pasar a una cuenta nueva.
         </p>
         <a className="inline-block font-semibold underline" href={PLAY_SUBSCRIPTIONS_URL} target="_blank" rel="noreferrer">
           Abrir mis suscripciones en Google Play

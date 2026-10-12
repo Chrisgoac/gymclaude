@@ -127,6 +127,7 @@ class AccountScreenTest {
     @Test fun deletionNeedsTheTypedWordThenAsksForAFreshSignIn() {
         showAccount()
         rule.onNodeWithText("Eliminar la cuenta no cancela una suscripción de Google Play", substring = true).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("no se puede pasar a una cuenta nueva", substring = true).assertIsDisplayed()
         rule.onNodeWithText("Eliminar cuenta para siempre").performScrollTo().assertIsNotEnabled()
 
         rule.onNode(hasSetTextAction()).performScrollTo().performTextInput("ELIMINAR")

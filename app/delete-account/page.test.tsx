@@ -40,6 +40,7 @@ describe('/delete-account (public page)', () => {
     expect(screen.getByRole('heading', { name: /qué se borra/i })).toBeInTheDocument();
     expect(screen.getByText(/entrenos, rutinas/i)).toBeInTheDocument();
     expect(screen.getByText(/no cancela/i)).toBeInTheDocument();
+    expect(screen.getByText(/no se puede pasar a una cuenta nueva/i)).toBeInTheDocument();
     const play = screen.getByRole('link', { name: /suscripciones en google play/i });
     expect(play).toHaveAttribute('href', expect.stringMatching(/^https:\/\/play\.google\.com\/store\/account\/subscriptions\?package=com\.chrisgoac\.gymlog/));
   });

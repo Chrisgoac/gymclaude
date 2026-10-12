@@ -52,7 +52,7 @@
 
     <string name="settings_delete_title">Eliminar cuenta</string>
     <string name="settings_delete_explanation">Se borran de forma permanente tu cuenta, tus rutinas, entrenamientos, medidas, fotos y conversaciones con el Coach, en el servidor y en este dispositivo. No se puede deshacer.</string>
-    <string name="settings_delete_subscription_general">Eliminar la cuenta no cancela una suscripción de Google Play. Si tienes GymLog Pro, cancélala en Google Play.</string>
+    <string name="settings_delete_subscription_general">Eliminar la cuenta no cancela una suscripción de Google Play. Si tienes GymLog Pro, cancélala en Google Play. La suscripción activa de Play no se puede pasar a una cuenta nueva.</string>
     <string name="settings_delete_subscription_renewing">Tienes GymLog Pro activo y se renovará. Eliminar la cuenta NO cancela la suscripción: cancélala en Google Play o te seguirá cobrando.</string>
     <string name="settings_delete_subscription_not_renewing">Tu suscripción de GymLog Pro no se renovará, pero sigue registrada en Google Play. Puedes revisarla allí.</string>
     <string name="settings_delete_manage">Gestionar suscripción en Google Play</string>
