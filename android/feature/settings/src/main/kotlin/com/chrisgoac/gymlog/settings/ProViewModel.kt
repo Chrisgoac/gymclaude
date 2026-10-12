@@ -127,13 +127,26 @@ class ProViewModel(
 
     init {
         viewModelScope.launch {
-            billing.loadProducts()
-            billing.refresh()
+            guarded { billing.loadProducts() }
+            guarded { billing.refresh() }
         }
     }
 
     fun reloadProducts() {
-        viewModelScope.launch { billing.loadProducts() }
+        viewModelScope.launch { guarded { billing.loadProducts() } }
+    }
+
+    /**
+     * The repository reports its own failures through `products` and `entitlement`; anything else it lets escape
+     * (e.g. an unexpected Play library exception) must not reach the main thread's uncaught handler.
+     */
+    private suspend fun guarded(block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+        }
     }
 
     /** Starts the Play purchase (or plan switch) for [product]; [activity] is the foreground `android.app.Activity`. */

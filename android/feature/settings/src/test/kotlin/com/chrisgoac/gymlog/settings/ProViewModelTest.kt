@@ -47,8 +47,14 @@ private class FakeBilling : BillingRepository {
     var restoreResult: RestoreResult = RestoreResult.NothingToRestore
     var restoreGate: CompletableDeferred<Unit>? = null
     var restores = 0
+    var loadFailure: Exception? = null
+    var refreshFailure: Exception? = null
 
-    override suspend fun loadProducts() { loadedProducts++; products.value = OFFERS }
+    override suspend fun loadProducts() {
+        loadedProducts++
+        loadFailure?.let { throw it }
+        products.value = OFFERS
+    }
     override suspend fun launchPurchase(activity: Any, product: ProProduct): PurchaseStatus {
         launched += activity to product
         purchaseStatus.value = PurchaseStatus.AwaitingPlay(product)
@@ -59,7 +65,10 @@ private class FakeBilling : BillingRepository {
         restoreGate?.await()
         return restoreResult
     }
-    override suspend fun refresh() { refreshed++ }
+    override suspend fun refresh() {
+        refreshed++
+        refreshFailure?.let { throw it }
+    }
     override fun managementUri() = "https://play.google.com/store/account/subscriptions?package=com.chrisgoac.gymlog"
 }
 
@@ -83,6 +92,24 @@ class ProViewModelTest {
         assertEquals(OFFERS, vm.state.value.catalog)
         assertEquals("4,99 €", vm.state.value.offer(ProProduct.MONTHLY)?.formattedPrice)
         assertEquals("P1Y", vm.state.value.offer(ProProduct.ANNUAL)?.billingPeriod)
+    }
+
+    @Test fun `an unexpected billing error while opening the screen does not crash and the state still renders`() = runTest(dispatcher) {
+        billing.loadFailure = IllegalStateException("play library")
+        billing.refreshFailure = IllegalStateException("unexpected")
+        val vm = viewModel(backgroundScope)
+        assertEquals(1, billing.loadedProducts)
+        assertEquals(ProductCatalog.Loading, vm.state.value.catalog)
+        assertEquals(Entitlement.Unknown, vm.state.value.entitlement)
+
+        vm.reloadProducts() // the retry is guarded too
+        assertEquals(2, billing.loadedProducts)
+    }
+
+    @Test fun `a failed product load still re-reads the entitlement`() = runTest(dispatcher) {
+        billing.loadFailure = IllegalStateException("play library")
+        viewModel(backgroundScope)
+        assertEquals(1, billing.refreshed)
     }
 
     @Test fun `the plan is derived only from the server entitlement`() {
