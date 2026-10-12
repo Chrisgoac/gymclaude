@@ -146,7 +146,7 @@ Evidence: [android-phase-01-backend.md](../../verification/android-phase-01-back
 
 ### Android foundation gate
 
-- [ ] Run `cd android && ./gradlew testDebug lintDebug assembleDebug`.
+- [x] Run `cd android && ./gradlew testDebug lintDebug assembleDebug`. (2026-10-12, `testDebugUnitTest lintDebug assembleDebug` 1188 tests, 0 lint errors: [evidencia](../../verification/android-release-qualification.md) §2)
 - [ ] Run instrumentation smoke tests on API 26 and API 36.
 - [ ] Confirm auth waits for an active Clerk session, not merely a loaded user.
 - [ ] Confirm switching test accounts never exposes the previous account's Room rows or cached media.
@@ -196,7 +196,7 @@ Evidence: [android-phase-05-media-ai.md](../../verification/android-phase-05-med
 - [ ] Complete the inventory in design spec section 6 without WebView screens.
 - [ ] Run the six critical E2E flows from design spec section 17.4.
 - [ ] Verify TalkBack, 200% font scale, touch targets, light/dark themes, and gesture insets.
-- [ ] Compare TypeScript and Kotlin results for every shared domain and conflict fixture.
+- [x] Compare TypeScript and Kotlin results for every shared domain and conflict fixture. (all 14 fixtures consumed by both suites, both green: [evidencia](../../verification/android-release-qualification.md) §2)
 
 ### Publication gate
 
@@ -209,7 +209,7 @@ Evidence: [android-phase-05-media-ai.md](../../verification/android-phase-05-med
 ## Final Acceptance
 
 - [ ] Every criterion in design spec section 20 has linked test evidence.
-- [ ] No unfinished-marker scan matches: `rg -n "[T]BD|[T]ODO|[F]IXME|place''holder|coming[ ]soon" android app/api/v1 lib/api/v1 contracts docs/play`.
-- [ ] `git diff --check` reports no whitespace errors.
-- [ ] The PWA still builds during the coexistence window.
-- [ ] The production AAB is the only public Android edition; Pro is an entitlement, not a separate APK.
+- [x] No unfinished-marker scan matches: `rg -n "[T]BD|[T]ODO|[F]IXME|place''holder|coming[ ]soon" android app/api/v1 lib/api/v1 contracts docs/play`. ([evidencia](../../verification/android-release-qualification.md) §2)
+- [x] `git diff --check` reports no whitespace errors. ([evidencia](../../verification/android-release-qualification.md) §2)
+- [x] The PWA still builds during the coexistence window. (`npm run build` green on `feat/android-release`: [evidencia](../../verification/android-release-qualification.md) §1)
+- [x] The production AAB is the only public Android edition; Pro is an entitlement, not a separate APK. (single `app` module, no product flavors: [evidencia](../../verification/android-release-qualification.md) §3)
