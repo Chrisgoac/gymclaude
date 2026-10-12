@@ -45,9 +45,11 @@ export const DeleteAccountRequestSchema = z.object({ confirm: z.literal(DELETION
 export const DELETION_STEPS = ['storage', 'database', 'storage_sweep', 'identity', 'database_sweep'] as const;
 /**
  * Espera mínima entre la petición y el barrido final: más que la duración máxima de cualquier
- * función que pudiera estar escribiendo para el usuario (maxDuration 60 s) con margen.
+ * función que pudiera estar escribiendo para el usuario (la mayor es 120 s, en /api/v1/ai/mesocycles y
+ * /api/coach/mesociclo; /api/v1/ai/reports 90 s; el resto 60 s) con margen. Si sube algún maxDuration,
+ * sube también esta espera.
  */
-export const FINAL_SWEEP_DELAY_MS = 120_000;
+export const FINAL_SWEEP_DELAY_MS = 180_000;
 export type DeletionStep = (typeof DELETION_STEPS)[number] | 'done';
 
 const STEP_ERROR_CODES: Record<(typeof DELETION_STEPS)[number], string> = {

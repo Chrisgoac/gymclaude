@@ -443,7 +443,7 @@ Deletes the caller's account and all of its data. Body (strict, `application/jso
   `media_deletions`, `subscription_entitlements`, `billing_events` of the user's token hashes,
   `api_rate_buckets` of `sha256(userId)`, `ai_reports`, `ai_responses`, `reported_ai_responses`) →
   second R2 sweep → Clerk user (`users.deleteUser`; 404 = already deleted) → final `database_sweep`
-  (rows + R2 again, run only ≥ 120 s after the request, by the cron or a repeated call) → done (the job
+  (rows + R2 again, run only ≥ 180 s after the request, by the cron or a repeated call) → done (the job
   keeps only the domain-separated hash, status and timestamps).
 - **Late writers.** Writes that are not serialized by the sync lock re-check the lock inside the write
   and refuse it: AI report storage, AI-response reports (`403 ACCOUNT_DELETING`), Play `verify`

@@ -9,7 +9,7 @@
 -- the Clerk id, and the raw user_id is kept only while the job is pending (needed to resume the R2,
 -- Postgres and Clerk steps) and is set to NULL when the job completes.
 -- step = next step to run (storage → database → storage_sweep → identity → database_sweep → done);
--- database_sweep runs only 120 s after requested_at (late writers that passed the guard before the lock). Each step is
+-- database_sweep runs only 180 s after requested_at (late writers that passed the guard before the lock). Each step is
 -- idempotent; a failure records last_error_code (a stable code) and last_error_class (sanitized error
 -- class + HTTP status/SQLSTATE, never a message) and the job is
 -- resumed by the next DELETE or by /api/internal/account/process-deletions.

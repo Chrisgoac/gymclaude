@@ -50,6 +50,22 @@ describe('recent authentication and confirmation', () => {
   });
 });
 
+describe('final sweep delay', () => {
+  it('waits longer than the slowest route that may still be writing for the user, with margin', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const routes = (readdirSync(join(process.cwd(), 'app'), { recursive: true }) as string[])
+      .filter((f) => /(^|\/)route\.tsx?$/.test(f));
+    const durations = routes.flatMap((f) => {
+      const m = /export const maxDuration = (\d+)/.exec(readFileSync(join(process.cwd(), 'app', f), 'utf8'));
+      return m ? [Number(m[1])] : [];
+    });
+    expect(Math.max(...durations)).toBe(120);
+    expect(FINAL_SWEEP_DELAY_MS).toBe(180_000);
+    expect(FINAL_SWEEP_DELAY_MS).toBeGreaterThanOrEqual(Math.max(...durations) * 1000 + 60_000);
+  });
+});
+
 describe('data scope', () => {
   it('covers every table with a user_id column; the others are deleted by an exact indirect key', () => {
     const tables = Object.values(schema as Record<string, unknown>).filter(
@@ -541,7 +557,7 @@ describe.skipIf(!url)('account deletion orchestrator (integration)', () => {
     await db.insert(schema.subscriptionEntitlements).values({ userId: a, productId: 'gymlog_pro_monthly', purchaseTokenHash: `raced-${a}`,
       state: 'ACTIVE', expiresAt: NOW + DAY, autoRenewing: true, lastVerifiedAt: NOW, source: 'play', createdAt: NOW, updatedAt: NOW });
     await db.insert(schema.apiRateBuckets).values({ scope: 'ai', subjectHash: hashSubject(a), windowStart: NOW + 1, count: 1 });
-    clock += FINAL_SWEEP_DELAY_MS - 1;
+    clock += FINAL_SWEEP_DELAY_MS - 1; // 179.999 s after the request: not yet
     expect(await svc.runJob(a)).toMatchObject({ status: 'in_progress', step: 'database_sweep', errorCode: null });
     expect(total(await counts(a))).toBe(3);
     clock += 1;
