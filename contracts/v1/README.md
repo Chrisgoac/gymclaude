@@ -415,8 +415,11 @@ like `verify`, so duplicates and out-of-order delivery converge on Google's curr
 entitlement change commit in one transaction. Voided (refunded) subscriptions become `REVOKED` unless
 Google still entitles them. `linkedPurchaseToken` (upgrade/downgrade) moves the owner of the old token
 to the new one and expires the old row. A token no account has verified yet is recorded and
-acknowledged without a grant (the client's `verify` binds it). 200 = acknowledged (`{ outcome }`),
-503 = Pub/Sub retries (Google or database unavailable). Migration: `drizzle/0004_billing_events.sql`
+acknowledged without a grant (the client's `verify` binds it). 200 = acknowledged (`{ outcome }`).
+Every other status makes Pub/Sub redeliver with backoff: 503 (Google or database unavailable, or
+config missing), 401 (bad or missing OIDC token) and 400/413/415 (malformed envelope, body too large,
+not JSON); Pub/Sub messages are authenticated and Google-generated, so that noise is bounded by the
+subscription's retention. Migration: `drizzle/0004_billing_events.sql`
 via `npm run db:migrate:billing` (after 0003).
 
 ## Account deletion
@@ -434,7 +437,8 @@ Deletes the caller's account and all of its data. Body (strict, `application/jso
   again (or runs Clerk reverification) and retries. Resuming an already requested deletion does not
   require recent authentication.
 - **Immediate lock.** The first step inserts the `account_deletion_jobs` row; from then on every other
-  `/api/v1` route and the legacy PWA routes (`/api/sync/*`, `/api/*-photos`) answer
+  `/api/v1` route and the legacy PWA routes (`/api/sync/*`, `/api/*-photos`, `/api/coach`,
+  `/api/coach/mesociclo`) answer
   `403 ACCOUNT_DELETING`, and a write that was already waiting on the per-user sync lock is refused
   inside its transaction.
 - **Steps** (each idempotent): R2 objects (private prefix `users/<hash>/`, legacy public prefix
