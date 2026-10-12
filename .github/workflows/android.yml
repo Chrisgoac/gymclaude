@@ -69,6 +69,8 @@ jobs:
       - run: ./gradlew assembleDebug
 
   release:
+    # A signed bundle is built only once the debug tests and lint passed.
+    needs: [testDebug, lintDebug]
     runs-on: ubuntu-latest
     env:
       # Public Clerk key from a repository variable (not a secret). Empty → unsigned build-health bundle only.
@@ -104,12 +106,16 @@ jobs:
           fi
           keystore="$RUNNER_TEMP/gymlog-upload.jks"
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
-          {
-            echo "GYMLOG_KEYSTORE_FILE=$keystore"
-            echo "GYMLOG_KEYSTORE_PASSWORD=$STORE_PASSWORD"
-            echo "GYMLOG_KEY_ALIAS=$KEY_ALIAS"
-            echo "GYMLOG_KEY_PASSWORD=$KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
+          # Multiline form with a random delimiter: a value containing a newline cannot inject other variables.
+          put_env() {
+            delim="gymlog_$(openssl rand -hex 16)"
+            case "$2" in *"$delim"*) echo "Refusing $1: value contains the delimiter"; exit 1 ;; esac
+            printf '%s<<%s\n%s\n%s\n' "$1" "$delim" "$2" "$delim" >> "$GITHUB_ENV"
+          }
+          put_env GYMLOG_KEYSTORE_FILE "$keystore"
+          put_env GYMLOG_KEYSTORE_PASSWORD "$STORE_PASSWORD"
+          put_env GYMLOG_KEY_ALIAS "$KEY_ALIAS"
+          put_env GYMLOG_KEY_PASSWORD "$KEY_PASSWORD"
       - run: ./gradlew testReleaseUnitTest lintRelease bundleRelease -Pgymlog.versionCode=$(( GITHUB_RUN_NUMBER + ${VERSION_CODE_OFFSET:-0} ))
       - name: Remove keystore
         if: always()
