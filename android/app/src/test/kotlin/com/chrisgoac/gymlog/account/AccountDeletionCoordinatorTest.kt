@@ -260,9 +260,39 @@ class AccountDeletionCoordinatorTest {
         assertEquals(setOf("h-$A"), marks.intents)
     }
 
+    // ── Re-sign-in after the final notice ──
+
+    @Test fun `after an unconfirmed wipe is acknowledged the same account can sign in again`() = runTest(UnconfinedTestDispatcher()) {
+        val coordinator = started()
+        coordinator.intend(A)
+        auth.value = AuthState.SessionExpired(A) // answer lost, session ended: wiped as unconfirmed
+        assertEquals(AccountDeletionStatus.Done(null, serverConfirmed = false), coordinator.status.value)
+        assertTrue("a late restore before Continuar stays blocked", coordinator.isWiped(A))
+
+        coordinator.acknowledge()
+        log.clear()
+        auth.value = AuthState.SignedIn(A) // the account may still exist on the server
+
+        assertTrue(log.isEmpty())
+        assertEquals(AuthState.SignedIn(A), auth.value)
+        assertFalse(coordinator.isWiped(A))
+    }
+
+    @Test fun `after a confirmed wipe is acknowledged the same account is still signed out`() = runTest(UnconfinedTestDispatcher()) {
+        val coordinator = started()
+        coordinator.begin(A, null)
+        coordinator.acknowledge()
+        log.clear()
+
+        auth.value = AuthState.SignedIn(A)
+
+        assertEquals(listOf("signOut"), log)
+        assertEquals(AuthState.SignedOut, auth.value)
+        assertTrue(coordinator.isWiped(A))
+    }
+
     private companion object {
         const val A = "user_a"
         const val B = "user_b"
     }
 }
-

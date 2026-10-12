@@ -69,7 +69,8 @@ interface AccountDeletionMarks {
  * 4. [wipe] deletes exactly that account's database, files, caches and per-account stores (under the account's
  *    sync lock when its id is known in this process);
  * 5. the mark is removed and the hash remembered for this process: a later `SignedIn` of it is signed out again
- *    ([isWiped] keeps the root from opening it) and a duplicate [begin] is ignored.
+ *    ([isWiped] keeps the root from opening it) and a duplicate [begin] is ignored. For an unconfirmed wipe this
+ *    lasts only until [acknowledge]: the account may still exist, so signing in again afterwards is allowed.
  * A failure leaves the mark ([AccountDeletionStatus.Failed]); [retry] runs the same steps again.
  *
  * **Unconfirmed deletion** ([intend] before the request; the answer may be lost). The intent stays until evidence:
@@ -97,6 +98,9 @@ class AccountDeletionCoordinator(
     private val mutex = Mutex()
     private val intents: MutableSet<String> = Collections.synchronizedSet(LinkedHashSet())
     private val wiped: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** Wiped without a server confirmation: the account may still exist, so [acknowledge] lets it sign in again. */
+    private val wipedUnconfirmed: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val knownIds = ConcurrentHashMap<String, String>()
     @Volatile private var subscription: LiveSubscription? = null
     @Volatile private var serverConfirmed = false
@@ -155,9 +159,15 @@ class AccountDeletionCoordinator(
         scope.launch { runCleanup() }
     }
 
-    /** The user read the final notice. Only a finished deletion can be dismissed. */
+    /**
+     * The user read the final notice. Only a finished deletion can be dismissed. Accounts wiped without a server
+     * confirmation stop being blocked here (the account may still exist and the user may sign in again); confirmed
+     * ones stay blocked for this process, since the server still answers `ACCOUNT_DELETING` for them.
+     */
     fun acknowledge() {
         if (mutableStatus.value !is AccountDeletionStatus.Done) return
+        wiped.removeAll(wipedUnconfirmed)
+        wipedUnconfirmed.clear()
         subscription = null
         serverConfirmed = false
         mutableStatus.value = AccountDeletionStatus.None
@@ -196,6 +206,7 @@ class AccountDeletionCoordinator(
                 if (mutableStatus.value == AccountDeletionStatus.Running) mutableStatus.value = done()
                 return@withLock
             }
+            val unconfirmed = marks.unconfirmed()
             hashes.forEach { stopWork(it) }
             if (!endSession(hashes)) {
                 mutableStatus.value = AccountDeletionStatus.Failed
@@ -204,6 +215,7 @@ class AccountDeletionCoordinator(
             hashes.forEach { hash ->
                 wipe(hash, knownIds[hash])
                 wiped += hash
+                if (hash in unconfirmed) wipedUnconfirmed += hash else wipedUnconfirmed -= hash
                 marks.remove(hash)
             }
             mutableStatus.value = done()
