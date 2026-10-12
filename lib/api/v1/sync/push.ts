@@ -13,6 +13,7 @@ import {
   type SyncTableName,
 } from '@/lib/api/v1/contracts/sync';
 import { ApiError } from '@/lib/api/v1/errors';
+import { enqueueReleasedMediaKey } from '@/lib/api/v1/media/deletions';
 import { decideVersionedWrite } from '@/lib/sync/server-merge';
 import { SYNC_TABLE_ADAPTERS, type SyncRecordDto, type SyncTableAdapter } from './tables';
 
@@ -157,6 +158,14 @@ async function applyOperation(
       .returning({ sequence: syncChanges.sequence });
     const serverVersion = change.sequence;
     await adapter.update(tx, userId, record.id, existing ? { ...values, serverVersion } : { serverVersion });
+    // Una foto tombstoneada (o con clave reemplazada) libera su objeto v1: borrado diferido, misma tx.
+    await enqueueReleasedMediaKey(tx, {
+      table,
+      userId,
+      before: existing ? { key: existing.row.key, deletedAt: existing.deletedAt } : null,
+      after: values,
+      at: now,
+    });
 
     return decision.conflict ? conflict(serverVersion, decision.conflict) : null;
   }

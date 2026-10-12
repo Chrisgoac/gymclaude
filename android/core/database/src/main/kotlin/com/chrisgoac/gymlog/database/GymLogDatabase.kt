@@ -3,7 +3,9 @@ package com.chrisgoac.gymlog.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.chrisgoac.gymlog.database.dao.AchievementDao
+import com.chrisgoac.gymlog.database.dao.WorkoutHistoryDao
 import com.chrisgoac.gymlog.database.dao.BodyMetricDao
+import com.chrisgoac.gymlog.database.dao.CatalogDao
 import com.chrisgoac.gymlog.database.dao.CoachMessageDao
 import com.chrisgoac.gymlog.database.dao.ExerciseDao
 import com.chrisgoac.gymlog.database.dao.ExercisePhotoDao
@@ -11,15 +13,19 @@ import com.chrisgoac.gymlog.database.dao.GymDao
 import com.chrisgoac.gymlog.database.dao.LoggedExerciseDao
 import com.chrisgoac.gymlog.database.dao.LoggedSetDao
 import com.chrisgoac.gymlog.database.dao.MesocycleDao
+import com.chrisgoac.gymlog.database.dao.PendingMediaDao
 import com.chrisgoac.gymlog.database.dao.ProgressPhotoDao
 import com.chrisgoac.gymlog.database.dao.RoutineDao
 import com.chrisgoac.gymlog.database.dao.RoutineExerciseDao
+import com.chrisgoac.gymlog.database.dao.StatsDao
 import com.chrisgoac.gymlog.database.dao.SyncDao
 import com.chrisgoac.gymlog.database.dao.UserSettingDao
 import com.chrisgoac.gymlog.database.dao.WorkoutSessionDao
 import com.chrisgoac.gymlog.database.entity.AchievementEntity
 import com.chrisgoac.gymlog.database.entity.BodyMetricEntity
 import com.chrisgoac.gymlog.database.entity.BootstrapCheckpointEntity
+import com.chrisgoac.gymlog.database.entity.CatalogExerciseEntity
+import com.chrisgoac.gymlog.database.entity.CatalogMetaEntity
 import com.chrisgoac.gymlog.database.entity.CoachMessageEntity
 import com.chrisgoac.gymlog.database.entity.ExerciseEntity
 import com.chrisgoac.gymlog.database.entity.ExercisePhotoEntity
@@ -28,6 +34,7 @@ import com.chrisgoac.gymlog.database.entity.LoggedExerciseEntity
 import com.chrisgoac.gymlog.database.entity.LoggedSetEntity
 import com.chrisgoac.gymlog.database.entity.MesocycleEntity
 import com.chrisgoac.gymlog.database.entity.OutboxMutationEntity
+import com.chrisgoac.gymlog.database.entity.PendingMediaEntity
 import com.chrisgoac.gymlog.database.entity.ProgressPhotoEntity
 import com.chrisgoac.gymlog.database.entity.RoutineEntity
 import com.chrisgoac.gymlog.database.entity.RoutineExerciseEntity
@@ -50,8 +57,13 @@ import com.chrisgoac.gymlog.database.entity.WorkoutSessionEntity
  * constraints would make applying such a page fail. Reference columns are indexed for joins
  * instead; referential checks belong in domain validation before a local write.
  *
- * Schema version 1 is the first published schema; exported schemas live in
- * `core/database/schemas/` and every future change needs a tested migration.
+ * Plus the local-only global exercise catalog (`catalog_exercises`, `catalog_meta`; schema 2): never
+ * synced and never in the outbox.
+ *
+ * Plus the local-only photo upload/delete queue (`pending_media`; schema 3), also never synced.
+ *
+ * Version 1 was the first published schema; exported schemas live in `core/database/schemas/` and
+ * every change needs a tested migration (see [GYMLOG_MIGRATIONS]).
  */
 @Database(
     entities = [
@@ -72,12 +84,17 @@ import com.chrisgoac.gymlog.database.entity.WorkoutSessionEntity
         OutboxMutationEntity::class,
         SyncCursorEntity::class,
         BootstrapCheckpointEntity::class,
+        CatalogExerciseEntity::class,
+        CatalogMetaEntity::class,
+        PendingMediaEntity::class,
     ],
-    version = 1,
+    version = 3,
     exportSchema = true,
 )
 abstract class GymLogDatabase : RoomDatabase() {
     abstract fun exerciseDao(): ExerciseDao
+    abstract fun workoutHistoryDao(): WorkoutHistoryDao
+    abstract fun statsDao(): StatsDao
     abstract fun routineDao(): RoutineDao
     abstract fun routineExerciseDao(): RoutineExerciseDao
     abstract fun workoutSessionDao(): WorkoutSessionDao
@@ -92,4 +109,6 @@ abstract class GymLogDatabase : RoomDatabase() {
     abstract fun mesocycleDao(): MesocycleDao
     abstract fun achievementDao(): AchievementDao
     abstract fun syncDao(): SyncDao
+    abstract fun catalogDao(): CatalogDao
+    abstract fun pendingMediaDao(): PendingMediaDao
 }

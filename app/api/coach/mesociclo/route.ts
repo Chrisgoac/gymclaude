@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { legacyDeletingResponse } from '@/lib/account/access';
 import { generateObject, jsonSchema } from 'ai';
 import { modeloCoach, deepseekConfigured } from '@/lib/coach-model';
 import { promptMesociclo, MESO_SCHEMA, type MesoParams } from '@/lib/meso-prompt';
@@ -11,6 +12,8 @@ export const maxDuration = 120;
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return new NextResponse('Unauthorized', { status: 401 });
+  const deleting = await legacyDeletingResponse(userId);
+  if (deleting) return deleting;
   if (!deepseekConfigured()) return new NextResponse('Coach no disponible', { status: 503 });
 
   let payload: { params: MesoParams; snapshot: CoachSnapshot; catalogo: { nombre: string; grupo: string; equipamiento: string }[] };

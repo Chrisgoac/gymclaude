@@ -1,7 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// The account-deletion access lock has its own tests (app/api/v1/account, lib/account).
+vi.mock('@/lib/account/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/account/access')>()),
+  legacyDeletingResponse: async () => null,
+}));
 
 const auth = vi.fn();
 vi.mock('@clerk/nextjs/server', () => ({ auth: () => auth() }));
+const enqueue = vi.fn(async () => {});
+vi.mock('@/db/pool', () => ({ getPoolDb: () => ({ tag: 'db' }) }));
+vi.mock('@/lib/api/v1/media/deletions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/v1/media/deletions')>()),
+  enqueueMediaDeletion: (...args: unknown[]) => enqueue(...(args as [])),
+}));
 vi.mock('@/lib/r2/client', () => ({
   r2Configured: vi.fn(() => true),
   putImage: vi.fn().mockResolvedValue(undefined),
@@ -10,7 +21,8 @@ vi.mock('@/lib/r2/client', () => ({
 }));
 
 import { POST, DELETE } from '@/app/api/progress-photos/route';
-import { r2Configured } from '@/lib/r2/client';
+import { deleteR2Object, r2Configured } from '@/lib/r2/client';
+import { mediaObjectKey } from '@/lib/api/v1/media/deletions';
 
 beforeEach(() => auth.mockReset());
 
@@ -69,5 +81,31 @@ describe('DELETE /api/progress-photos', () => {
     auth.mockResolvedValue({ userId: 'u1' });
     const res = await DELETE(new Request('http://localhost/api/progress-photos', { method: 'DELETE', body: JSON.stringify({ key: 'u1/progress/x.jpg' }) }));
     expect(res.status).toBe(200);
+  });
+});
+
+describe('DELETE /api/progress-photos with a v1 private key', () => {
+  const del = (key: string) =>
+    DELETE(new Request('http://localhost/api/progress-photos', { method: 'DELETE', body: JSON.stringify({ key }) }));
+
+  it('enqueues the deferred deletion of an owned v1 key instead of 403, even without the public bucket', async () => {
+    auth.mockResolvedValue({ userId: 'u1' });
+    enqueue.mockClear();
+    vi.mocked(r2Configured).mockReturnValue(false);
+    const key = mediaObjectKey('u1', 'progress', 'abc');
+    const res = await del(key);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(enqueue).toHaveBeenCalledWith({ tag: 'db' }, expect.objectContaining({ userId: 'u1', objectKey: key }));
+    expect(deleteR2Object).not.toHaveBeenCalledWith(key);
+    vi.mocked(r2Configured).mockReturnValue(true);
+  });
+
+  it("still forbids another user's v1 key and a v1 key of the other kind", async () => {
+    auth.mockResolvedValue({ userId: 'u1' });
+    enqueue.mockClear();
+    expect((await del(mediaObjectKey('u2', 'progress', 'abc'))).status).toBe(403);
+    expect((await del(mediaObjectKey('u1', 'exercise', 'abc'))).status).toBe(403);
+    expect(enqueue).not.toHaveBeenCalled();
   });
 });

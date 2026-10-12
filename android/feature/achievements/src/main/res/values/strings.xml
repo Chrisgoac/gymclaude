@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="es">
+    <string name="achievements_title">Logros</string>
+    <string name="achievements_back">Atrás</string>
+    <string name="achievements_loading">Cargando logros</string>
+    <string name="achievements_error_title">No se pudieron cargar los logros</string>
+    <string name="achievements_error_message">Inténtalo de nuevo. Tus datos siguen guardados en este dispositivo.</string>
+    <string name="achievements_retry">Reintentar</string>
+
+    <string name="achievements_section_streak">Racha</string>
+    <string name="achievements_streak_current_label">Racha actual</string>
+    <plurals name="achievements_streak_current">
+        <item quantity="one">%1$d semana</item>
+        <item quantity="other">%1$d semanas</item>
+    </plurals>
+    <plurals name="achievements_streak_best">
+        <item quantity="one">Mejor racha: %1$d semana</item>
+        <item quantity="other">Mejor racha: %1$d semanas</item>
+    </plurals>
+    <plurals name="achievements_streak_target">
+        <item quantity="one">Objetivo: %1$d entreno por semana</item>
+        <item quantity="other">Objetivo: %1$d entrenos por semana</item>
+    </plurals>
+    <plurals name="achievements_streak_days">
+        <item quantity="one">%1$d día seguido entrenando</item>
+        <item quantity="other">%1$d días seguidos entrenando</item>
+    </plurals>
+
+    <string name="achievements_section_milestones">Hitos</string>
+    <string name="achievements_milestones_summary">%1$d de %2$d desbloqueados</string>
+    <string name="achievements_unlocked_on">Desbloqueado el %1$s</string>
+    <string name="achievements_locked">Bloqueado</string>
+
+    <string name="achievements_section_records">Récords (PRs)</string>
+    <string name="achievements_records_empty">Aún no hay récords. ¡A entrenar!</string>
+    <string name="achievements_record_value">%1$s kg · %2$s</string>
+    <string name="achievements_record_spoken">%1$s: %2$s kg, conseguido el %3$s</string>
+</resources>

@@ -19,6 +19,49 @@ sealed interface GymLogDestination {
     @Serializable data object Body : GymLogDestination { override val title = R.string.nav_body }
     @Serializable data object Achievements : GymLogDestination { override val title = R.string.nav_achievements }
     @Serializable data object Settings : GymLogDestination { override val title = R.string.nav_settings }
+    @Serializable data object Gyms : GymLogDestination { override val title = R.string.nav_gyms }
+    @Serializable data object TrainingSettings : GymLogDestination { override val title = R.string.nav_training_settings }
+    @Serializable data object Backup : GymLogDestination { override val title = R.string.nav_backup }
+    // Exercises graph: list (the tab) -> detail -> editor.
+    @Serializable data class ExerciseDetail(val id: String) : GymLogDestination {
+        override val title: Int get() = R.string.nav_exercise_detail
+    }
+    /** [id] == null creates a custom exercise. */
+    @Serializable data class ExerciseEditor(val id: String? = null) : GymLogDestination {
+        override val title: Int get() = R.string.nav_exercise_editor
+    }
+    /** [id] == null creates a routine. */
+    @Serializable data class RoutineEditor(val id: String? = null) : GymLogDestination {
+        override val title: Int get() = R.string.nav_routine_editor
+    }
+    /** The workout [sessionId] in progress (placeholder until set logging exists). */
+    @Serializable data class ActiveWorkout(val sessionId: String) : GymLogDestination {
+        override val title: Int get() = R.string.nav_active_workout
+    }
+    /** A finished workout in the History graph. */
+    @Serializable data class HistoryDetail(val sessionId: String) : GymLogDestination {
+        override val title: Int get() = R.string.nav_history_detail
+    }
+    /** Full editor of a finished workout, above its detail in the History graph. */
+    @Serializable data class HistoryEditor(val sessionId: String) : GymLogDestination {
+        override val title: Int get() = R.string.nav_history_editor
+    }
+    /** Per-exercise drill-down of Progress; [period] and [gym] are the wire values of the filter it was opened with. */
+    @Serializable data class ProgressExercise(val exerciseId: String, val period: String, val gym: String) : GymLogDestination {
+        override val title: Int get() = R.string.nav_progress_exercise
+    }
+    /** Private progress photos; [capture] opens the gallery straight on the new-photo form. */
+    @Serializable data class ProgressPhotos(val capture: Boolean = false) : GymLogDestination {
+        override val title: Int get() = R.string.nav_progress_photos
+    }
+    /** Pro: AI mesocycle generator + review, above the routine list. */
+    @Serializable data object MesocycleGenerator : GymLogDestination { override val title = R.string.nav_mesocycle_generator }
+    /** Pro: intelligent report, above Progress. */
+    @Serializable data object IntelligentReport : GymLogDestination { override val title = R.string.nav_intelligent_report }
+    @Serializable data object Pro : GymLogDestination { override val title = R.string.nav_pro }
+    /** Sign-out, account deletion and the entry to [Privacy], above Settings. */
+    @Serializable data object Account : GymLogDestination { override val title = R.string.nav_account }
+    @Serializable data object Privacy : GymLogDestination { override val title = R.string.nav_privacy }
     @Serializable data object SyncDiagnostics : GymLogDestination { override val title = R.string.nav_sync_diagnostics }
 }
 

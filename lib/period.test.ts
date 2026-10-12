@@ -21,3 +21,29 @@ describe('periodoASinceTs', () => {
     expect(PERIODOS.map((p) => p.id)).toEqual<Periodo[]>(['4s', '3m', 'ano', 'todo']);
   });
 });
+
+// Shared with the Android implementation (android/core/domain DomainParityTest).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { inicioSemana } from '@/lib/period';
+
+const periodFixture = JSON.parse(readFileSync(join(process.cwd(), 'contracts/domain/period-cases.json'), 'utf8'));
+
+describe('shared fixture contracts/domain/period-cases.json', () => {
+  it.each(periodFixture.since as { periodo: Periodo; ahora: number; expected: number }[])(
+    'periodoASinceTs $periodo @ $ahora',
+    ({ periodo, ahora, expected }) => expect(periodoASinceTs(periodo, ahora)).toBe(expected),
+  );
+  it.each(periodFixture.weekStart as { zone: string; at: number; expected: number }[])(
+    'inicioSemana $zone @ $at',
+    ({ zone, at, expected }) => {
+      const previous = process.env.TZ;
+      process.env.TZ = zone;
+      try {
+        expect(inicioSemana(at)).toBe(expected);
+      } finally {
+        if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous;
+      }
+    },
+  );
+});

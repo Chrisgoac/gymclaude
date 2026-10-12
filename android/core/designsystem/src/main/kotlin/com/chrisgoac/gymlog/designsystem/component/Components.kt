@@ -95,7 +95,8 @@ private fun Modifier.hardBox(fill: Color, border: Color, shadow: Color?, shadowO
 
 // ---- Buttons ----
 
-enum class HierroButtonVariant { Primary, Secondary }
+/** [Destructive]: an action that throws data away; reserved for explicit, irreversible choices. */
+enum class HierroButtonVariant { Primary, Secondary, Destructive }
 
 @Composable
 fun HierroButton(
@@ -106,6 +107,8 @@ fun HierroButton(
     enabled: Boolean = true,
     loading: Boolean = false,
     loadingLabel: String = "Cargando",
+    /** Spoken label when the visible [text] is ambiguous out of context ("Subir" -> "Subir la rutina Push"). */
+    contentDescription: String? = null,
 ) {
     val colors = HierroTheme.colors
     val interaction = remember { MutableInteractionSource() }
@@ -115,6 +118,7 @@ fun HierroButton(
     val fill = when {
         !enabled -> colors.surfaceMuted
         variant == HierroButtonVariant.Primary -> colors.accent
+        variant == HierroButtonVariant.Destructive -> colors.error
         else -> colors.ink
     }
     val content = when {
@@ -135,7 +139,7 @@ fun HierroButton(
                 .hardBox(fill, colors.border, colors.shadow, shadowOffset, if (focused) 4.dp else HierroShape.border)
                 .clickable(interactionSource = interaction, indication = null, enabled = active, role = Role.Button, onClick = onClick)
                 .semantics {
-                    contentDescription = text
+                    this.contentDescription = contentDescription ?: text
                     if (loading) stateDescription = loadingLabel
                     if (!enabled) disabled()
                 }
@@ -157,6 +161,8 @@ fun HierroButton(
 fun HierroCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    /** Single spoken label for a clickable card whose visible text is split over several lines. */
+    contentDescription: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = HierroTheme.colors
@@ -176,6 +182,7 @@ fun HierroCard(
                         Modifier
                             .heightIn(min = HierroShape.minTouchTarget)
                             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+                            .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier)
                     } else Modifier,
                 )
                 .padding(16.dp),

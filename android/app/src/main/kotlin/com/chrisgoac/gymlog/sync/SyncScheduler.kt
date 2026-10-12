@@ -75,8 +75,10 @@ class WorkManagerSyncScheduler(
         manager.enqueueUniqueWork(oneTimeName(hash), ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 
-    override suspend fun cancel(userId: String) {
-        val hash = hashOf(userId)
+    override suspend fun cancel(userId: String) = cancelForHash(hashOf(userId))
+
+    /** [cancel] for an account known only by its hash (account deletion resumed after process death). */
+    fun cancelForHash(hash: String) {
         val manager = workManager()
         manager.cancelUniqueWork(oneTimeName(hash))
         manager.cancelUniqueWork(periodicName(hash))

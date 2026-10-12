@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/internal/media/process-deletions", "schedule": "0 4 * * *" },
+    { "path": "/api/internal/account/process-deletions", "schedule": "30 4 * * *" }
+  ]
+}

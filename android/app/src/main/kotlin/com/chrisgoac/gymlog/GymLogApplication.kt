@@ -9,7 +9,7 @@ class GymLogApplication : Application(), Configuration.Provider {
         private set
 
     override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder().setWorkerFactory(container.syncWorkerFactory).build()
+        get() = Configuration.Builder().setWorkerFactory(container.workerFactory).build()
 
     override fun onCreate() {
         super.onCreate()

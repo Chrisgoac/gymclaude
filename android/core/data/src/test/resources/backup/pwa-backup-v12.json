@@ -1,0 +1,51 @@
+{
+  "app": "gymlog",
+  "version": 12,
+  "exportedAt": 1780000000000,
+  "data": {
+    "gyms": [
+      { "id": "g1", "userId": "user_foreign", "nombre": "Gold's", "orden": 0, "archivada": false, "updatedAt": 1700000000000, "deletedAt": null }
+    ],
+    "exercises": [
+      { "id": "seed-press-banca", "userId": null, "nombre": "Press banca", "grupoMuscular": "pecho", "equipamiento": "barra", "tipo": "compuesto", "esPersonalizado": false, "updatedAt": 1, "deletedAt": null },
+      { "id": "ex-custom-1", "userId": "user_foreign", "nombre": "Press landmine", "grupoMuscular": "hombros", "equipamiento": "barra", "tipo": "compuesto", "incrementoKg": 2.5, "esPersonalizado": true, "pwaOnlyField": "ignored", "updatedAt": 1700000000000, "deletedAt": null }
+    ],
+    "routines": [
+      { "id": "r1", "userId": "user_foreign", "nombre": "R", "orden": 0, "archivada": false, "updatedAt": 1700000000000, "deletedAt": null }
+    ],
+    "routineExercises": [
+      { "id": "re1", "routineId": "r1", "exerciseId": "seed-press-banca", "orden": 0, "updatedAt": 1700000000000, "deletedAt": null }
+    ],
+    "workoutSessions": [
+      { "id": "s1", "userId": "user_foreign", "routineId": "r1", "gymId": "g1", "fecha": 1700000000000, "duracionSegundos": 3600, "updatedAt": 1700000000000, "deletedAt": null }
+    ],
+    "loggedExercises": [
+      { "id": "le1", "sessionId": "s1", "exerciseId": "seed-press-banca", "orden": 0, "updatedAt": 1700000000000, "deletedAt": null }
+    ],
+    "loggedSets": [
+      { "id": "ls1", "loggedExerciseId": "le1", "orden": 0, "peso": 60, "reps": 8, "updatedAt": 1700000000000, "deletedAt": null },
+      { "id": "ls2", "loggedExerciseId": "le1", "orden": 1, "peso": 62.5, "reps": 6, "esCalentamiento": false, "updatedAt": 1700000000000, "deletedAt": 1700000000500 }
+    ],
+    "exercisePhotos": [
+      { "id": "p1", "userId": "user_foreign", "exerciseId": "seed-press-banca", "url": "https://pub.r2.dev/x.jpg", "key": "u/e/x.jpg", "updatedAt": 1700000000000, "deletedAt": null }
+    ],
+    "userSettings": [
+      { "id": "objetivoSemanal", "userId": "user_foreign", "valor": "4", "updatedAt": 1, "deletedAt": null }
+    ],
+    "coachMessages": [
+      { "id": "b1", "userId": "user_foreign", "rol": "assistant", "contenido": "hey", "createdAt": 5, "updatedAt": 5, "deletedAt": null }
+    ],
+    "bodyMetrics": [
+      { "id": "bk1", "userId": "user_foreign", "tipo": "peso", "valor": 79.5, "fecha": 5, "updatedAt": 5, "deletedAt": null }
+    ],
+    "progressPhotos": [
+      { "id": "pp1", "userId": "user_foreign", "url": "u", "key": "k", "fecha": 5, "angulo": "frente", "nota": "x", "updatedAt": 5, "deletedAt": null }
+    ],
+    "mesocycles": [
+      { "id": "mb1", "userId": "user_foreign", "nombre": "H", "objetivo": "general", "semanas": 5, "diasPorSemana": 3, "notas": null, "progresion": [{ "semana": 1, "descarga": false, "ajuste": "x" }], "fechaInicio": 5, "updatedAt": 5, "deletedAt": null }
+    ],
+    "achievements": [
+      { "id": "ab1", "userId": "user_foreign", "clave": "mesociclo-1", "fechaDesbloqueo": 9, "updatedAt": 9, "deletedAt": null }
+    ]
+  }
+}

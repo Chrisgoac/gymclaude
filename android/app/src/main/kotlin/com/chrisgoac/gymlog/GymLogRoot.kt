@@ -27,11 +27,31 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chrisgoac.gymlog.auth.AuthScreen
 import com.chrisgoac.gymlog.auth.AuthViewModel
+import com.chrisgoac.gymlog.designsystem.component.HierroButton
+import com.chrisgoac.gymlog.designsystem.component.HierroButtonVariant
+import com.chrisgoac.gymlog.designsystem.component.HierroCard
 import com.chrisgoac.gymlog.designsystem.component.HierroEmptyState
+import com.chrisgoac.gymlog.designsystem.component.HierroText
 import com.chrisgoac.gymlog.designsystem.component.HierroLoadingState
 import com.chrisgoac.gymlog.designsystem.theme.HierroTheme
 import com.chrisgoac.gymlog.domain.auth.AuthGateway
+import com.chrisgoac.gymlog.domain.exercise.ExerciseRepository
+import com.chrisgoac.gymlog.domain.routine.RoutineRepository
+import com.chrisgoac.gymlog.domain.timer.RestTimerController
+import com.chrisgoac.gymlog.domain.SyncUiState
+import com.chrisgoac.gymlog.domain.workout.FinishWorkoutUseCase
+import com.chrisgoac.gymlog.domain.workout.HistoryRepository
+import com.chrisgoac.gymlog.domain.workout.WorkoutLogRepository
+import kotlinx.coroutines.flow.Flow
+import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
 import com.chrisgoac.gymlog.navigation.GymLogApp
+import com.chrisgoac.gymlog.navigation.HistoryEditServices
+import com.chrisgoac.gymlog.navigation.AchievementsServices
+import com.chrisgoac.gymlog.navigation.BodyServices
+import com.chrisgoac.gymlog.navigation.AiPlanServices
+import com.chrisgoac.gymlog.navigation.CoachServices
+import com.chrisgoac.gymlog.navigation.MediaServices
+import com.chrisgoac.gymlog.navigation.ProgressServices
 import com.chrisgoac.gymlog.navigation.SettingsServices
 import kotlin.math.roundToInt
 
@@ -41,7 +61,30 @@ fun GymLogRoot(
     state: RootState,
     authGateway: () -> AuthGateway,
     onRetryBootstrap: () -> Unit = {},
+    /** Account deletion: retry a failed local wipe, dismiss the final notice, open Play's subscription page. */
+    onRetryDeletion: () -> Unit = {},
+    onDeletionAcknowledged: () -> Unit = {},
+    onOpenUri: (String) -> Unit = {},
+    /** Public account-deletion page, offered when the server never confirmed a deletion. */
+    accountDeletionUrl: String? = null,
     settings: SettingsServices? = null,
+    exercises: ExerciseRepository? = null,
+    routines: RoutineRepository? = null,
+    workouts: WorkoutRepository? = null,
+    workoutLog: WorkoutLogRepository? = null,
+    restTimer: RestTimerController? = null,
+    finishWorkout: FinishWorkoutUseCase? = null,
+    history: HistoryRepository? = null,
+    historyEditing: HistoryEditServices? = null,
+    progress: ProgressServices? = null,
+    body: BodyServices? = null,
+    achievements: AchievementsServices? = null,
+    media: MediaServices? = null,
+    coach: CoachServices? = null,
+    aiPlans: AiPlanServices? = null,
+    syncState: Flow<SyncUiState>? = null,
+    openWorkoutRequest: String? = null,
+    onOpenWorkoutHandled: () -> Unit = {},
 ) {
     when (state) {
         RootState.Loading -> CenteredStatus { HierroLoadingState(stringResource(R.string.root_loading)) }
@@ -50,7 +93,62 @@ fun GymLogRoot(
         is RootState.Bootstrapping -> CenteredStatus {
             HierroLoadingState(stringResource(R.string.root_bootstrapping, (state.progress * 100).roundToInt()))
         }
-        is RootState.Ready -> AccountScope(state.userId) { GymLogApp(settings = settings) }
+        is RootState.Ready -> AccountScope(state.userId) {
+            GymLogApp(
+                settings = settings,
+                exercises = exercises,
+                routines = routines,
+                workouts = workouts,
+                workoutLog = workoutLog,
+                restTimer = restTimer,
+                finishWorkout = finishWorkout,
+                history = history,
+                historyEditing = historyEditing,
+                progress = progress,
+                body = body,
+                achievements = achievements,
+                media = media,
+                coach = coach,
+                aiPlans = aiPlans,
+                syncState = syncState,
+                openWorkoutRequest = openWorkoutRequest,
+                onOpenWorkoutHandled = onOpenWorkoutHandled,
+            )
+        }
+        is RootState.DeletingAccount -> CenteredStatus {
+            if (state.failed) {
+                HierroEmptyState(
+                    title = stringResource(R.string.root_deleting_failed_title),
+                    message = stringResource(R.string.root_deleting_failed_message),
+                    actionLabel = stringResource(R.string.root_retry),
+                    onAction = onRetryDeletion,
+                )
+            } else {
+                HierroLoadingState(stringResource(R.string.root_deleting))
+            }
+        }
+        is RootState.AccountDeleted -> CenteredStatus {
+            HierroCard {
+                HierroText(stringResource(R.string.root_deleted_title).uppercase(), style = HierroTheme.typography.title)
+                HierroText(
+                    stringResource(if (state.serverConfirmed) R.string.root_deleted_message else R.string.root_deleted_unconfirmed_message),
+                    color = HierroTheme.colors.textMuted,
+                )
+                if (!state.serverConfirmed && accountDeletionUrl != null) {
+                    HierroButton(stringResource(R.string.root_deleted_web), { onOpenUri(accountDeletionUrl) }, variant = HierroButtonVariant.Secondary)
+                }
+                val subscription = state.subscription?.takeIf { it.willRenew }
+                if (subscription != null) {
+                    HierroText(stringResource(R.string.root_deleted_subscription), color = HierroTheme.colors.error)
+                    HierroButton(stringResource(R.string.root_deleted_manage), { onOpenUri(subscription.manageUrl) })
+                }
+                HierroButton(
+                    stringResource(R.string.root_deleted_continue),
+                    onDeletionAcknowledged,
+                    variant = if (subscription != null) HierroButtonVariant.Secondary else HierroButtonVariant.Primary,
+                )
+            }
+        }
         is RootState.Fatal -> CenteredStatus {
             val config = state.message == "config"
             HierroEmptyState(

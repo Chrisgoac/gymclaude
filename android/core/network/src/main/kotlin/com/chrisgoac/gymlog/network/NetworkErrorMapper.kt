@@ -8,6 +8,14 @@ import com.chrisgoac.gymlog.model.ResponseJson
 object NetworkErrorMapper {
     fun map(status: Int, retryAfterHeader: String?, body: String, requestId: String? = null): SyncApiException {
         if (status == 401 || status == 403) return SyncApiException.SessionRequired("HTTP $status")
+        return mapApiError(status, retryAfterHeader, body, requestId)
+    }
+
+    /**
+     * The error body as an [SyncApiException.Api] whatever the status, for statuses a route gives a meaning
+     * beyond authentication (e.g. `403 PRO_REQUIRED` on the AI routes).
+     */
+    fun mapApiError(status: Int, retryAfterHeader: String?, body: String, requestId: String? = null): SyncApiException.Api {
         val detail = runCatching { ResponseJson.decodeFromString<ApiErrorBody>(body).error }.getOrNull()
             ?: return SyncApiException.Api(
                 httpStatus = status,

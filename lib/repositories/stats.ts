@@ -3,6 +3,7 @@ import { MUSCLE_GROUPS } from '@/lib/db/types';
 import type { LoggedSet, MuscleGroup, WorkoutSession } from '@/lib/db/types';
 import { detectarEstancamiento } from '@/lib/insights';
 import { calcularRacha } from '@/lib/logros';
+import { inicioSemana } from '@/lib/period';
 
 const DIA_MS = 86400000;
 
@@ -173,15 +174,6 @@ export interface WeeklyVolumePoint {
   volumen: number;
 }
 
-/** Lunes 00:00 (hora local) de la semana que contiene ts. */
-function inicioSemana(ts: number): number {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  const dow = (d.getDay() + 6) % 7; // 0 = lunes
-  d.setDate(d.getDate() - dow);
-  return d.getTime();
-}
-
 export interface WeeklySummary {
   sesiones: number;
   volumenSemana: number;
@@ -247,12 +239,13 @@ const dayKey = (ts: number) => {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 };
 
-export async function getCurrentStreakDays(): Promise<number> {
+/** Días naturales (hora local) consecutivos con sesión, contando hacia atrás desde hoy. `now` inyectable. */
+export async function getCurrentStreakDays(now: number = Date.now()): Promise<number> {
   const sessions = activo(await db.workoutSessions.toArray());
   if (sessions.length === 0) return 0;
   const days = new Set(sessions.map((s) => dayKey(s.fecha)));
   let streak = 0;
-  const cursor = new Date();
+  const cursor = new Date(now);
   while (days.has(dayKey(cursor.getTime()))) {
     streak++;
     cursor.setDate(cursor.getDate() - 1);

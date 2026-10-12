@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="es">
+    <string name="progress_title">Progreso</string>
+    <string name="progress_achievements_action">Logros y récords</string>
+    <string name="progress_body_action">Peso y medidas corporales</string>
+    <string name="progress_photos_action">Fotos de progreso</string>
+    <string name="progress_back">Atrás</string>
+    <string name="progress_loading">Cargando progreso</string>
+    <string name="progress_error_title">No se pudo cargar el progreso</string>
+    <string name="progress_error_message">Inténtalo de nuevo. Tus datos siguen guardados en este dispositivo.</string>
+    <string name="progress_retry">Reintentar</string>
+    <string name="progress_empty_title">Aún no hay progreso que mostrar</string>
+    <string name="progress_empty_message">Termina un entrenamiento y aquí verás tu volumen, récords y ejercicios estancados.</string>
+
+    <string name="progress_filter_period">Periodo</string>
+    <string name="progress_filter_gym">Gimnasio</string>
+    <string name="progress_period_4w">4 sem</string>
+    <string name="progress_period_3m">3 meses</string>
+    <string name="progress_period_year">Año</string>
+    <string name="progress_period_all">Todo</string>
+    <string name="progress_gym_all">Todos</string>
+    <string name="progress_selected">seleccionado</string>
+
+    <string name="progress_section_week">Esta semana</string>
+    <string name="progress_section_period">Periodo seleccionado</string>
+    <string name="progress_section_volume">Volumen semanal</string>
+    <string name="progress_section_stalls">Ejercicios estancados</string>
+    <string name="progress_section_exercise">Por ejercicio</string>
+    <string name="progress_section_balance">Balance muscular</string>
+    <string name="progress_section_records">Récords de la semana</string>
+
+    <string name="progress_stat_sessions_goal">Sesiones esta semana</string>
+    <string name="progress_stat_records">Récords de la semana</string>
+    <string name="progress_stat_volume_change">Volumen frente a la semana anterior</string>
+    <string name="progress_stat_streak_days">Racha de días</string>
+    <string name="progress_stat_sessions">Sesiones</string>
+    <string name="progress_stat_volume">Volumen</string>
+    <string name="progress_stat_weeks">Semanas seguidas</string>
+    <string name="progress_stat_best_weeks">Mejor racha: %1$d</string>
+    <string name="progress_stat_sessions_goal_value">%1$d de %2$d</string>
+    <string name="progress_delta_up">▲ %1$d %%</string>
+    <string name="progress_delta_down">▼ %1$d %%</string>
+    <string name="progress_delta_none">—</string>
+    <string name="progress_delta_up_spoken">Sube un %1$d %%</string>
+    <string name="progress_delta_down_spoken">Baja un %1$d %%</string>
+    <string name="progress_delta_none_spoken">Sin semana anterior para comparar</string>
+
+    <string name="progress_record_weight">Récord de peso</string>
+    <string name="progress_record_1rm">Récord de 1RM</string>
+
+    <string name="progress_volume_empty">Aún no hay sesiones en este periodo.</string>
+    <string name="progress_volume_unit">kg·rep</string>
+    <string name="progress_volume_chart_title">Volumen por semana</string>
+    <string name="progress_week_delta_up">%1$d %% más que la anterior</string>
+    <string name="progress_week_delta_down">%1$d %% menos que la anterior</string>
+
+    <string name="progress_chart_show_table">Ver como tabla</string>
+    <string name="progress_chart_hide_table">Ocultar tabla</string>
+    <string name="progress_chart_col_date">Fecha</string>
+    <string name="progress_chart_col_week">Semana</string>
+    <string name="progress_chart_col_value">Valor</string>
+    <string name="progress_chart_empty">Sin datos para mostrar.</string>
+    <string name="progress_chart_summary">%1$s, %2$d puntos. Mínimo %3$s el %4$s, máximo %5$s el %6$s, último %7$s el %8$s. Tendencia: %9$s.</string>
+    <string name="progress_chart_summary_one">%1$s, un punto: %2$s el %3$s.</string>
+    <string name="progress_trend_up">al alza</string>
+    <string name="progress_trend_down">a la baja</string>
+    <string name="progress_trend_flat">estable</string>
+
+    <string name="progress_stalls_empty">Ningún ejercicio estancado ahora mismo.</string>
+    <plurals name="progress_stall_sessions">
+        <item quantity="one">%1$d sesión sin mejorar</item>
+        <item quantity="other">%1$d sesiones sin mejorar</item>
+    </plurals>
+    <string name="progress_stall_last_improvement">Última mejora %1$s</string>
+    <string name="progress_stall_never_improved">Sin mejoras registradas</string>
+    <string name="progress_suggestion">Sugerencia: %1$s</string>
+    <string name="progress_open_exercise">Ver progreso de %1$s</string>
+
+    <string name="progress_exercise_search">Buscar ejercicio</string>
+    <string name="progress_exercise_no_results">Ningún ejercicio coincide.</string>
+
+    <string name="progress_balance_empty">Aún no hay volumen registrado.</string>
+    <string name="progress_balance_row">%1$s: %2$s kg·rep</string>
+    <string name="progress_balance_goal">%1$d %% de la meta semanal</string>
+    <string name="progress_balance_never">nunca entrenado</string>
+    <string name="progress_balance_days_ago">hace %1$d d</string>
+    <string name="progress_balance_neglected">descuidado</string>
+
+    <string name="progress_report_action">Informe inteligente</string>
+    <string name="progress_report_action_locked">Informe inteligente · Pro</string>
+    <string name="progress_report_locked_state">Requiere Pro</string>
+    <string name="progress_report_unavailable_state">Disponible próximamente</string>
+
+    <string name="progress_exercise_title">Progreso del ejercicio</string>
+    <string name="progress_exercise_missing">Ejercicio sin nombre</string>
+    <string name="progress_exercise_empty">Sin datos todavía para este ejercicio.</string>
+    <string name="progress_exercise_records">Récords</string>
+    <string name="progress_exercise_max_weight">Peso máximo</string>
+    <string name="progress_exercise_best_1rm">Mejor 1RM estimado</string>
+    <string name="progress_exercise_kg">%1$s kg</string>
+    <string name="progress_exercise_one_point">Necesitas al menos 2 registros para ver la evolución.</string>
+    <string name="progress_filter_metric">Valor</string>
+    <string name="progress_metric_1rm">1RM</string>
+    <string name="progress_metric_weight">Peso máx.</string>
+    <string name="progress_metric_volume">Volumen</string>
+    <string name="progress_metric_1rm_title">1RM estimado por sesión</string>
+    <string name="progress_metric_weight_title">Peso máximo por sesión</string>
+    <string name="progress_metric_volume_title">Volumen por sesión</string>
+
+    <!-- Progress photos (gallery, capture, viewer, comparison) -->
+    <string name="progress_photos_title">Fotos de progreso</string>
+    <string name="progress_photos_back">Atrás</string>
+    <string name="progress_photos_add">Añadir foto</string>
+    <string name="progress_photos_compare">Comparar fotos</string>
+    <string name="progress_photos_loading">Cargando fotos</string>
+    <string name="progress_photos_error_title">No se pudieron cargar las fotos</string>
+    <string name="progress_photos_error_message">Inténtalo de nuevo. Tus fotos siguen guardadas en este dispositivo.</string>
+    <string name="progress_photos_retry">Reintentar</string>
+    <string name="progress_photos_empty_title">Aún no hay fotos</string>
+    <string name="progress_photos_empty_message">Añade una foto de frente, de lado o de espalda para ver tu evolución. Solo tú puedes verlas.</string>
+    <string name="progress_photos_private_note">Tus fotos son privadas: se guardan cifradas en tu cuenta y solo se muestran aquí.</string>
+    <string name="progress_photos_angle_frente">Frente</string>
+    <string name="progress_photos_angle_lado">Lado</string>
+    <string name="progress_photos_angle_espalda">Espalda</string>
+
+    <string name="progress_photos_tile_description">%1$s, %2$s. %3$s</string>
+    <string name="progress_photos_tile_description_note">%1$s, %2$s. Nota: %3$s. %4$s</string>
+    <string name="progress_photos_tile_description_concealed">%1$s, %2$s. Foto oculta, toca para mostrar</string>
+    <string name="progress_photos_concealed_cover">Toca para ver</string>
+    <string name="progress_photos_compare_image_concealed">%1$s: foto de %2$s del %3$s. Foto oculta, toca para mostrar</string>
+    <string name="progress_photos_viewer_undecodable">No se puede mostrar esta foto en este dispositivo.</string>
+    <string name="progress_photos_placeholder">Sin vista previa</string>
+
+    <string name="progress_photos_state_pending">Guardada en este dispositivo, pendiente de subir</string>
+    <string name="progress_photos_state_uploading">Subiendo</string>
+    <string name="progress_photos_state_uploading_percent">Subiendo, %1$d %%</string>
+    <string name="progress_photos_state_loading">Cargando foto</string>
+    <string name="progress_photos_state_offline">Sin conexión: esta foto aún no está guardada en este dispositivo</string>
+    <string name="progress_photos_state_failure_upload">No se pudo subir ahora; se reintentará sola</string>
+    <string name="progress_photos_state_failure_load">No se pudo cargar la foto</string>
+    <string name="progress_photos_state_rejected_large">Rechazada: la foto es demasiado grande</string>
+    <string name="progress_photos_state_rejected_type">Rechazada: tipo de imagen no admitido</string>
+    <string name="progress_photos_state_rejected_other">Rechazada: no se pudo subir</string>
+
+    <string name="progress_photos_capture_title">Nueva foto de progreso</string>
+    <string name="progress_photos_capture_angle">Ángulo</string>
+    <string name="progress_photos_capture_date">Fecha</string>
+    <string name="progress_photos_capture_date_change">Fecha: %1$s. Cambiar fecha</string>
+    <string name="progress_photos_capture_note">Nota (opcional)</string>
+    <string name="progress_photos_capture_pick">Elegir de la galería</string>
+    <string name="progress_photos_capture_camera">Hacer una foto</string>
+    <string name="progress_photos_capture_cancel">Cancelar</string>
+    <string name="progress_photos_capture_saving">Guardando foto</string>
+    <string name="progress_photos_capture_hint">Primero indica ángulo y fecha; después elige la foto. Se guarda aquí aunque no tengas conexión.</string>
+    <string name="progress_photos_date_ok">Aceptar</string>
+    <string name="progress_photos_date_cancel">Cancelar</string>
+    <string name="progress_photos_date_title">Fecha de la foto</string>
+
+    <string name="progress_photos_message_corrupt">No se pudo leer esa imagen. Prueba con otra.</string>
+    <string name="progress_photos_message_unsupported">Ese tipo de archivo no se admite. Elige una foto JPG, PNG, WebP o HEIC.</string>
+    <string name="progress_photos_message_too_large">Esa imagen es demasiado grande.</string>
+    <string name="progress_photos_message_unreadable">No se pudo abrir esa imagen. Prueba con otra.</string>
+    <string name="progress_photos_message_action">No se pudo completar la acción. Inténtalo de nuevo.</string>
+    <string name="progress_photos_message_camera">No se puede usar la cámara ahora mismo. Elige una foto de la galería.</string>
+    <string name="progress_photos_message_dismiss">Entendido</string>
+
+    <string name="progress_photos_viewer_title">Foto de progreso</string>
+    <string name="progress_photos_viewer_close">Cerrar foto</string>
+    <string name="progress_photos_viewer_image">Foto de %1$s del %2$s</string>
+    <string name="progress_photos_viewer_note">Nota: %1$s</string>
+    <string name="progress_photos_viewer_retry_image">Reintentar cargar la foto</string>
+    <string name="progress_photos_viewer_retry_upload">Reintentar subida</string>
+    <string name="progress_photos_viewer_discard">Descartar foto</string>
+    <string name="progress_photos_viewer_delete">Eliminar foto</string>
+
+    <string name="progress_photos_delete_title">¿Eliminar esta foto?</string>
+    <string name="progress_photos_delete_message">Se borrará la foto de %1$s del %2$s de tu cuenta y de este dispositivo. No se puede deshacer.</string>
+    <string name="progress_photos_delete_confirm">Eliminar</string>
+    <string name="progress_photos_discard_title">¿Descartar esta foto?</string>
+    <string name="progress_photos_discard_message">La foto de %1$s del %2$s no llegó a subirse. Se borrará de este dispositivo.</string>
+    <string name="progress_photos_discard_confirm">Descartar</string>
+    <string name="progress_photos_delete_cancel">Cancelar</string>
+
+    <string name="progress_photos_compare_title">Comparar fotos</string>
+    <string name="progress_photos_compare_close">Cerrar comparación</string>
+    <string name="progress_photos_compare_need_two">Para comparar necesitas al menos dos fotos del mismo ángulo.</string>
+    <string name="progress_photos_compare_angle">Ángulo a comparar</string>
+    <string name="progress_photos_compare_side_a">Foto A</string>
+    <string name="progress_photos_compare_side_b">Foto B</string>
+    <string name="progress_photos_compare_image">%1$s: foto de %2$s del %3$s. %4$s</string>
+    <string name="progress_photos_compare_swap">Intercambiar A y B</string>
+    <string name="progress_photos_compare_choose_a">Elegir foto A</string>
+    <string name="progress_photos_compare_choose_b">Elegir foto B</string>
+    <string name="progress_photos_compare_selected">seleccionada</string>
+    <string name="progress_photos_compare_option">%1$s, %2$s</string>
+    <!-- Intelligent report (Pro) -->
+    <string name="progress_ai_report_title">Informe inteligente</string>
+    <string name="progress_ai_report_back">Volver</string>
+    <string name="progress_ai_report_locked_title">INFORME PRO</string>
+    <string name="progress_ai_report_locked_action">Ver GymLog Pro</string>
+    <string name="progress_ai_report_locked_message">Necesitas una suscripción Pro activa para el informe inteligente. Tus estadísticas siguen disponibles en Progreso.</string>
+    <string name="progress_ai_report_checking">Comprobando tu suscripción…</string>
+    <string name="progress_ai_report_loading">Analizando tu progreso…</string>
+    <string name="progress_ai_report_offline">Sin conexión. El informe necesita internet.</string>
+    <string name="progress_ai_report_offline_cached">Sin conexión: este es el último informe obtenido.</string>
+    <string name="progress_ai_report_failed">No se pudo generar el informe. Reinténtalo.</string>
+    <string name="progress_ai_report_failed_rejected">El servidor rechazó la petición.</string>
+    <string name="progress_ai_report_failed_session">Tu sesión necesita atención. Vuelve a iniciar sesión.</string>
+    <string name="progress_ai_report_retry">Reintentar</string>
+    <string name="progress_ai_report_refresh">Actualizar informe</string>
+    <string name="progress_ai_report_generated">Generado el %1$s</string>
+    <string name="progress_ai_report_cached">Sin cambios en tus datos desde entonces.</string>
+    <string name="progress_ai_report_summary">Resumen</string>
+    <string name="progress_ai_report_strengths">Puntos fuertes</string>
+    <string name="progress_ai_report_improve">A mejorar</string>
+    <string name="progress_ai_report_recommendations">Recomendaciones</string>
+    <string name="progress_ai_report_disclaimer">Esto es orientación general de entrenamiento, no consejo médico. Ante dolor o dudas de salud, consulta a un profesional.</string>
+</resources>

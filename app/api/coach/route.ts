@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { legacyDeletingResponse } from '@/lib/account/access';
 import { streamText, convertToModelMessages, type UIMessage } from 'ai';
 import { modeloCoach, deepseekConfigured } from '@/lib/coach-model';
 import { systemPrompt } from '@/lib/coach-prompt';
@@ -10,6 +11,8 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return new NextResponse('Unauthorized', { status: 401 });
+  const deleting = await legacyDeletingResponse(userId);
+  if (deleting) return deleting;
   if (!deepseekConfigured()) return new NextResponse('Coach no configurado', { status: 503 });
 
   let body: { messages?: UIMessage[]; snapshot?: CoachSnapshot };

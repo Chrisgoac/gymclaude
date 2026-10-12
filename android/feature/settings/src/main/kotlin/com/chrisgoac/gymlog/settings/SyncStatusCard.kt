@@ -30,7 +30,7 @@ fun SyncStatusCard(
     val colors = HierroTheme.colors
     val needsAttention = state is SyncUiState.NeedsAction || state is SyncUiState.SessionRequired || state is SyncUiState.SessionRejected
     HierroCard(modifier) {
-        HierroText(stringResource(R.string.sync_title).uppercase(), style = HierroTheme.typography.label, color = colors.textMuted)
+        HierroText(stringResource(R.string.settings_sync_title).uppercase(), style = HierroTheme.typography.label, color = colors.textMuted)
         HierroText(
             text = message(state),
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
@@ -40,20 +40,20 @@ fun SyncStatusCard(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             when (state) {
                 SyncUiState.SessionRequired, SyncUiState.Synced -> Unit
-                SyncUiState.SessionRejected -> HierroButton(stringResource(R.string.sync_retry), onSyncNow, variant = HierroButtonVariant.Secondary)
-                else -> HierroButton(stringResource(R.string.sync_now), onSyncNow, variant = HierroButtonVariant.Secondary)
+                SyncUiState.SessionRejected -> HierroButton(stringResource(R.string.settings_sync_retry), onSyncNow, variant = HierroButtonVariant.Secondary)
+                else -> HierroButton(stringResource(R.string.settings_sync_now), onSyncNow, variant = HierroButtonVariant.Secondary)
             }
-            HierroButton(stringResource(R.string.sync_details), onDetails, variant = HierroButtonVariant.Secondary)
+            HierroButton(stringResource(R.string.settings_sync_details), onDetails, variant = HierroButtonVariant.Secondary)
         }
     }
 }
 
 @Composable
 private fun message(state: SyncUiState): String = when (state) {
-    SyncUiState.Synced -> stringResource(R.string.sync_synced)
-    is SyncUiState.Pending -> pluralStringResource(R.plurals.sync_pending, state.count, state.count)
-    is SyncUiState.Offline -> pluralStringResource(R.plurals.sync_offline, state.count, state.count)
-    SyncUiState.SessionRequired -> stringResource(R.string.sync_session_required)
-    SyncUiState.SessionRejected -> stringResource(R.string.sync_session_rejected)
-    is SyncUiState.NeedsAction -> pluralStringResource(R.plurals.sync_needs_action, state.count, state.count)
+    SyncUiState.Synced -> stringResource(R.string.settings_sync_synced)
+    is SyncUiState.Pending -> pluralStringResource(R.plurals.settings_sync_pending, state.count, state.count)
+    is SyncUiState.Offline -> pluralStringResource(R.plurals.settings_sync_offline, state.count, state.count)
+    SyncUiState.SessionRequired -> stringResource(R.string.settings_sync_session_required)
+    SyncUiState.SessionRejected -> stringResource(R.string.settings_sync_session_rejected)
+    is SyncUiState.NeedsAction -> pluralStringResource(R.plurals.settings_sync_needs_action, state.count, state.count)
 }

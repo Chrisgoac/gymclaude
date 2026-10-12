@@ -106,11 +106,29 @@ class SyncApiTest {
     }
 
     @Test
-    fun noTokenShortCircuitsWithoutRequest() = runTest {
-        val f = setup(token = null) { error("must not be called") }
+    fun noTokenWithoutAnActiveSessionShortCircuitsAsSessionRequired() = runTest {
+        val f = setup(auth = FakeAuth("tok", state = AuthState.SessionExpired(USER))) { error("must not be called") }
         val e = runCatching { f.api.pull(USER, null) }.exceptionOrNull()
         assertTrue(e is SyncApiException.SessionRequired)
         assertTrue(f.requests.isEmpty())
+    }
+
+    @Test
+    fun noTokenWhileSignedInIsATransientFailure() = runTest {
+        val f = setup(token = null) { error("must not be called") }
+        val e = runCatching { f.api.pull(USER, null) }.exceptionOrNull()
+        assertTrue("got $e", e is SyncApiException.Transport)
+        assertTrue(f.requests.isEmpty())
+    }
+
+    @Test
+    fun throwingTokenProviderWhileSignedInIsATransientFailure() = runTest {
+        val auth = object : AuthSessionProvider {
+            override val state: StateFlow<AuthState> = MutableStateFlow(AuthState.SignedIn(USER))
+            override suspend fun accessToken(expectedUserId: String, forceRefresh: Boolean): String = throw IllegalStateException("clerk down")
+        }
+        val api = SyncApiImpl(createGymLogHttpClient(MockEngine { error("must not be called") }), "https://example.test", auth, ServerClock())
+        assertTrue(runCatching { api.pull(USER, null) }.exceptionOrNull() is SyncApiException.Transport)
     }
 
     @Test

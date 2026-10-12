@@ -25,3 +25,24 @@ describe('resumenSerie', () => {
     expect(r.puntos.map((p) => p.valor)).toEqual([80, 78.5, 77]);
   });
 });
+
+// Shared with the Android implementation (android/core/domain DomainParityTest).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+type BodyCase = { name: string; zone: string; metrics: { valor: number; fecha: number }[]; expected: unknown };
+const bodyFixture: { cases: BodyCase[] } = JSON.parse(
+  readFileSync(join(process.cwd(), 'contracts/domain/body-stats-cases.json'), 'utf8'),
+);
+
+describe('resumenSerie (shared fixture contracts/domain/body-stats-cases.json)', () => {
+  it.each(bodyFixture.cases)('$name', ({ zone, metrics, expected }) => {
+    const previous = process.env.TZ;
+    process.env.TZ = zone;
+    try {
+      expect(resumenSerie(metrics.map(({ valor, fecha }) => bm(valor, fecha)))).toEqual(expected);
+    } finally {
+      if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous;
+    }
+  });
+});

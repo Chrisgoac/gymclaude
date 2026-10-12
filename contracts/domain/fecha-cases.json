@@ -1,0 +1,279 @@
+{
+  "description": "Cases for lib/fecha.ts (formatSegundos, formatHaceDias) and its Android port (core:domain time/Periods.kt). formatHaceDias counts local calendar days in 'zone'. Times are epoch ms.",
+  "formatSegundos": [
+    {
+      "seconds": 0,
+      "expected": "0:00"
+    },
+    {
+      "seconds": 5,
+      "expected": "0:05"
+    },
+    {
+      "seconds": 59,
+      "expected": "0:59"
+    },
+    {
+      "seconds": 60,
+      "expected": "1:00"
+    },
+    {
+      "seconds": 65,
+      "expected": "1:05"
+    },
+    {
+      "seconds": 599,
+      "expected": "9:59"
+    },
+    {
+      "seconds": 600,
+      "expected": "10:00"
+    },
+    {
+      "seconds": 3599,
+      "expected": "59:59"
+    },
+    {
+      "seconds": 3600,
+      "expected": "60:00"
+    },
+    {
+      "seconds": 3725,
+      "expected": "62:05"
+    },
+    {
+      "seconds": 59.9,
+      "expected": "0:59"
+    },
+    {
+      "seconds": 0.4,
+      "expected": "0:00"
+    },
+    {
+      "seconds": -3,
+      "expected": "0:00"
+    },
+    {
+      "seconds": -0.5,
+      "expected": "0:00"
+    }
+  ],
+  "formatHaceDias": [
+    {
+      "zone": "UTC",
+      "now": 1780826400000,
+      "ts": 1780815600000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "UTC",
+      "now": 1780826400000,
+      "ts": 1780781400000,
+      "expected": "ayer"
+    },
+    {
+      "zone": "UTC",
+      "now": 1780826400000,
+      "ts": 1780788600000,
+      "expected": "ayer"
+    },
+    {
+      "zone": "UTC",
+      "now": 1780826400000,
+      "ts": 1780560000000,
+      "expected": "hace 3 días"
+    },
+    {
+      "zone": "UTC",
+      "now": 1780826400000,
+      "ts": 1778140800000,
+      "expected": "hace 31 días"
+    },
+    {
+      "zone": "UTC",
+      "now": 1780826400000,
+      "ts": 1780905600000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "UTC",
+      "now": 1780826400000,
+      "ts": 1774740600000,
+      "expected": "hace 71 días"
+    },
+    {
+      "zone": "UTC",
+      "now": 1780826400000,
+      "ts": 1774778400000,
+      "expected": "hace 70 días"
+    },
+    {
+      "zone": "UTC",
+      "now": 1780826400000,
+      "ts": 1792881000000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "Europe/Madrid",
+      "now": 1780819200000,
+      "ts": 1780815600000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "Europe/Madrid",
+      "now": 1780819200000,
+      "ts": 1780781400000,
+      "expected": "ayer"
+    },
+    {
+      "zone": "Europe/Madrid",
+      "now": 1780819200000,
+      "ts": 1780788600000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "Europe/Madrid",
+      "now": 1780819200000,
+      "ts": 1780560000000,
+      "expected": "hace 3 días"
+    },
+    {
+      "zone": "Europe/Madrid",
+      "now": 1780819200000,
+      "ts": 1778140800000,
+      "expected": "hace 31 días"
+    },
+    {
+      "zone": "Europe/Madrid",
+      "now": 1780819200000,
+      "ts": 1780905600000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "Europe/Madrid",
+      "now": 1780819200000,
+      "ts": 1774740600000,
+      "expected": "hace 70 días"
+    },
+    {
+      "zone": "Europe/Madrid",
+      "now": 1780819200000,
+      "ts": 1774778400000,
+      "expected": "hace 70 días"
+    },
+    {
+      "zone": "Europe/Madrid",
+      "now": 1780819200000,
+      "ts": 1792881000000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "America/New_York",
+      "now": 1780840800000,
+      "ts": 1780815600000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "America/New_York",
+      "now": 1780840800000,
+      "ts": 1780781400000,
+      "expected": "ayer"
+    },
+    {
+      "zone": "America/New_York",
+      "now": 1780840800000,
+      "ts": 1780788600000,
+      "expected": "ayer"
+    },
+    {
+      "zone": "America/New_York",
+      "now": 1780840800000,
+      "ts": 1780560000000,
+      "expected": "hace 3 días"
+    },
+    {
+      "zone": "America/New_York",
+      "now": 1780840800000,
+      "ts": 1778140800000,
+      "expected": "hace 31 días"
+    },
+    {
+      "zone": "America/New_York",
+      "now": 1780840800000,
+      "ts": 1780905600000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "America/New_York",
+      "now": 1780840800000,
+      "ts": 1774740600000,
+      "expected": "hace 71 días"
+    },
+    {
+      "zone": "America/New_York",
+      "now": 1780840800000,
+      "ts": 1774778400000,
+      "expected": "hace 70 días"
+    },
+    {
+      "zone": "America/New_York",
+      "now": 1780840800000,
+      "ts": 1792881000000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "now": 1780790400000,
+      "ts": 1780815600000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "now": 1780790400000,
+      "ts": 1780781400000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "now": 1780790400000,
+      "ts": 1780788600000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "now": 1780790400000,
+      "ts": 1780560000000,
+      "expected": "hace 3 días"
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "now": 1780790400000,
+      "ts": 1778140800000,
+      "expected": "hace 31 días"
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "now": 1780790400000,
+      "ts": 1780905600000,
+      "expected": "hoy"
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "now": 1780790400000,
+      "ts": 1774740600000,
+      "expected": "hace 70 días"
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "now": 1780790400000,
+      "ts": 1774778400000,
+      "expected": "hace 70 días"
+    },
+    {
+      "zone": "Pacific/Auckland",
+      "now": 1780790400000,
+      "ts": 1792881000000,
+      "expected": "hoy"
+    }
+  ]
+}

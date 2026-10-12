@@ -12,8 +12,8 @@ import java.io.File
 
 /**
  * Counts and deletes one account's local data. Besides the Room files it removes
- * `files/users/<hash>` and `cache/users/<hash>` (the places future per-user private files and
- * thumbnails must use). There is no per-user DataStore yet; when one exists its file goes here too.
+ * `files/users/<hash>` and `cache/users/<hash>` (the places per-user private files and thumbnails
+ * must use; the rest-timer DataStore lives there, released through [onLocalDataDeleted]).
  *
  * Deletion is recorded (by hash, never the raw id) in [PendingDeletionMarks] before the session
  * ends and cleared once the files are gone; [sweepPendingDeletions] and [reconcile] finish any that
@@ -23,6 +23,8 @@ class RoomLocalAccountCleaner(
     context: Context,
     private val databases: UserDatabaseManagerImpl,
     private val locks: SyncLocks,
+    /** Runs just BEFORE an account's files are deleted (by hash): releases per-user caches (open files) and, for the current account only, wake-ups. */
+    private val onLocalDataDeleted: (userHash: String) -> Unit = {},
 ) : LocalAccountCleaner {
     private val appContext = context.applicationContext
     private val marks = PendingDeletionMarks(appContext)
@@ -31,7 +33,9 @@ class RoomLocalAccountCleaner(
         val open = databases.current.value?.takeIf { it.userId == userId }
             ?: error("The database of the signing-out account is not the open one")
         val dao = open.database.syncDao()
-        return dao.outboxCount(OutboxStatus.PENDING) + dao.outboxCount(OutboxStatus.QUARANTINED)
+        // Queued (or rejected) photo uploads/deletes never reached the server either.
+        return dao.outboxCount(OutboxStatus.PENDING) + dao.outboxCount(OutboxStatus.QUARANTINED) +
+            open.database.pendingMediaDao().count()
     }
 
     override suspend fun markPendingDeletion(userId: String) = marks.markIntent(UserDatabaseManagerImpl.userHash(userId))
@@ -47,6 +51,30 @@ class RoomLocalAccountCleaner(
             deleteByHash(hash)
             marks.clear(hash)
         }
+    }
+
+    /**
+     * Account deletion: removes everything local of the account [hash] (database, private files, caches and the
+     * per-account stores released by [onLocalDataDeleted]) and any sign-out mark it had. The caller has already
+     * stopped the account's work and ended its session.
+     *
+     * With [userId] (deletion started in this process) it waits for the account's sync lock first, like
+     * [deleteLocalData]: an in-flight sync, bootstrap or photo run holds it, and every one of them re-checks
+     * under that lock that the account's database is still the open one before writing, so once the database
+     * is closed and deleted here nothing can recreate its files. Without [userId] (resumed after process death)
+     * no work of the account has run in this process: the root never became Ready for it.
+     */
+    suspend fun deleteAccountData(hash: String, userId: String?) {
+        if (userId != null) {
+            locks.forUser(userId).withLock { wipe(hash) }
+        } else {
+            wipe(hash)
+        }
+    }
+
+    private suspend fun wipe(hash: String) {
+        deleteByHash(hash)
+        marks.clear(hash)
     }
 
     /**
@@ -75,6 +103,7 @@ class RoomLocalAccountCleaner(
     }
 
     private suspend fun deleteByHash(hash: String) {
+        onLocalDataDeleted(hash)
         databases.closeAndDeleteHash(hash)
         withContext(Dispatchers.IO) {
             listOf(File(appContext.filesDir, "users/$hash"), File(appContext.cacheDir, "users/$hash")).forEach { dir ->

@@ -1,10 +1,7 @@
 import type { VolumeByMuscle } from '@/lib/repositories/stats';
 import type { MuscleGroup } from '@/lib/db/types';
-import { MUSCLE_GROUPS } from '@/lib/db/types';
 import { muscleGroupLabel } from '@/lib/labels';
-
-const DIA = 86400000;
-const UMBRAL_DESCUIDADO_DIAS = 10;
+import { filasEquilibrio } from '@/lib/insights';
 
 // `lastTrained` y `ahora` van juntos: si pasas lastTrained, pasa también `ahora` (Date.now() vía useState lazy del padre).
 export function MuscleBalance({
@@ -21,24 +18,13 @@ export function MuscleBalance({
   objetivos?: Partial<Record<MuscleGroup, number>>;
   volumenSemana?: Record<MuscleGroup, number>;
 }) {
-  const volByGrupo = new Map(data.map((d) => [d.grupo, d.volumen]));
-  // Grupos: con volumen en el periodo, o (si hay lastTrained) entrenados alguna vez → afloran los descuidados.
-  const grupos = MUSCLE_GROUPS
-    .filter((g) => volByGrupo.has(g) || (lastTrained ? lastTrained[g] != null : false))
-    .sort((a, b) => (volByGrupo.get(b) ?? 0) - (volByGrupo.get(a) ?? 0));
-  if (grupos.length === 0) return <p className="text-muted-foreground">Aún no hay volumen registrado.</p>;
-  const max = Math.max(...grupos.map((g) => volByGrupo.get(g) ?? 0), 1);
-  const ts = ahora ?? 0;
+  const filas = filasEquilibrio({ data, lastTrained, ahora, objetivos, volumenSemana });
+  if (filas.length === 0) return <p className="text-muted-foreground">Aún no hay volumen registrado.</p>;
+  const max = Math.max(...filas.map((f) => f.volumen), 1);
   return (
     <div className="space-y-2">
-      {grupos.map((g) => {
-        const vol = volByGrupo.get(g) ?? 0;
+      {filas.map(({ grupo: g, volumen: vol, diasSinEntrenar: dias, descuidado, metaPct }) => {
         const ult = lastTrained?.[g] ?? null;
-        const dias = ult == null ? null : Math.floor((ts - ult) / DIA);
-        const descuidado = lastTrained != null && (ult == null || (dias !== null && dias > UMBRAL_DESCUIDADO_DIAS));
-        const meta = objetivos?.[g];
-        const volSem = volumenSemana?.[g] ?? 0;
-        const metaPct = meta && meta > 0 && volumenSemana != null ? Math.min(100, Math.round((volSem / meta) * 100)) : null;
         return (
           <div key={g}>
             <div className="label-mono mb-1 flex items-center justify-between text-[10px] text-muted-foreground">

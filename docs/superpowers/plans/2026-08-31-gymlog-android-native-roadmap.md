@@ -146,17 +146,57 @@ Evidence: [android-phase-01-backend.md](../../verification/android-phase-01-back
 
 ### Android foundation gate
 
-- [ ] Run `cd android && ./gradlew testDebug lintDebug assembleDebug`.
+- [x] Run `cd android && ./gradlew testDebug lintDebug assembleDebug`. (2026-10-12, `testDebugUnitTest lintDebug assembleDebug` 1188 tests, 0 lint errors: [evidencia](../../verification/android-release-qualification.md) §2)
 - [ ] Run instrumentation smoke tests on API 26 and API 36.
 - [ ] Confirm auth waits for an active Clerk session, not merely a loaded user.
 - [ ] Confirm switching test accounts never exposes the previous account's Room rows or cached media.
+
+### Core workouts gate (Plan 3)
+
+Status: **automated evidence complete; device checks pending.**
+
+- [x] Offline routine workout (log, reorder, kill/reopen, finish) and offline historical edit converge on a second device/database, tombstones included (JVM two-device harness against an in-process contract-faithful sync server).
+- [x] A duplicated push delivery is applied once on the server (mutationId replay).
+- [x] Concurrent offline edits of the same set converge to the LWW winner in either sync order.
+- [x] UI offline flow (start routine/free workout, log, finish, history, edit, save) passes on the API 36 emulator.
+- [x] No WebView dependency in `android/`; all screens are Compose.
+- [ ] API 26 run, Pixel/Samsung rest-timer checks, and a real two-device run against the production server after Clerk configuration.
+
+Evidence: [android-phase-03-workouts.md](../../verification/android-phase-03-workouts.md).
+
+### Insights and settings gate (Plan 4)
+
+Status: **automated evidence complete; device checks pending.**
+
+- [x] Every shared domain fixture is executed by both runtimes (365 TypeScript tests, Kotlin parity suites) against the same expected outputs from the shared JSON.
+- [x] A historical edit moves progress, PRs, 1RM, volume, balance, streak, stalls, achievements and the Coach invalidation event consistently (the Coach event is checked in the JVM test only; the on-screen test covers the other values on the API 36 emulator).
+- [x] Body, gyms, theme, weekly goal, routine order and backup export/delete/import (documents seam) work offline.
+- [x] `testDebugUnitTest test lintDebug assembleDebug verifyModuleGraph` green; `:app:connectedDebugAndroidTest` 11/11 on API 36.
+- [x] Chart text alternatives and 200% font semantics tests green.
+- [ ] TalkBack, API 26 run, real SAF picker and PWA backup round trip on a physical device.
+
+Evidence: [android-phase-04-insights-settings.md](../../verification/android-phase-04-insights-settings.md).
+
+### Private media and Pro AI gate (Plan 5)
+
+Status: **automated evidence complete; device and real-service checks pending.**
+
+- [x] Photo path: capture offline, kill/reopen, reconnect, upload once, short signed read grant, cached thumbnail offline (JVM harness + real routes on a disposable Postgres with fake R2).
+- [x] A second user cannot read or delete another user's media (404) nor see the first user's local cache.
+- [x] The server returns `PRO_REQUIRED` for Coach, mesocycles and reports regardless of client state or payload; a seeded test entitlement unlocks Coach streaming/interruption/retry/replay, mesocycle drafts and fingerprint-cached reports with invalidation.
+- [x] Backend `vitest` 1073/1073, lint, build; Android `testDebugUnitTest test lintDebug assembleDebug verifyModuleGraph` green (1007 tests); `:app:connectedDebugAndroidTest` 11/11 on API 36.
+- [x] Final-review fixes: Serwist sends `/api/media/read/*` and `/api/v1/*` to the network only; v1 media in a separate private bucket (`R2_PRIVATE_BUCKET`, 503 `MEDIA_UNAVAILABLE` without it); `processDeletions` wired to `/api/internal/media/process-deletions` (`CRON_SECRET` bearer) + Vercel cron, with sync/legacy tombstones enqueuing; one photo per exercise on Android and an image cache keyed by object key; daily AI budget (200/user/day).
+- [ ] **Deploy order (binding):** 1) run `npm run db:migrate:media` then `npm run db:migrate:ai` against production BEFORE the code reaches production (the PWA pull already selects the new columns); 2) create the private R2 bucket and set `R2_PRIVATE_BUCKET`; 3) set `CRON_SECRET`; 4) verify the `vercel.json` cron (`/api/internal/media/process-deletions`, daily) appears in Vercel and a manual run returns 200; 5) deploy.
+- [ ] Real R2 private bucket (+ CORS/CSP), real DeepSeek stream, Photo Picker/camera on devices, API 26 run, Play entitlements (Plan 6), legacy PWA `/api/coach` gating decision.
+
+Evidence: [android-phase-05-media-ai.md](../../verification/android-phase-05-media-ai.md).
 
 ### Product parity gate
 
 - [ ] Complete the inventory in design spec section 6 without WebView screens.
 - [ ] Run the six critical E2E flows from design spec section 17.4.
 - [ ] Verify TalkBack, 200% font scale, touch targets, light/dark themes, and gesture insets.
-- [ ] Compare TypeScript and Kotlin results for every shared domain and conflict fixture.
+- [x] Compare TypeScript and Kotlin results for every shared domain and conflict fixture. (all 14 fixtures consumed by both suites, both green: [evidencia](../../verification/android-release-qualification.md) §2)
 
 ### Publication gate
 
@@ -169,7 +209,7 @@ Evidence: [android-phase-01-backend.md](../../verification/android-phase-01-back
 ## Final Acceptance
 
 - [ ] Every criterion in design spec section 20 has linked test evidence.
-- [ ] No unfinished-marker scan matches: `rg -n "[T]BD|[T]ODO|[F]IXME|place''holder|coming[ ]soon" android app/api/v1 lib/api/v1 contracts docs/play`.
-- [ ] `git diff --check` reports no whitespace errors.
-- [ ] The PWA still builds during the coexistence window.
-- [ ] The production AAB is the only public Android edition; Pro is an entitlement, not a separate APK.
+- [x] No unfinished-marker scan matches: `rg -n "[T]BD|[T]ODO|[F]IXME|place''holder|coming[ ]soon" android app/api/v1 lib/api/v1 contracts docs/play`. ([evidencia](../../verification/android-release-qualification.md) §2)
+- [x] `git diff --check` reports no whitespace errors. ([evidencia](../../verification/android-release-qualification.md) §2)
+- [x] The PWA still builds during the coexistence window. (`npm run build` green on `feat/android-release`: [evidencia](../../verification/android-release-qualification.md) §1)
+- [x] The production AAB is the only public Android edition; Pro is an entitlement, not a separate APK. (single `app` module, no product flavors: [evidencia](../../verification/android-release-qualification.md) §3)

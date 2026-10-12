@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// The account-deletion access lock has its own tests (app/api/v1/account, lib/account).
+vi.mock('@/lib/account/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/account/access')>()),
+  assertAccountActive: async () => {},
+}));
 import { ApiErrorBodySchema, PushResponseSchema, type PushRequest } from '@/lib/api/v1/contracts/sync';
 import { setAuthSourceForTests } from '@/lib/api/v1/auth';
 import { ApiError, RateLimitedError } from '@/lib/api/v1/errors';
@@ -158,6 +163,18 @@ describe('POST /api/v1/sync/push', () => {
       expect((await errorOf(res)).code).toBe('INVALID_REQUEST');
     }
     expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('400 INVALID_REQUEST for server-only Pro/AI tables, before any transaction', async () => {
+    for (const table of ['subscriptionEntitlements', 'subscription_entitlements', 'aiReports', 'ai_reports',
+      'reportedAiResponses', 'reported_ai_responses', 'aiResponses', 'ai_responses']) {
+      const op = { ...validBody.mutations[0].operations[0], table };
+      const res = await post(JSON.stringify({ mutations: [{ ...validBody.mutations[0], operations: [op] }] }));
+      expect(res.status, table).toBe(400);
+      expect((await errorOf(res)).code).toBe('INVALID_REQUEST');
+    }
+    expect(transaction).not.toHaveBeenCalled();
+    expect(pushMutations).not.toHaveBeenCalled();
   });
 
   it('passes retryable ApiErrors from the service through as stable JSON', async () => {

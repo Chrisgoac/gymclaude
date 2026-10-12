@@ -53,6 +53,31 @@ tasks.register("verifyModuleGraph") {
     }
 }
 
+// Run `./gradlew verifyUniqueResourceNames` (also run by verifyModuleGraph): library resources merge
+// into one namespace in the APK, so the same name in two modules silently shadows one of them.
+val verifyUniqueResourceNames = tasks.register("verifyUniqueResourceNames") {
+    group = "verification"
+    description = "Fails if two modules declare a value resource with the same type, qualifier and name."
+    val resDirs = rootProject.allprojects.associate { it.path to it.file("src/main/res") }
+    doLast {
+        val declaredIn = mutableMapOf<String, MutableSet<String>>()
+        val tag = Regex("<(string|plurals|string-array|integer-array|array|color|dimen|bool|integer|style|attr|declare-styleable)\\s[^>]*name=\"([^\"]+)\"")
+        resDirs.forEach { (path, res) ->
+            res.listFiles { dir -> dir.isDirectory && dir.name.startsWith("values") }.orEmpty().forEach { dir ->
+                dir.listFiles { file -> file.extension == "xml" }.orEmpty().forEach { file ->
+                    tag.findAll(file.readText()).forEach { match ->
+                        declaredIn.getOrPut("${dir.name}/${match.groupValues[1]}/${match.groupValues[2]}") { mutableSetOf() } += path
+                    }
+                }
+            }
+        }
+        val duplicates = declaredIn.filterValues { it.size > 1 }
+        check(duplicates.isEmpty()) { "Resource names declared by several modules: " + duplicates.entries.joinToString { "${it.key} in ${it.value}" } }
+        logger.lifecycle("verifyUniqueResourceNames: ${declaredIn.size} value resources, no duplicates across modules")
+    }
+}
+tasks.named("verifyModuleGraph") { dependsOn(verifyUniqueResourceNames) }
+
 // ---- Shared build conventions (no buildSrc: keep the scaffold small) ----
 val javaVersion = JavaVersion.VERSION_17
 
@@ -76,6 +101,9 @@ subprojects {
                 targetCompatibility = javaVersion
             }
             testOptions.unitTests.isIncludeAndroidResources = true
+            // Library resources merge into ONE app namespace: a shared name silently resolves to whichever
+            // module wins the merge. Every feature owns a prefix (lint `ResourceName` enforces it).
+            if (path.startsWith(":feature:")) resourcePrefix = path.substringAfterLast(':') + "_"
         }
     }
     // Modules using the Compose compiler plugin need the runtime on their classpath.

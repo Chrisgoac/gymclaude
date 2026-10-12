@@ -26,3 +26,28 @@ describe('formatSegundos', () => {
     expect(formatSegundos(-3)).toBe('0:00');
   });
 });
+
+// Shared with the Android implementation (android/core/domain DomainParityTest).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const fechaFixture = JSON.parse(readFileSync(join(process.cwd(), 'contracts/domain/fecha-cases.json'), 'utf8'));
+
+describe('shared fixture contracts/domain/fecha-cases.json', () => {
+  it.each(fechaFixture.formatSegundos as { seconds: number; expected: string }[])(
+    'formatSegundos($seconds)',
+    ({ seconds, expected }) => expect(formatSegundos(seconds)).toBe(expected),
+  );
+  it.each(fechaFixture.formatHaceDias as { zone: string; now: number; ts: number; expected: string }[])(
+    'formatHaceDias $zone $ts vs $now',
+    ({ zone, now, ts, expected }) => {
+      const previous = process.env.TZ;
+      process.env.TZ = zone;
+      try {
+        expect(formatHaceDias(ts, now)).toBe(expected);
+      } finally {
+        if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous;
+      }
+    },
+  );
+});

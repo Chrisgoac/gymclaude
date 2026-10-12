@@ -1,0 +1,13 @@
+{
+  "description": "Cases for getNextRoutineId (lib/routine-rotation.ts) / nextRoutineId (Android). 'routines' are the ids in manual order; 'last' is the last trained routine id or null.",
+  "cases": [
+    { "name": "lista vacía con última → null", "routines": [], "last": "a", "expected": null },
+    { "name": "lista vacía sin última → null", "routines": [], "last": null, "expected": null },
+    { "name": "sin última → la primera", "routines": ["a", "b", "c"], "last": null, "expected": "a" },
+    { "name": "última desconocida (borrada) → la primera", "routines": ["a", "b", "c"], "last": "zzz", "expected": "a" },
+    { "name": "en medio → la siguiente (a)", "routines": ["a", "b", "c"], "last": "a", "expected": "b" },
+    { "name": "en medio → la siguiente (b)", "routines": ["a", "b", "c"], "last": "b", "expected": "c" },
+    { "name": "la última de la lista → vuelve a la primera (ciclo)", "routines": ["a", "b", "c"], "last": "c", "expected": "a" },
+    { "name": "una sola rutina → esa misma", "routines": ["solo"], "last": "solo", "expected": "solo" }
+  ]
+}

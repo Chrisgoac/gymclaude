@@ -2,9 +2,14 @@ name: android
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
     paths: ["android/**", "contracts/**", ".github/workflows/android.yml"]
   pull_request:
     paths: ["android/**", "contracts/**", ".github/workflows/android.yml"]
+
+permissions:
+  contents: read
 
 concurrency:
   group: android-${{ github.ref }}
@@ -19,12 +24,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
+        with:
+          # ponytail: default packages include the removed 'tools' package, which fails sdkmanager
+          packages: 'platform-tools'
+      - run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew verifyModuleGraph testDebugUnitTest :core:model:test :core:domain:test :core:testing:test
 
@@ -32,12 +40,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
+        with:
+          # ponytail: default packages include the removed 'tools' package, which fails sdkmanager
+          packages: 'platform-tools'
+      - run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew lintDebug
 
@@ -45,11 +56,73 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
+        with:
+          # ponytail: default packages include the removed 'tools' package, which fails sdkmanager
+          packages: 'platform-tools'
+      - run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew assembleDebug
+
+  release:
+    # A signed bundle is built only once the debug tests and lint passed.
+    needs: [testDebug, lintDebug]
+    runs-on: ubuntu-latest
+    env:
+      # Public Clerk key from a repository variable (not a secret). Empty → unsigned build-health bundle only.
+      GYMLOG_CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
+      # Play needs strictly increasing version codes; github.run_number restarts if this workflow is renamed or
+      # recreated, so set the VERSION_CODE_OFFSET repository variable above the last uploaded code if that happens.
+      VERSION_CODE_OFFSET: ${{ vars.VERSION_CODE_OFFSET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+        with:
+          # ponytail: default packages include the removed 'tools' package, which fails sdkmanager
+          packages: 'platform-tools'
+      - run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      # Signing only for pushes to main and v* tags, and only when every secret exists (never on PRs or forks).
+      # The secrets live in this step's env; they reach the Gradle step through GITHUB_ENV only when signing.
+      - name: Prepare upload keystore
+        if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.GYMLOG_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.GYMLOG_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.GYMLOG_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.GYMLOG_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "Signing secrets missing: building an unsigned bundle."
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/gymlog-upload.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          # Multiline form with a random delimiter: a value containing a newline cannot inject other variables.
+          put_env() {
+            delim="gymlog_$(openssl rand -hex 16)"
+            case "$2" in *"$delim"*) echo "Refusing $1: value contains the delimiter"; exit 1 ;; esac
+            printf '%s<<%s\n%s\n%s\n' "$1" "$delim" "$2" "$delim" >> "$GITHUB_ENV"
+          }
+          put_env GYMLOG_KEYSTORE_FILE "$keystore"
+          put_env GYMLOG_KEYSTORE_PASSWORD "$STORE_PASSWORD"
+          put_env GYMLOG_KEY_ALIAS "$KEY_ALIAS"
+          put_env GYMLOG_KEY_PASSWORD "$KEY_PASSWORD"
+      - run: ./gradlew testReleaseUnitTest lintRelease bundleRelease -Pgymlog.versionCode=$(( GITHUB_RUN_NUMBER + ${VERSION_CODE_OFFSET:-0} ))
+      - name: Remove keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gymlog-upload.jks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gymlog-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab
+          retention-days: 7
+          if-no-files-found: error

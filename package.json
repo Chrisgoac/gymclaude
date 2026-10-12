@@ -2,6 +2,9 @@
   "name": "gymlog-scaffold",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
@@ -11,12 +14,20 @@
     "test:watch": "vitest",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:sync": "node scripts/migrate-sync-foundation.mjs"
+    "export:android-catalog": "tsx scripts/export-android-catalog.mjs",
+    "export:domain-fixtures": "tsx scripts/export-domain-fixtures.mjs",
+    "db:migrate:sync": "node scripts/migrate-sync-foundation.mjs",
+    "db:migrate:media": "node scripts/migrate-private-media.mjs",
+    "db:migrate:ai": "node scripts/migrate-ai-entitlements.mjs",
+    "db:migrate:billing": "node scripts/migrate-billing-events.mjs",
+    "ai:seed-test-entitlement": "node scripts/seed-test-entitlement.mjs",
+    "db:migrate:account": "node scripts/migrate-account-deletion.mjs"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",
     "@ai-sdk/react": "^3.0.200",
     "@aws-sdk/client-s3": "^3.1053.0",
+    "@aws-sdk/s3-request-presigner": "3.1053.0",
     "@base-ui/react": "^1.5.0",
     "@clerk/nextjs": "^7.9.14",
     "@neondatabase/serverless": "^1.1.0",
@@ -27,6 +38,7 @@
     "dexie": "^4.4.2",
     "dexie-react-hooks": "^4.4.0",
     "drizzle-orm": "^0.45.2",
+    "google-auth-library": "11.1.0",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "pg": "^8.23.1",

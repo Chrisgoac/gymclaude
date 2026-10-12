@@ -48,3 +48,7 @@ next-env.d.ts
 # clerk configuration (can include secrets)
 /.clerk/
 .superpowers/
+# Android release signing (never commit keys or their passwords)
+android/signing.properties
+*.jks
+*.keystore

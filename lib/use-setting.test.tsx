@@ -26,4 +26,15 @@ describe('useSetting', () => {
     await userEvent.click(screen.getByRole('button', { name: 'set5' }));
     await waitFor(() => expect(screen.getByTestId('valor').textContent).toBe('5'));
   });
+
+  it('loaded es false mientras lee y true despues, tambien si el ajuste no existe', async () => {
+    function Loaded() {
+      const [valor, , loaded] = useSetting<number>('objetivoSemanal', 3);
+      return <span data-testid="estado">{loaded ? `cargado:${valor}` : 'cargando'}</span>;
+    }
+    await db.userSettings.put({ id: 'objetivoSemanal', userId: null, valor: 7, updatedAt: 1, deletedAt: null } as never);
+    render(<Loaded />);
+    expect(screen.getByTestId('estado').textContent).toBe('cargando');
+    await waitFor(() => expect(screen.getByTestId('estado').textContent).toBe('cargado:7'));
+  });
 });

@@ -1,0 +1,183 @@
+package com.chrisgoac.gymlog.train
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.chrisgoac.gymlog.domain.routine.RoutineRepository
+import com.chrisgoac.gymlog.domain.routine.RoutineSummary
+import com.chrisgoac.gymlog.domain.workout.Gym
+import com.chrisgoac.gymlog.domain.workout.TrainingSummary
+import com.chrisgoac.gymlog.domain.workout.WorkoutAggregate
+import com.chrisgoac.gymlog.domain.workout.WorkoutRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+enum class TrainLoadStatus { Loading, Ready, Failed }
+
+enum class StartError { GymUnavailable, RoutineUnavailable, RoutineArchived, Failed }
+
+data class TrainHomeUiState(
+    val status: TrainLoadStatus = TrainLoadStatus.Loading,
+    val activeWorkout: WorkoutAggregate? = null,
+    val nextRoutine: RoutineSummary? = null,
+    val gyms: List<Gym> = emptyList(),
+    /** Null = "Sin gimnasio". Always an id present in [gyms] (a vanished gym falls back to null). */
+    val selectedGymId: String? = null,
+    val summary: TrainingSummary? = null,
+    val starting: Boolean = false,
+    val startError: StartError? = null,
+)
+
+sealed interface TrainEvent {
+    /** Route to the active workout [sessionId] (new or resumed). */
+    data class OpenWorkout(val sessionId: String) : TrainEvent
+    /** A start failed; the error is also in the state so the Train tab can show it. */
+    data class StartFailed(val error: StartError) : TrainEvent
+}
+
+/**
+ * Train tab state and start actions. One instance per account shell: the Routines tab's "Empezar"
+ * goes through [startRoutine] too, so both entry points share the gym selection, the in-flight
+ * guard and the one-active-workout rule.
+ *
+ * Starting while a workout is active never silently opens it: the start comes back `resumed`
+ * (nothing was written) and [activeChoice] asks "Tienes un entrenamiento en curso" with
+ * [continueActive] / [dismissActiveChoice]. The shell shows that prompt over whichever tab started it.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class TrainHomeViewModel(
+    private val workouts: WorkoutRepository,
+    private val routines: RoutineRepository,
+    private val start: StartWorkoutUseCase,
+    /** The device's default gym (Settings); applies until the user picks a gym (or "Sin gimnasio") here. */
+    private val defaultGymId: Flow<String?> = flowOf(null),
+) : ViewModel() {
+    /** Null = the user has not chosen in this session, so [defaultGymId] applies; [Pick.gymId] null = explicit "Sin gimnasio". */
+    private val pick = MutableStateFlow<Pick?>(null)
+    private class Pick(val gymId: String?)
+    private val lastDefault = MutableStateFlow<String?>(null)
+
+    init {
+        // Starts can come from the Routines tab while the Train state is not collected: track the default here.
+        viewModelScope.launch { defaultGymId.catch { }.collect { lastDefault.value = it } }
+    }
+    private val starting = MutableStateFlow(false)
+    private val startError = MutableStateFlow<StartError?>(null)
+    private val attempt = MutableStateFlow(0)
+    private val events = Channel<TrainEvent>(Channel.BUFFERED)
+    private val pendingChoice = MutableStateFlow<String?>(null)
+
+    val eventFlow: Flow<TrainEvent> = events.receiveAsFlow()
+
+    /** Session id of the active workout a start ran into, while the user chooses; null = no prompt. */
+    val activeChoice: StateFlow<String?> = pendingChoice
+
+    val state: StateFlow<TrainHomeUiState> = attempt
+        .flatMapLatest { content() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), TrainHomeUiState())
+
+    private fun content(): Flow<TrainHomeUiState> {
+        val data = combine(
+            workouts.observeActiveWorkout(),
+            routines.observeRoutines(),
+            routines.observeNextRoutineId(),
+            workouts.observeGyms(),
+            workouts.observeTrainingSummary(),
+        ) { active, summaries, nextId, gyms, summary ->
+            Data(active, summaries.firstOrNull { it.id == nextId && !it.archived }, gyms, summary)
+        }
+        return combine(data, pick, defaultGymId, starting, startError) { d, picked, default, isStarting, error ->
+            val gymId = if (picked != null) picked.gymId else default
+            TrainHomeUiState(
+                status = TrainLoadStatus.Ready,
+                activeWorkout = d.active,
+                nextRoutine = d.next,
+                gyms = d.gyms,
+                selectedGymId = gymId?.takeIf { id -> d.gyms.any { it.id == id } },
+                summary = d.summary,
+                starting = isStarting,
+                startError = error,
+            )
+        }.onStart { emit(TrainHomeUiState(TrainLoadStatus.Loading)) }
+            .catch { emit(TrainHomeUiState(TrainLoadStatus.Failed)) }
+    }
+
+    private class Data(val active: WorkoutAggregate?, val next: RoutineSummary?, val gyms: List<Gym>, val summary: TrainingSummary)
+
+    fun retry() = attempt.update { it + 1 }
+
+    fun selectGym(id: String?) {
+        pick.value = Pick(id)
+    }
+
+    fun dismissError() {
+        startError.value = null
+    }
+
+    fun startFree() = launchStart { start.startFree(currentGym()) }
+
+    fun startRoutine(routineId: String) = launchStart { start.startRoutine(routineId, currentGym()) }
+
+    /** The selected gym; if it vanished meanwhile the repository rejects it and the selection resets. */
+    private suspend fun currentGym(): String? {
+        pick.value?.let { return it.gymId } // an explicit choice, including "Sin gimnasio", beats the default
+        return lastDefault.value?.takeIf { id -> workouts.observeGyms().first().any { it.id == id } }
+    }
+
+    private fun launchStart(block: suspend () -> StartWorkoutResult) {
+        // A tap while another start is in flight is dropped (the use case would resume it anyway).
+        if (!starting.compareAndSet(expect = false, update = true)) return
+        startError.value = null
+        viewModelScope.launch {
+            try {
+                when (val result = block()) {
+                    is StartWorkoutResult.Started ->
+                        if (result.resumed) pendingChoice.value = result.sessionId else events.send(TrainEvent.OpenWorkout(result.sessionId))
+                    StartWorkoutResult.GymUnavailable -> {
+                        pick.value = Pick(null)
+                        fail(StartError.GymUnavailable)
+                    }
+                    StartWorkoutResult.RoutineUnavailable -> fail(StartError.RoutineUnavailable)
+                    StartWorkoutResult.RoutineArchived -> fail(StartError.RoutineArchived)
+                    StartWorkoutResult.Failed -> fail(StartError.Failed)
+                }
+            } finally {
+                starting.value = false
+            }
+        }
+    }
+
+    /** "Continuar el actual": opens the workout that was already running. */
+    fun continueActive() {
+        val sessionId = pendingChoice.value ?: return
+        pendingChoice.value = null
+        viewModelScope.launch { events.send(TrainEvent.OpenWorkout(sessionId)) }
+    }
+
+    /** "Cancelar": nothing is started or opened. */
+    fun dismissActiveChoice() {
+        pendingChoice.value = null
+    }
+
+    private suspend fun fail(error: StartError) {
+        startError.value = error
+        events.send(TrainEvent.StartFailed(error))
+    }
+
+    private companion object {
+        const val STOP_TIMEOUT_MILLIS = 5_000L
+    }
+}

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { legacyDeletingResponse } from '@/lib/account/access';
 import { and, eq, gte } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { SERVER_TABLES, withoutServerMeta } from '@/lib/sync/server-tables';
@@ -9,6 +10,8 @@ import type { TableChanges } from '@/lib/sync/types';
 export async function GET(req: Request) {
   const { userId } = await auth();
   if (!userId) return new NextResponse('Unauthorized', { status: 401 });
+  const deleting = await legacyDeletingResponse(userId);
+  if (deleting) return deleting;
 
   const cursor = Number(new URL(req.url).searchParams.get('cursor') ?? '0');
   const changes: TableChanges[] = [];

@@ -21,3 +21,20 @@ describe('parseDecimal', () => {
   it('vacío → 0', () => expect(parseDecimal('')).toBe(0));
   it('clampa negativos a 0', () => expect(parseDecimal('-1')).toBe(0));
 });
+
+// Shared with the Android implementation (android/core/domain DomainParityTest).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+type NumCase = { text: string; expected: number | string | null };
+const numFixture = JSON.parse(readFileSync(join(process.cwd(), 'contracts/domain/num-cases.json'), 'utf8'));
+const decode = (e: number | string | null) => (e === null ? undefined : typeof e === 'string' ? Number(e) : e);
+
+describe('shared fixture contracts/domain/num-cases.json', () => {
+  it.each(numFixture.parseEnteroOpt as NumCase[])('parseEnteroOpt($text)', ({ text, expected }) =>
+    expect(parseEnteroOpt(text)).toBe(decode(expected)));
+  it.each(numFixture.parseEntero as NumCase[])('parseEntero($text)', ({ text, expected }) =>
+    expect(parseEntero(text)).toBe(decode(expected)));
+  it.each(numFixture.parseDecimal as NumCase[])('parseDecimal($text)', ({ text, expected }) =>
+    expect(parseDecimal(text)).toBe(decode(expected)));
+});

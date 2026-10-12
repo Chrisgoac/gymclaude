@@ -20,4 +20,22 @@ interface AuthSessionProvider {
      * another account's token). [forceRefresh] bypasses any cached token.
      */
     suspend fun accessToken(expectedUserId: String, forceRefresh: Boolean = false): String?
+
+    /**
+     * What a v1 answer revealed about [userId]'s account (see [AccountSignal]). Called from every API client,
+     * on any thread, after the response; implementations must return quickly.
+     */
+    fun onAccountSignal(userId: String, signal: AccountSignal) {}
+}
+
+/** Facts about an account learned from v1 answers, used to resolve an unconfirmed account deletion. */
+enum class AccountSignal {
+    /** A 2xx from an ordinary route: the account is not locked for deletion. */
+    ACTIVE,
+
+    /** `403 ACCOUNT_DELETING`: the server has started deleting the account. */
+    DELETING,
+
+    /** 401/403 even with a fresh token while the identity provider still holds the session. */
+    SESSION_REJECTED,
 }

@@ -27,6 +27,17 @@ npm run lint
 
 > Nota: `dev` usa Turbopack; `build` usa `--webpack` porque el service worker de Serwist se empaqueta con el plugin de webpack. El SW está deshabilitado en desarrollo.
 
+## Variables de entorno (servidor)
+
+Solo nombres; los valores viven en Vercel (y en `.env.local` para desarrollo).
+
+- `DATABASE_URL` (Postgres/Neon) · `MIGRATION_DATABASE_URL` + `CONFIRM_TARGET` (solo scripts `db:migrate:*`).
+- Clerk: `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`.
+- R2: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`, `R2_PRIVATE_BUCKET` (medios v1; sin ella → 503 `MEDIA_UNAVAILABLE`).
+- `CRON_SECRET` (crons de `vercel.json`) · `DEEPSEEK_API_KEY` (IA).
+- Google Play: `GOOGLE_PLAY_PACKAGE_NAME`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `GOOGLE_PLAY_RTDN_AUDIENCE`, `GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT`.
+- `PRO_USER_IDS` (opcional): ids de usuario de Clerk separados por comas (`user_…`), Pro de cortesía sin compra en Play. Lo respetan el gate de IA (`lib/entitlements/reader.ts`) y `GET /api/v1/billing/entitlement`, que responde `PRO`/`ACTIVE` sin `productId` con `validUntil` móvil de 7 días. Vacía o ausente = nadie. Quitar un id deja de dar Pro en el siguiente despliegue (la app Android lo deja de mostrar como mucho 7 días después sin conexión).
+
 ## Datos
 
 Todo vive en IndexedDB (base `gymlog`) mediante Dexie. El catálogo de ejercicios se siembra en el primer arranque. Cada registro lleva `id` (UUID), `updatedAt` y `deletedAt` (borrado lógico), preparados para la sincronización de la Fase 4.

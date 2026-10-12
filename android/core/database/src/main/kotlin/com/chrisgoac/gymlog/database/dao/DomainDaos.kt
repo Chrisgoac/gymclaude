@@ -26,6 +26,15 @@ import kotlinx.coroutines.flow.Flow
 // - getAll: every row including tombstones (sync, diagnostics, tests).
 // There is no physical delete: removing a synced row means upserting a tombstone.
 
+/** An exercise id with its display name. */
+data class ExerciseName(val id: String, val nombre: String)
+
+/** Live custom exercises by primary key (non-custom synced rows are not exercises the app shows). */
+const val CUSTOM_EXERCISE_NAMES_SQL = "SELECT id, nombre FROM exercises WHERE id IN (:ids) AND deletedAt IS NULL AND esPersonalizado = 1"
+
+/** Live logged exercises of one session in order, through `index_logged_exercises_sessionId`. */
+const val LIVE_EXERCISES_FOR_SESSION_SQL = "SELECT * FROM logged_exercises WHERE sessionId = :sessionId AND deletedAt IS NULL ORDER BY orden, id"
+
 @Dao
 interface ExerciseDao {
     @Upsert suspend fun upsert(entity: ExerciseEntity)
@@ -38,6 +47,9 @@ interface ExerciseDao {
 
     @Query("SELECT * FROM exercises ORDER BY id")
     suspend fun getAll(): List<ExerciseEntity>
+
+    @Query(CUSTOM_EXERCISE_NAMES_SQL)
+    suspend fun customNames(ids: List<String>): List<ExerciseName>
 }
 
 @Dao
@@ -64,6 +76,10 @@ interface RoutineExerciseDao {
     @Query("SELECT * FROM routine_exercises WHERE deletedAt IS NULL ORDER BY orden, id")
     fun observeLive(): Flow<List<RoutineExerciseEntity>>
 
+    /** Live exercises of one routine in order; usable inside a mutation transaction. */
+    @Query("SELECT * FROM routine_exercises WHERE routineId = :routineId AND deletedAt IS NULL ORDER BY orden, id")
+    suspend fun liveForRoutine(routineId: String): List<RoutineExerciseEntity>
+
     @Query("SELECT * FROM routine_exercises ORDER BY id")
     suspend fun getAll(): List<RoutineExerciseEntity>
 }
@@ -77,6 +93,13 @@ interface WorkoutSessionDao {
 
     @Query("SELECT * FROM workout_sessions WHERE deletedAt IS NULL ORDER BY fecha DESC, id")
     fun observeLive(): Flow<List<WorkoutSessionEntity>>
+
+    /** Active = not finished (`duracionSegundos` null) and not deleted; newest first. */
+    @Query("SELECT * FROM workout_sessions WHERE deletedAt IS NULL AND duracionSegundos IS NULL ORDER BY fecha DESC, id")
+    fun observeActive(): Flow<List<WorkoutSessionEntity>>
+
+    @Query("SELECT * FROM workout_sessions WHERE deletedAt IS NULL AND duracionSegundos IS NULL ORDER BY fecha DESC, id")
+    suspend fun findActive(): List<WorkoutSessionEntity>
 
     @Query("SELECT * FROM workout_sessions ORDER BY id")
     suspend fun getAll(): List<WorkoutSessionEntity>
@@ -92,6 +115,10 @@ interface LoggedExerciseDao {
     @Query("SELECT * FROM logged_exercises WHERE deletedAt IS NULL ORDER BY orden, id")
     fun observeLive(): Flow<List<LoggedExerciseEntity>>
 
+    /** Live exercises of one session in order; usable inside a mutation transaction. */
+    @Query(LIVE_EXERCISES_FOR_SESSION_SQL)
+    suspend fun liveForSession(sessionId: String): List<LoggedExerciseEntity>
+
     @Query("SELECT * FROM logged_exercises ORDER BY id")
     suspend fun getAll(): List<LoggedExerciseEntity>
 }
@@ -105,6 +132,10 @@ interface LoggedSetDao {
 
     @Query("SELECT * FROM logged_sets WHERE deletedAt IS NULL ORDER BY orden, id")
     fun observeLive(): Flow<List<LoggedSetEntity>>
+
+    /** Live sets of one logged exercise in order; usable inside a mutation transaction. */
+    @Query("SELECT * FROM logged_sets WHERE loggedExerciseId = :loggedExerciseId AND deletedAt IS NULL ORDER BY orden, id")
+    suspend fun liveForExercise(loggedExerciseId: String): List<LoggedSetEntity>
 
     @Query("SELECT * FROM logged_sets ORDER BY id")
     suspend fun getAll(): List<LoggedSetEntity>
@@ -120,9 +151,19 @@ interface GymDao {
     @Query("SELECT * FROM gyms WHERE deletedAt IS NULL ORDER BY orden, id")
     fun observeLive(): Flow<List<GymEntity>>
 
+    /** Live gyms (archived included) at this moment; usable inside a transaction. */
+    @Query("SELECT * FROM gyms WHERE deletedAt IS NULL ORDER BY orden, id")
+    suspend fun live(): List<GymEntity>
+
     @Query("SELECT * FROM gyms ORDER BY id")
     suspend fun getAll(): List<GymEntity>
+
+    /** Live workouts per gym (index on gymId); gyms without workouts have no row. */
+    @Query("SELECT gymId, COUNT(*) AS sessions FROM workout_sessions WHERE gymId IS NOT NULL AND deletedAt IS NULL GROUP BY gymId")
+    fun observeSessionCounts(): Flow<List<GymSessionCount>>
 }
+
+data class GymSessionCount(val gymId: String, val sessions: Int)
 
 @Dao
 interface ExercisePhotoDao {
@@ -175,6 +216,13 @@ interface BodyMetricDao {
 
     @Query("SELECT * FROM body_metrics WHERE deletedAt IS NULL ORDER BY fecha DESC, id")
     fun observeLive(): Flow<List<BodyMetricEntity>>
+
+    /** One metric chronologically (index tipo, fecha); same-day ties by write order. */
+    @Query("SELECT * FROM body_metrics WHERE tipo = :type AND deletedAt IS NULL ORDER BY fecha, updatedAt, id")
+    fun observeLiveByType(type: String): Flow<List<BodyMetricEntity>>
+
+    @Query("SELECT DISTINCT tipo FROM body_metrics WHERE deletedAt IS NULL")
+    fun observeLiveTypes(): Flow<List<String>>
 
     @Query("SELECT * FROM body_metrics ORDER BY id")
     suspend fun getAll(): List<BodyMetricEntity>

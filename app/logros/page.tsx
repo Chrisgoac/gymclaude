@@ -9,12 +9,14 @@ import { reconciliarLogros } from '@/lib/reconciliar-logros';
 import { LogrosView } from '@/components/logros-view';
 
 export default function LogrosPage() {
-  const [objetivo] = useSetting<number>('objetivoSemanal', 3);
+  const [objetivo, , objetivoCargado] = useSetting<number>('objetivoSemanal', 3);
   const [ahora] = useState(() => Date.now());
 
+  // No reconciliar con el fallback mientras el ajuste carga: un objetivo equivocado desbloquearía rachas de más.
   useEffect(() => {
+    if (!objetivoCargado) return;
     void reconciliarLogros(objetivo, ahora);
-  }, [objetivo, ahora]);
+  }, [objetivo, objetivoCargado, ahora]);
 
   const racha = useLiveQuery(() => getRachaSemanal(objetivo, ahora), [objetivo, ahora]);
   const achievements = useLiveQuery(() => getAchievementMap(), []);
