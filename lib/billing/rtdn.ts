@@ -285,7 +285,9 @@ export async function processPushMessage(deps: RtdnDeps, push: PubSubPush): Prom
     receivedAt,
   };
   const done = (result: RtdnResult): RtdnResult => {
-    console.info('[billing/rtdn]', JSON.stringify({
+    // An outcome Pub/Sub has to redeliver (Google or the store unavailable) is worth a warning.
+    const log = result.status === 200 ? console.info : console.warn;
+    log('[billing/rtdn]', JSON.stringify({
       messageId, kind: event.notificationKind, type: event.notificationType,
       tokenHash: tokenHash?.slice(0, 12) ?? null, outcome: result.outcome, status: result.status,
     }));

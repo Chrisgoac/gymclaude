@@ -307,6 +307,15 @@ describe('processPushMessage', () => {
     expect(line).toContain('updated');
     expect(line).not.toContain(hashPurchaseToken(TOKEN)); // only a short prefix
   });
+
+  it('logs an outcome that makes Pub/Sub retry as a warning', async () => {
+    const store = memoryStore([row()]);
+    store.failCommit = true;
+    await processPushMessage(deps(fakePlay({ [TOKEN]: subscription() }), store), envelope(subNotif(2), 'warn-1'));
+    const line = (console.warn as unknown as MockInstance).mock.calls.at(-1)?.join(' ') ?? '';
+    expect(line).toContain('warn-1');
+    expect(line).toContain('store_unavailable');
+  });
 });
 
 // ── Config + OIDC verifier ──
