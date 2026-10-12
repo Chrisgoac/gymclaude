@@ -11,6 +11,7 @@ import {
   testEntitlementsAllowed,
   type EntitlementState,
 } from '@/lib/entitlements/reader';
+import { COMPED_VALIDITY_MS, isCompedPro } from '@/lib/entitlements/comped';
 import {
   GOOGLE_PLAY_PRODUCT_IDS,
   getGooglePlay,
@@ -204,6 +205,19 @@ export function toEntitlementResponse(row: EntitlementRow | null, now: number): 
   return { tier: pro ? 'PRO' : 'FREE', productId: row.productId, state, validUntil: row.expiresAt, serverTime: now };
 }
 
+/**
+ * A comped user (`PRO_USER_IDS`) is Pro without a Play purchase. A real Pro entitlement still wins
+ * (it carries the product and its own dates); otherwise the answer is a rolling ACTIVE grant with no
+ * product, valid for COMPED_VALIDITY_MS so clients re-ask before it lapses.
+ */
+export function compedEntitlementResponse(now: number): EntitlementResponse {
+  return { tier: 'PRO', productId: null, state: 'ACTIVE', validUntil: now + COMPED_VALIDITY_MS, serverTime: now };
+}
+
+function withComped(response: EntitlementResponse, comped: boolean, now: number): EntitlementResponse {
+  return comped && response.tier !== 'PRO' ? compedEntitlementResponse(now) : response;
+}
+
 // ── Use cases ──
 
 export interface BillingDeps {
@@ -294,13 +308,25 @@ export async function verifyPurchase(deps: BillingDeps, userId: string, request:
     }
   }
 
-  return toEntitlementResponse(await bestFor(store, userId, now), now);
+  return withComped(toEntitlementResponse(await bestFor(store, userId, now), now), isCompedPro(userId), now);
 }
 
 /** The caller's entitlement (GET /api/v1/billing/entitlement). Never needs Google. */
-export async function readEntitlement(deps: Pick<BillingDeps, 'store' | 'now'>, userId: string): Promise<EntitlementResponse> {
+export async function readEntitlement(
+  deps: Pick<BillingDeps, 'store' | 'now'>,
+  userId: string,
+  isComped: (userId: string) => boolean = isCompedPro,
+): Promise<EntitlementResponse> {
   const now = deps.now();
-  return toEntitlementResponse(await bestFor(deps.store, userId, now), now);
+  if (!isComped(userId)) return toEntitlementResponse(await bestFor(deps.store, userId, now), now);
+  // Comped: the allowlist alone grants Pro, so an unreadable store does not take it away.
+  let row: EntitlementRow | null = null;
+  try {
+    row = await deps.store.findBest(userId, now);
+  } catch (error) {
+    console.warn('[billing] entitlement store unavailable; answering from PRO_USER_IDS', errorName(error));
+  }
+  return withComped(toEntitlementResponse(row, now), true, now);
 }
 
 const defaultStore = createDbEntitlementStore();

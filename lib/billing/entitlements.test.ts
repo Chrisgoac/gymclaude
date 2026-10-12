@@ -12,6 +12,7 @@ import {
 } from './google-play';
 import {
   VerifyPurchaseRequestSchema,
+  compedEntitlementResponse,
   createDbEntitlementStore,
   hashPurchaseToken,
   readEntitlement,
@@ -327,6 +328,27 @@ describe('toEntitlementResponse / readEntitlement', () => {
     store.rows.push(row({ userId: OTHER }));
     expect(await readEntitlement({ store, now: () => NOW }, USER)).toEqual(toEntitlementResponse(null, NOW));
     expect(store.findBest).toHaveBeenCalledWith(USER, NOW);
+  });
+
+  it('a comped user (PRO_USER_IDS) reads PRO without a purchase, with a rolling validity', async () => {
+    const store = memoryStore();
+    const comped = (id: string) => id === USER;
+    const answer = await readEntitlement({ store, now: () => NOW }, USER, comped);
+    expect(answer).toEqual(compedEntitlementResponse(NOW));
+    expect(answer).toMatchObject({ tier: 'PRO', state: 'ACTIVE', productId: null, serverTime: NOW });
+    expect(answer.validUntil).toBeGreaterThan(NOW);
+    expect(await readEntitlement({ store, now: () => NOW }, OTHER, comped)).toMatchObject({ tier: 'FREE', state: 'NONE' });
+  });
+
+  it('a comped user keeps a real Pro entitlement, and stays Pro when the store errors', async () => {
+    const store = memoryStore();
+    store.rows.push(row({}));
+    const comped = () => true;
+    expect(await readEntitlement({ store, now: () => NOW }, USER, comped)).toEqual(toEntitlementResponse(row({}), NOW));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const broken = { ...store, findBest: async () => { throw new Error('down'); } } as unknown as EntitlementStore;
+    expect(await readEntitlement({ store: broken, now: () => NOW }, USER, comped)).toEqual(compedEntitlementResponse(NOW));
+    warn.mockRestore();
   });
 });
 

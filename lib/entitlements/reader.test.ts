@@ -10,6 +10,7 @@ import {
   testEntitlementsAllowed,
   type EntitlementState,
 } from './reader';
+import { compedProUserIds, isCompedPro } from './comped';
 
 const NOW = 1_767_225_600_000;
 const DAY = 86_400_000;
@@ -36,6 +37,29 @@ describe('testEntitlementsAllowed', () => {
     expect(testEntitlementsAllowed({ NODE_ENV: 'production', VERCEL_ENV: 'preview' } as NodeJS.ProcessEnv)).toBe(false);
     expect(testEntitlementsAllowed({ NODE_ENV: 'development' } as NodeJS.ProcessEnv)).toBe(true);
     expect(testEntitlementsAllowed({ NODE_ENV: 'test' } as NodeJS.ProcessEnv)).toBe(true);
+  });
+});
+
+describe('createDbEntitlementReader (PRO_USER_IDS)', () => {
+  it('grants a comped user without reading the store', async () => {
+    const execute = vi.fn(async () => { throw new Error('must not be read'); });
+    const reader = createDbEntitlementReader(() => ({ execute }) as unknown as PoolDb, () => true, (id) => id === 'user_comped');
+    await expect(reader.isPro('user_comped', NOW)).resolves.toBe(true);
+    expect(execute).not.toHaveBeenCalled();
+    await expect(reader.isPro('user_other', NOW)).rejects.toThrow();
+  });
+});
+
+describe('compedProUserIds / isCompedPro', () => {
+  it('parses a trimmed comma-separated list; empty or unset is nobody', () => {
+    const env = (v?: string) => ({ PRO_USER_IDS: v }) as unknown as NodeJS.ProcessEnv;
+    expect([...compedProUserIds(env(' user_a , user_b,,'))]).toEqual(['user_a', 'user_b']);
+    expect(compedProUserIds(env('')).size).toBe(0);
+    expect(compedProUserIds(env(undefined)).size).toBe(0);
+    expect(compedProUserIds(env(' , ')).size).toBe(0);
+    expect(isCompedPro('user_a', env('user_a'))).toBe(true);
+    expect(isCompedPro('user_ab', env('user_a'))).toBe(false);
+    expect(isCompedPro('', env(','))).toBe(false);
   });
 });
 

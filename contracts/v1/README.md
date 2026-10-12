@@ -390,6 +390,9 @@ Both routes answer the caller's best entitlement:
 (paused or account hold: fix/resume in Play), `EXPIRED` (expired, revoked, or past `validUntil`).
 Compare `validUntil` with `serverTime`, not the device clock.
 
+A comped account (server env `PRO_USER_IDS`) without a Pro purchase gets `tier: PRO`, `state: ACTIVE`,
+`productId: null` and a rolling `validUntil` (`serverTime` + 7 days): clients re-ask before it lapses.
+
 | HTTP | code | retryable | Cause |
 |------|------|-----------|-------|
 | 422 | `PURCHASE_INVALID` | false | Unknown token for our package, wrong product, canceled pending purchase |

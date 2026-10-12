@@ -48,6 +48,7 @@ Cada script usa una transacción, un advisory lock y comprobaciones posteriores;
 - [ ] Verificar en Vercel que aparecen los dos crons de `vercel.json` (`/api/internal/media/process-deletions` 04:00 UTC y `/api/internal/account/process-deletions` 04:30 UTC) y que una ejecución manual con `Authorization: Bearer $CRON_SECRET` devuelve 200.
 - [ ] `CLERK_SECRET_KEY` presente en runtime (borrado de identidad en Clerk).
 - [ ] `DEEPSEEK_API_KEY` presente (Coach, mesociclos, informes).
+- [ ] `PRO_USER_IDS` (opcional): ids de Clerk (`user_…`) separados por comas con Pro de cortesía, sin compra en Play (IA + `GET /api/v1/billing/entitlement`). Revisar antes del lanzamiento público que solo contiene las cuentas previstas.
 - [ ] `GOOGLE_PLAY_PACKAGE_NAME=com.chrisgoac.gymlog`.
 - [ ] `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`: cuenta de servicio de Google Cloud con acceso a la Google Play Developer API, invitada en Play Console → Usuarios y permisos con permiso de ver datos financieros y gestionar pedidos/suscripciones.
 - [ ] Pub/Sub: crear el topic de RTDN, darle `roles/pubsub.publisher` a `google-play-developer-notifications@system.gserviceaccount.com`, enlazarlo en Play Console → Monetización → Configuración de monetización, y crear una suscripción **push** autenticada hacia `https://gym.chrisgoac.dev/api/webhooks/google-play` con una cuenta de servicio de envío y una audiencia.

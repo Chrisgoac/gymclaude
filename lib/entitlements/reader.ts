@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { getPoolDb, type PoolDb } from '@/db/pool';
+import { isCompedPro } from '@/lib/entitlements/comped';
 
 /**
  * States of a server-verified subscription entitlement (`subscription_entitlements.state`).
@@ -36,6 +37,7 @@ export interface EntitlementReader {
   /**
    * true iff the user has an entitlement that grants Pro at `now` (epoch ms); false when there is
    * none. Rejects when the store cannot be read: callers must fail closed, never grant.
+   * Users in the `PRO_USER_IDS` allowlist (comped) are Pro without reading the store.
    */
   isPro(userId: string, now: number): Promise<boolean>;
 }
@@ -44,11 +46,13 @@ export interface EntitlementReader {
 export function createDbEntitlementReader(
   getDb: () => Pick<PoolDb, 'execute'> = getPoolDb,
   allowTestEntitlements: () => boolean = testEntitlementsAllowed,
+  isComped: (userId: string) => boolean = isCompedPro,
 ): EntitlementReader {
   // Single source of truth for the granting states: the SQL list is built from PRO_GRANTING_STATES.
   const granting = sql.join([...PRO_GRANTING_STATES].map((s) => sql`${s}`), sql`, `);
   return {
     async isPro(userId, now) {
+      if (isComped(userId)) return true;
       const allowTest = allowTestEntitlements();
       const result = await getDb().execute(sql`
         SELECT 1 AS granted FROM subscription_entitlements
