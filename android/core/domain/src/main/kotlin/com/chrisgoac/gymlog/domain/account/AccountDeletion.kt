@@ -115,4 +115,3 @@ class AccountDeletion(
         const val CONFIRMATION = "ELIMINAR"
     }
 }
-
